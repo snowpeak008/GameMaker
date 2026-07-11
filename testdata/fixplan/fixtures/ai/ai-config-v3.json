@@ -1,0 +1,82 @@
+{
+  "schema_version": 3,
+  "dev": {
+    "category_id": "dev",
+    "active_entry_id": "fixture_codex_dev",
+    "entries": [
+      {
+        "id": "fixture_codex_dev",
+        "label": "Fixture Codex CLI",
+        "config_type": "local_codex_cli",
+        "api_url": "",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-code-model\",\"cli_path\":\"fixture-bin/codex.cmd\",\"fixture_extension\":{\"keep\":true,\"revision\":7}}",
+        "codex_toml_path": "fixture-config/codex.toml",
+        "codex_json_path": "fixture-config/auth.json"
+      },
+      {
+        "id": "fixture_dev_api",
+        "label": "Fixture Development API",
+        "config_type": "custom_dev_api",
+        "api_url": "http://127.0.0.1:41001/v1",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-code-api-model\",\"auth\":{\"kind\":\"environment\",\"name\":\"ADM_FIXTURE_DEV_KEY\"}}",
+        "codex_toml_path": "",
+        "codex_json_path": ""
+      }
+    ]
+  },
+  "image": {
+    "category_id": "image",
+    "active_entry_id": "fixture_codex_image",
+    "entries": [
+      {
+        "id": "fixture_codex_image",
+        "label": "Fixture Codex Image CLI",
+        "config_type": "codex_cli_image",
+        "api_url": "",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-image-cli\",\"fixture_extension\":{\"keep\":true}}",
+        "codex_toml_path": "fixture-config/codex.toml",
+        "codex_json_path": "fixture-config/auth.json"
+      },
+      {
+        "id": "fixture_image_api",
+        "label": "Fixture Image API",
+        "config_type": "openai_image_api",
+        "api_url": "http://127.0.0.1:41002/v1",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-image-model\",\"size\":\"640x384\"}",
+        "codex_toml_path": "",
+        "codex_json_path": ""
+      }
+    ]
+  },
+  "completion": {
+    "category_id": "completion",
+    "active_entry_id": "fixture_claude_completion",
+    "entries": [
+      {
+        "id": "fixture_claude_completion",
+        "label": "Fixture Claude CLI",
+        "config_type": "local_claude_completion_cli",
+        "api_url": "",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-text-cli\",\"cli_path\":\"fixture-bin/claude.cmd\"}",
+        "codex_toml_path": "",
+        "codex_json_path": ""
+      },
+      {
+        "id": "fixture_completion_api",
+        "label": "Fixture Completion API",
+        "config_type": "openai_completion_api",
+        "api_url": "http://127.0.0.1:41003/v1",
+        "api_key": "",
+        "extra_json": "{\"model\":\"fixture-text-model\",\"fixture_extension\":{\"keep\":true}}",
+        "codex_toml_path": "",
+        "codex_json_path": ""
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AutoDesignMaker NEWrust",
+  "version": "0.1.0",
+  "identifier": "com.autodesignmaker.newrust",
+  "build": {
+    "beforeBuildCommand": "npm --prefix ../../web run build",
+    "beforeDevCommand": "npm --prefix ../../web run build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "AutoDesignMaker NEWrust",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1180,
+        "minHeight": 720
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

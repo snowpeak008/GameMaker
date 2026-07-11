@@ -1,0 +1,20 @@
+{
+  "name": "adm-newrust-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/generate-design-content.mjs --check && node scripts/build.mjs",
+    "design-content": "node scripts/generate-design-content.mjs",
+    "design-content-check": "node scripts/generate-design-content.mjs --check",
+    "test": "node scripts/test.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "i18n-test": "node scripts/i18n-test.mjs",
+    "language-gate": "npm run build && node scripts/language-gate.mjs",
+    "ui-gate": "node scripts/ui-gate.mjs",
+    "ui-baseline-gate": "node scripts/ui-baseline-gate.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "run_id": "fixture_legacy_run",
+  "status": "running",
+  "stop_requested": false,
+  "current_stage_id": "7",
+  "stages": {
+    "00": {
+      "stage_id": "00",
+      "status": "success",
+      "started_at": "fixture:1",
+      "completed_at": "fixture:2",
+      "result": {
+        "status": "success",
+        "outputs": {
+          "content_exists": true,
+          "future_output": {
+            "keep": true
+          }
+        },
+        "errors": [],
+        "warnings": [],
+        "message": "fixture stage complete"
+      }
+    },
+    "07": {
+      "stage_id": "07",
+      "status": "waiting_confirmation",
+      "started_at": "fixture:3",
+      "completed_at": "fixture:4",
+      "result": {
+        "status": "waiting_confirmation",
+        "outputs": {
+          "confirmation_status": "waiting_confirmation"
+        },
+        "errors": [],
+        "warnings": [],
+        "message": "fixture waiting for style confirmation"
+      }
+    }
+  }
+}
+

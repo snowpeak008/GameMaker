@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "generated_at": "fixture:2026-07-10",
+  "stage": 7,
+  "project": "Fixture Project",
+  "enabled": false,
+  "records": [
+    {
+      "style_id": "STYLE-01-fixture-visible",
+      "image_path": "images/visible-640x384.png",
+      "prompt": "fixture image prompt; no provider call",
+      "status": "fallback",
+      "provider": "deterministic_fixture",
+      "result": "visible test fixture",
+      "width": 640,
+      "height": 384,
+      "format": "png"
+    },
+    {
+      "style_id": "STYLE-00-legacy-placeholder",
+      "image_path": "images/legacy-1x1.png",
+      "prompt": "",
+      "status": "legacy_placeholder",
+      "provider": "legacy_fixture",
+      "result": "must request rerun",
+      "width": 1,
+      "height": 1,
+      "format": "png"
+    }
+  ],
+  "requested_count": 1,
+  "generated_count": 0,
+  "provider_generated_count": 0,
+  "fallback_count": 1,
+  "failed_count": 0,
+  "image_count": 1,
+  "status": "degraded"
+}
+

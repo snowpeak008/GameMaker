@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "path": "crates/adm-new-ai/src/lib.rs",
+      "kind": "synthetic_secret_fixture",
+      "scope": "cfg(test) secret-redaction and credential-rebinding tests",
+      "reason": "Synthetic values prove that secrets are removed from serialized and debug views.",
+      "owner": "adm-new-ai tests",
+      "expiresWhen": "The redaction tests adopt generated non-literal fixtures."
+    },
+    {
+      "path": "crates/adm-new-contracts/src/ai.rs",
+      "kind": "synthetic_secret_fixture",
+      "scope": "cfg(test) DTO debug-redaction test",
+      "reason": "Synthetic URL credentials and API keys verify non-disclosure contracts.",
+      "owner": "adm-new-contracts tests",
+      "expiresWhen": "The DTO tests adopt generated non-literal fixtures."
+    },
+    {
+      "path": "crates/adm-new-application/src/migration_tools.rs",
+      "kind": "legacy_path_fixture",
+      "scope": "legacy Python migration detector and tests",
+      "reason": "Historical path literals are inputs to migration classification, never current resource roots.",
+      "owner": "adm-new-application migration tests",
+      "expiresWhen": "The legacy migration detector is retired."
+    }
+  ]
+}

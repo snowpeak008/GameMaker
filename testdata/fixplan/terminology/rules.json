@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "default_severity": "error",
+  "rules": [
+    {
+      "id": "TERM-AI-CONFIG",
+      "token": "AI",
+      "exact_keys": ["action.aiConfig", "settings.aiConfig.status.loaded", "settings.aiConfig.empty.waiting"],
+      "required_all": ["AI"],
+      "forbidden": ["人工智能配置", "智能助手配置"],
+      "rationale": "AI configuration controls use the same token as code and English catalog."
+    },
+    {
+      "id": "TERM-AI-ADAPTER",
+      "token": "AI Adapter",
+      "exact_keys": ["pipeline.detail.aiAdapter"],
+      "required_all": ["AI", "Adapter"],
+      "forbidden": ["人工智能适配器"],
+      "rationale": "The technical detail maps directly to adapter_kind."
+    },
+    {
+      "id": "TERM-CATEGORY-CONFIG",
+      "token": "配置",
+      "key_patterns": ["^(settings\\.aiConfig\\.category|enum\\.aiConfigCategory)\\.(dev|image|completion)$"],
+      "required_all": ["配置"],
+      "forbidden": ["接口"],
+      "rationale": "A category can contain CLI and API entries, so it is not an API-only interface."
+    },
+    {
+      "id": "TERM-API-TYPE",
+      "token": "API",
+      "key_patterns": ["^enum\\.aiConfigType\\..*_api$"],
+      "required_all": ["API"],
+      "forbidden": ["接口"],
+      "rationale": "Concrete API types use the API token."
+    },
+    {
+      "id": "TERM-CLI-TYPE",
+      "token": "CLI",
+      "key_patterns": ["^enum\\.aiConfigType\\..*cli.*$"],
+      "required_all": ["CLI"],
+      "forbidden": ["命令行"],
+      "rationale": "Concrete local command providers use the CLI token."
+    },
+    {
+      "id": "TERM-API-URL",
+      "token": "API URL",
+      "exact_keys": ["settings.aiConfig.field.apiUrl"],
+      "required_all": ["API", "URL"],
+      "forbidden": ["接口地址", "API Url"],
+      "rationale": "The field maps to api_url."
+    },
+    {
+      "id": "TERM-API-KEY",
+      "token": "API Key",
+      "exact_keys": ["settings.aiConfig.field.apiKey"],
+      "required_all": ["API Key"],
+      "forbidden": ["接口密钥", "API密钥", "api key"],
+      "rationale": "Use the standard credential label without exposing its value."
+    },
+    {
+      "id": "TERM-ID",
+      "token": "ID",
+      "exact_keys": ["settings.aiConfig.field.entryId", "common.nodeId", "ai.currentNodeId"],
+      "required_all": ["ID"],
+      "forbidden": ["标识", " Id"],
+      "rationale": "These are technical identifiers, unlike natural save or order numbers."
+    },
+    {
+      "id": "TERM-SDK-NAV",
+      "token": "SDK",
+      "exact_keys": ["nav.sdk", "state.waitingSdkSpecs", "sdk.name", "sdk.sourceUrl", "sdk.sourceUrlShort"],
+      "required_all": ["SDK"],
+      "forbidden": ["开发工具包"],
+      "rationale": "SDK module controls use the SDK token."
+    },
+    {
+      "id": "TERM-SDK-UTILITY",
+      "token": "SDK",
+      "key_prefixes": ["utility.sdk."],
+      "forbidden": ["开发工具包"],
+      "rationale": "Only values that name the module are flagged; generic words like name/status remain valid."
+    },
+    {
+      "id": "TERM-MARKDOWN-SHELL",
+      "token": "Markdown",
+      "exact_keys": ["format.markdown", "enum.export_format.markdown"],
+      "required_all": ["Markdown"],
+      "forbidden": ["标记文本", "标记文档"],
+      "rationale": "Format selectors name the exact serialization format."
+    },
+    {
+      "id": "TERM-JSON-SHELL",
+      "token": "JSON",
+      "exact_keys": ["format.json", "enum.export_format.json"],
+      "required_all": ["JSON"],
+      "forbidden": ["结构化数据"],
+      "rationale": "Format selectors name the exact serialization format; natural structured-data prose is out of scope."
+    },
+    {
+      "id": "TERM-PROMPT-FORMAT",
+      "token": "Prompt",
+      "exact_keys": ["format.prompt", "enum.export_format.prompt"],
+      "required_all": ["Prompt"],
+      "forbidden": [],
+      "rationale": "Protocol/format labels use Prompt; style authoring copy may keep 提示词."
+    }
+  ],
+  "natural_language_exceptions": [
+    {
+      "text": "请检查后端接口是否可用。",
+      "reason": "接口 is ordinary prose, not an API config type."
+    },
+    {
+      "text": "请输入风格提示词。",
+      "reason": "提示词 is natural authoring language, not a protocol field."
+    },
+    {
+      "text": "存档编号 12",
+      "reason": "编号 is a product-facing ordinal, not a technical ID field."
+    },
+    {
+      "text": "来源网址",
+      "reason": "网址 can remain in natural product copy unless the key explicitly maps to a URL field."
+    }
+  ]
+}

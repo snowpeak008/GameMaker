@@ -1,0 +1,23 @@
+[package]
+name = "adm-new-ai"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-new-config = { path = "../adm-new-config" }
+adm-new-contracts = { path = "../adm-new-contracts" }
+adm-new-design = { path = "../adm-new-design" }
+adm-new-foundation = { path = "../adm-new-foundation" }
+adm-new-storage = { path = "../adm-new-storage" }
+base64 = "0.22"
+cap-fs-ext = "4.0"
+cap-std = "4.0"
+image = { version = "0.25", default-features = false, features = ["png"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"

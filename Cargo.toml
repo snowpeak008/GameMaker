@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "apps/adm-new-cli",
+    "apps/desktop-tauri",
+    "crates/adm-new-foundation",
+    "crates/adm-new-contracts",
+    "crates/adm-new-governance",
+    "crates/adm-new-config",
+    "crates/adm-new-storage",
+    "crates/adm-new-knowledge",
+    "crates/adm-new-design",
+    "crates/adm-new-save",
+    "crates/adm-new-ai",
+    "crates/adm-new-pipeline",
+    "crates/adm-new-artifact",
+    "crates/adm-new-packaging",
+    "crates/adm-new-patch",
+    "crates/adm-new-sdk",
+    "crates/adm-new-application",
+    "crates/adm-new-tauri-commands",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "UNLICENSED"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_root_policy": "all paths are relative to this directory or a test temporary root",
+  "secret_policy": "all credential values are empty; environment variable names are examples only",
+  "fixtures": [
+    {
+      "id": "ai-v3-three-categories",
+      "path": "ai/ai-config-v3.json",
+      "expect": "schema 3; independent active entries; fixture_extension survives inside extra_json"
+    },
+    {
+      "id": "ai-legacy-profile",
+      "path": "ai/ai-config-legacy-v1.json",
+      "expect": "legacy profile is migratable without a credential"
+    },
+    {
+      "id": "project-binding-v2",
+      "path": "project/project-config-v2.json",
+      "expect": "logical project document contains no machine paths and preserves future_field"
+    },
+    {
+      "id": "unity-project-markers",
+      "path": "project/unity-project",
+      "expect": "Assets, ProjectSettings/ProjectVersion.txt and Packages/manifest.json are present"
+    },
+    {
+      "id": "pipeline-legacy-running",
+      "path": "pipeline/pipeline-state-legacy-running.json",
+      "expect": "unversioned interrupted state is accepted as legacy input and never auto-resumed"
+    },
+    {
+      "id": "step07-visible-png",
+      "path": "step07/images/visible-640x384.png",
+      "generator": "../scripts/generate-png-fixtures.mjs --write",
+      "expect": "PNG dimensions are exactly 640x384"
+    },
+    {
+      "id": "step07-legacy-placeholder",
+      "path": "step07/images/legacy-1x1.png",
+      "generator": "../scripts/generate-png-fixtures.mjs --write",
+      "expect": "PNG dimensions are exactly 1x1"
+    },
+    {
+      "id": "long-ui-data",
+      "path": "ui/long-ui-data.json",
+      "expect": "long project name, 15 stages, long logs, table rows and interview messages"
+    }
+  ]
+}
+

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "generated_at": "fixture:2026-07-10",
+  "project": "Fixture Project",
+  "source_stage": 6,
+  "option_count": 2,
+  "recommended_style_id": "STYLE-01-fixture-visible",
+  "options": [
+    {
+      "style_id": "STYLE-01-fixture-visible",
+      "title": "Visible 640×384 Fixture",
+      "description": "Deterministic visible preview for UI and PNG metadata tests.",
+      "palette": ["#2E3440", "#88C0D0", "#EBCB8B"],
+      "source_refs": ["fixture.stage_04", "fixture.stage_06"],
+      "prompt": "fixture image prompt; no provider call",
+      "image_path": "images/visible-640x384.png",
+      "image_status": "fallback",
+      "image_message": "deterministic fixture",
+      "score": 100,
+      "recommended": true,
+      "recommendation_reason": "fixture recommendation",
+      "prompt_refined": false
+    },
+    {
+      "style_id": "STYLE-00-legacy-placeholder",
+      "title": "Legacy 1×1 Fixture",
+      "description": "Compatibility input that must not be treated as a valid preview.",
+      "palette": ["#000000", "#000000", "#000000"],
+      "source_refs": ["fixture.legacy"],
+      "prompt": "",
+      "image_path": "images/legacy-1x1.png",
+      "image_status": "legacy_placeholder",
+      "image_message": "rerun Step07",
+      "score": 0,
+      "recommended": false,
+      "recommendation_reason": "",
+      "prompt_refined": false
+    }
+  ],
+  "selection_required": true,
+  "prompt_override_used": false
+}
+

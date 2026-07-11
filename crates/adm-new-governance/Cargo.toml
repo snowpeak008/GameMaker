@@ -1,0 +1,16 @@
+[package]
+name = "adm-new-governance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-new-contracts = { path = "../adm-new-contracts" }
+adm-new-foundation = { path = "../adm-new-foundation" }
+adm-new-packaging = { path = "../adm-new-packaging" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"

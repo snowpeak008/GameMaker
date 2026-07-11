@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "project_engine": "unity",
+  "pipeline_adapter": "none",
+  "custom_engine_name": "",
+  "development_path": "fixtures/project/unity-project",
+  "editor_path": "fixtures/project/unity-editor/Editor/Unity.exe",
+  "future_field": {
+    "keep": true,
+    "source": "legacy-fixture"
+  }
+}
+

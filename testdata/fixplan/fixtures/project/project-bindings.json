@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "bindings": {
+    "fixture_unity_binding": {
+      "project_path": "fixtures/project/unity-project",
+      "editor_path": "fixtures/project/unity-editor/Editor/Unity.exe",
+      "verified_at": "fixture:2026-07-10"
+    }
+  }
+}
+

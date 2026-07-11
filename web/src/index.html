@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh-CN" data-language-mode="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoDesignMaker NEWrust</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell" data-route="design" data-theme="adm-light" data-shell="desktop">
+      <header class="top-task-bar" aria-label="任务导航" data-i18n-aria-label="nav.taskNavigation">
+        <div class="brand-block">
+          <span class="brand-title">AutoDesignMaker</span>
+          <span class="brand-subtitle">NEWrust</span>
+        </div>
+        <nav class="task-tabs" aria-label="主要任务区域" data-i18n-aria-label="nav.mainAreas">
+          <button class="task-tab active" type="button" data-route="design" data-i18n="nav.design">设计工作台</button>
+          <button class="task-tab" type="button" data-route="pipeline" data-i18n="nav.pipeline">开发流水线</button>
+          <button class="task-tab" type="button" data-route="patch" data-i18n="nav.patch">补充开发</button>
+          <button class="task-tab" type="button" data-route="package" data-i18n="nav.package">打包阶段</button>
+          <button class="task-tab" type="button" data-route="logs" data-i18n="nav.logs">运行日志</button>
+          <button class="task-tab" type="button" data-route="sdk" data-i18n="nav.sdk">SDK 知识库</button>
+        </nav>
+      </header>
+
+      <main class="route-outlet" aria-live="polite">
+        <section class="task-panel active" data-panel="design" aria-labelledby="title-design">
+          <header class="panel-header design-topbar">
+            <div>
+              <p class="eyebrow" data-i18n="design.eyebrow">商业游戏设计决策工具</p>
+              <h1 id="title-design" data-i18n="design.title">完整商业游戏设计决策工具</h1>
+              <p class="panel-description" data-i18n="design.description">16 个领域、二级节点、三级检查项和文本导出。</p>
+            </div>
+            <div class="panel-actions">
+              <input class="text-input project-name" value="未命名游戏设计项目" aria-label="项目名称" data-role="project-name" data-i18n-value="design.defaultProjectName" data-i18n-aria-label="design.projectName" />
+              <select class="select-input" aria-label="导出格式" data-role="export-format" data-i18n-aria-label="design.exportFormat">
+                <option value="markdown" data-i18n="format.markdown">Markdown</option>
+                <option value="json" data-i18n="format.json">JSON</option>
+                <option value="text" data-i18n="format.text">纯文本</option>
+                <option value="prompt" data-i18n="format.prompt">Prompt</option>
+              </select>
+              <button class="command-button" type="button" data-action="export-design" data-i18n="action.export">导出</button>
+              <button class="command-button secondary" type="button" data-action="save-manager" data-i18n="action.manageSaves">存档管理</button>
+              <button class="command-button secondary" type="button" data-action="template-browser" data-i18n="action.viewTemplates">查看模板</button>
+              <button class="command-button secondary" type="button" data-action="save-template" data-i18n="action.saveAsTemplate">另存为模板</button>
+              <button class="command-button danger" type="button" data-action="reset-design" data-i18n="action.reset">重置</button>
+            </div>
+          </header>
+          <div class="design-shell-grid">
+            <aside class="side-pane" aria-label="领域总览" data-i18n-aria-label="design.domainOverview">
+              <h2 data-i18n="design.domainOverview">领域总览</h2>
+              <p class="pane-note" data-i18n="design.domainNote">保留全部 16 个领域；项目画像只影响排序和风险提示。</p>
+              <section class="profile-panel" aria-label="项目画像" data-i18n-aria-label="design.projectProfile">
+                <h3 data-i18n="design.projectProfile">项目画像</h3>
+                <div class="profile-fields" data-role="profile-fields" data-content-origin="project" data-i18n="state.waitingDesignData">等待设计数据</div>
+              </section>
+              <div class="domain-list" data-role="domain-list" data-content-origin="project" data-i18n="state.waitingDesignData">等待设计数据</div>
+            </aside>
+            <section class="center-pane" aria-label="节点面板" data-i18n-aria-label="design.nodePanel">
+              <header class="domain-header">
+                <h2 data-role="domain-title" data-content-origin="project" data-i18n="state.waitingDomainData">等待领域数据</h2>
+                <p data-role="domain-description" data-content-origin="project" data-i18n="state.waitingWorkbench">等待工作台数据</p>
+              </header>
+              <div class="toolbar-row">
+                <input class="text-input" placeholder="搜索节点" aria-label="搜索节点" data-role="node-search" data-i18n-placeholder="design.searchNodes" data-i18n-aria-label="design.searchNodes" />
+                <button class="command-button secondary" type="button" data-action="search-node" data-i18n="action.search">搜索</button>
+                <button class="command-button secondary" type="button" data-action="clear-search" data-i18n="action.clear">清空</button>
+                <select class="select-input" aria-label="节点过滤" data-role="node-filter" data-i18n-aria-label="design.nodeFilter">
+                  <option value="all" data-i18n="design.filter.all">全部</option>
+                  <option value="decided" data-i18n="design.filter.decided">已决策</option>
+                  <option value="incomplete" data-i18n="design.filter.incomplete">未完成</option>
+                  <option value="risk" data-i18n="design.filter.risk">有风险</option>
+                  <option value="not_applicable" data-i18n="design.filter.notApplicable">不适用</option>
+                  <option value="l4_missing" data-i18n="design.filter.l4Missing">第四层不完整</option>
+                </select>
+              </div>
+              <section class="gameplay-systems-panel" aria-label="玩法系统总览" data-role="gameplay-systems" data-content-origin="project" data-i18n-aria-label="design.gameplayOverview" data-i18n="state.waitingGameplaySystems">等待玩法系统</section>
+              <div class="node-card-list" data-role="node-list" data-content-origin="project" data-i18n="state.waitingWorkbench">等待工作台数据</div>
+              <section class="embedded-interview-shell" aria-label="智能访谈面板" data-role="ai-interview-panel" data-i18n-aria-label="ai.interviewPanel">
+                <header data-i18n="ai.currentQuestion">当前智能提问</header>
+                <textarea class="interview-question" readonly rows="3" data-role="ai-current-question" data-content-origin="ai" data-i18n="state.waitingInterviewState">等待访谈状态</textarea>
+                <div class="interview-transcript" data-role="ai-transcript" data-content-origin="ai" data-i18n="state.waitingTranscript">等待访谈记录</div>
+                <div class="ai-runtime-row">
+                  <span class="ai-stream-timeline" data-role="ai-stream-timeline" data-i18n="ai.streamIdle">流式处理：空闲</span>
+                  <span class="ai-background-status" data-role="ai-background-status" data-i18n="ai.backgroundIdle">映射：空闲；摘要：空闲</span>
+                </div>
+                <label class="ai-hint" data-role="ai-input-hint" data-i18n="state.waitingAiState">等待智能助手状态</label>
+                <textarea class="text-area ai-answer-input" rows="3" data-role="ai-answer-input" aria-label="智能访谈输入" data-i18n-aria-label="ai.interviewInput"></textarea>
+                <div class="ai-action-row">
+                  <input class="text-input ai-node-input" data-role="ai-node-id" aria-label="AI 当前节点 ID" placeholder="节点 ID" data-i18n-aria-label="ai.currentNodeId" data-i18n-placeholder="common.nodeId" />
+                  <span class="ai-panel-status" data-role="ai-panel-status" data-i18n="ai.waitingStatus">智能访谈：等待状态</span>
+                  <button class="command-button" type="button" data-action="send-ai-turn" data-i18n="ai.sendAnswer">发送回答</button>
+                  <button class="command-button secondary" type="button" data-action="force-ai-output" data-i18n="ai.generateOutput">生成输出</button>
+                  <button class="command-button secondary" type="button" data-action="mark-ai-inaccurate" data-i18n="ai.markInaccurate">标记不准确</button>
+                  <button class="command-button secondary" type="button" data-action="save-ai-archive" data-i18n="ai.saveArchive">保存访谈存档</button>
+                </div>
+              </section>
+            </section>
+            <aside class="result-pane" aria-label="结果" data-i18n-aria-label="common.results">
+              <div class="tab-strip">
+                <button class="mini-tab active" type="button" data-result-tab="summary" data-i18n="result.summary">摘要</button>
+                <button class="mini-tab" type="button" data-result-tab="missing" data-i18n="result.missing">缺失项</button>
+                <button class="mini-tab" type="button" data-result-tab="risks" data-i18n="result.risks">风险</button>
+                <button class="mini-tab" type="button" data-result-tab="validation" data-i18n="result.validation">校验</button>
+              </div>
+              <div class="readonly-box result-output" data-role="result-output" data-content-origin="project" data-i18n="state.waitingResults">等待结果</div>
+            </aside>
+          </div>
+          <footer class="design-status-bar" data-role="design-status" data-i18n="design.waitingStatus">设计工作台：等待工作台数据</footer>
+        </section>
+
+        <section class="task-panel" data-panel="pipeline" aria-labelledby="title-pipeline" hidden>
+          <header class="panel-header">
+            <h1 id="title-pipeline" data-i18n="nav.pipeline">开发流水线</h1>
+            <div class="panel-actions">
+              <button class="command-button secondary" type="button" data-action="project-config" data-i18n="action.projectConfig">项目配置</button>
+              <button class="command-button secondary" type="button" data-action="ai-config" data-i18n="action.aiConfig">AI 配置</button>
+              <button class="command-button secondary" type="button" data-action="export-to-pipeline" data-i18n="action.exportToPipeline">导出到流水线</button>
+              <input class="select-input stage-select" data-role="pipeline-from" type="text" inputmode="numeric" pattern="[0-9]*" list="pipeline-from-options" autocomplete="off" aria-label="起始步骤" placeholder="起始步骤" data-i18n-aria-label="pipeline.startStage" data-i18n-placeholder="pipeline.startStage" />
+              <datalist id="pipeline-from-options" data-role="pipeline-from-options"></datalist>
+              <input class="select-input stage-select" data-role="pipeline-to" type="text" inputmode="numeric" pattern="[0-9]*" list="pipeline-to-options" autocomplete="off" aria-label="结束步骤" placeholder="结束步骤" data-i18n-aria-label="pipeline.endStage" data-i18n-placeholder="pipeline.endStage" />
+              <datalist id="pipeline-to-options" data-role="pipeline-to-options"></datalist>
+              <label class="checkline skip-gate"><input type="checkbox" data-role="pipeline-skip-gate" /><span data-i18n="pipeline.skipManualConfirmation">跳过人工确认</span></label>
+              <button class="command-button" type="button" data-action="run-pipeline" data-i18n="action.run">运行</button>
+              <button class="command-button" type="button" data-action="resume-pipeline" data-i18n="pipeline.action.resume" hidden>恢复运行</button>
+              <button class="command-button danger" type="button" data-action="stop-pipeline" data-i18n="action.stop">停止</button>
+            </div>
+          </header>
+          <div class="pipeline-shell">
+            <aside class="side-pane pipeline-step-list" data-role="pipeline-step-list" data-i18n="state.waitingPipeline">等待流水线数据</aside>
+            <section class="center-pane pipeline-main">
+              <section class="pipeline-detail" data-role="pipeline-detail" data-content-origin="runtime" data-i18n="pipeline.selectStageHint">点击左侧步骤查看详情</section>
+              <section class="style-confirmation-grid" data-role="style-grid" hidden></section>
+              <section class="runtime-log-pane">
+                <header data-i18n="nav.logs">运行日志</header>
+                <pre data-role="pipeline-runtime-log" data-content-origin="log" data-i18n="state.waitingLogs">等待运行日志</pre>
+              </section>
+            </section>
+          </div>
+        </section>
+
+        <section class="task-panel" data-panel="patch" aria-labelledby="title-patch" hidden>
+          <header class="panel-header">
+            <h1 id="title-patch" data-i18n="nav.patch">补充开发</h1>
+            <div class="panel-actions">
+              <button class="command-button" type="button" data-action="analyze-patch" data-i18n="patch.analyze">分析补充开发</button>
+              <button class="command-button secondary" type="button" data-action="refresh-patches" data-i18n="action.refreshList">刷新列表</button>
+              <span class="panel-status" data-role="patch-status" data-i18n="patch.waitingStatus">补充开发：等待记录</span>
+            </div>
+          </header>
+          <textarea class="text-area" rows="5" aria-label="补充开发请求" data-role="patch-request" data-content-origin="user" data-i18n-aria-label="patch.request"></textarea>
+          <div class="table-shell" data-role="patch-table" data-content-origin="runtime" data-i18n="state.waitingPatchRecords">等待补充开发记录</div>
+        </section>
+
+        <section class="task-panel" data-panel="package" aria-labelledby="title-package" hidden>
+          <header class="panel-header">
+            <h1 id="title-package" data-i18n="nav.package">打包阶段</h1>
+            <div class="panel-actions">
+              <button class="command-button" type="button" data-action="run-package" data-i18n="package.generate">生成打包资料</button>
+              <button class="command-button secondary" type="button" data-action="refresh-package" data-i18n="action.refreshStatus">刷新状态</button>
+              <span class="panel-status" data-role="package-status" data-i18n="package.waitingStatus">打包：等待状态</span>
+            </div>
+          </header>
+          <pre class="output-pane" data-role="package-output" data-content-origin="artifact" data-i18n="state.waitingPackage">等待打包状态</pre>
+        </section>
+
+        <section class="task-panel" data-panel="logs" aria-labelledby="title-logs" hidden>
+          <header class="panel-header">
+            <h1 id="title-logs" data-i18n="nav.logs">运行日志</h1>
+            <div class="panel-actions">
+              <label class="panel-status" data-i18n="logs.level">级别</label>
+              <select class="select-input" aria-label="级别" data-role="log-level" data-i18n-aria-label="logs.level">
+                <option value="ALL" data-i18n="enum.logLevel.all">全部</option>
+                <option value="DEBUG" data-i18n="enum.logLevel.debug">调试</option>
+                <option value="INFO" data-i18n="enum.logLevel.info">信息</option>
+                <option value="WARNING" data-i18n="enum.logLevel.warning">警告</option>
+                <option value="ERROR" data-i18n="enum.logLevel.error">错误</option>
+              </select>
+              <button class="command-button secondary" type="button" data-action="export-logs" data-i18n="logs.export">导出日志文件</button>
+              <button class="command-button danger" type="button" data-action="clear-logs" data-i18n="logs.clear">清空日志</button>
+              <span class="panel-status" data-role="logs-status" data-i18n="logs.waitingStatus">日志：等待记录</span>
+            </div>
+          </header>
+          <div class="table-shell" data-role="log-table" data-content-origin="log" data-i18n="state.waitingLogEntries">等待日志记录</div>
+        </section>
+
+        <section class="task-panel" data-panel="sdk" aria-labelledby="title-sdk" hidden>
+          <header class="panel-header">
+            <h1 id="title-sdk" data-i18n="nav.sdk">SDK 知识库</h1>
+            <div class="panel-actions">
+              <input class="text-input sdk-name-input" data-role="sdk-name" aria-label="SDK 名称" placeholder="SDK 名称" data-i18n-aria-label="sdk.name" data-i18n-placeholder="sdk.name" />
+              <input class="text-input sdk-url-input" data-role="sdk-url" aria-label="SDK 来源 URL" placeholder="SDK 来源 URL" data-i18n-aria-label="sdk.sourceUrl" data-i18n-placeholder="sdk.sourceUrlShort" />
+              <button class="command-button" type="button" data-action="add-sdk" data-i18n="sdk.add">新增 SDK</button>
+              <button class="command-button secondary" type="button" data-action="approve-sdk" data-i18n="sdk.approve">批准入库</button>
+              <button class="command-button secondary" type="button" data-action="pending-sdk" data-i18n="sdk.pending">标记待复核</button>
+              <button class="command-button secondary" type="button" data-action="reject-sdk" data-i18n="sdk.reject">拒绝入库</button>
+              <span class="panel-status" data-role="sdk-status" data-i18n="sdk.waitingStatus">SDK：等待状态</span>
+            </div>
+          </header>
+          <div class="table-shell" data-role="sdk-table" data-content-origin="sdk" data-i18n="state.waitingSdkSpecs">等待 SDK 数据</div>
+          <textarea class="text-area" rows="8" readonly aria-label="已批准的 SDK 上下文" data-role="sdk-context" data-content-origin="sdk" data-i18n-aria-label="sdk.approvedContext"></textarea>
+        </section>
+      </main>
+
+      <section class="modal-backdrop" data-role="template-browser-modal" hidden aria-labelledby="title-template-browser" aria-modal="true" role="dialog">
+        <div class="modal-dialog template-browser-dialog" aria-busy="false">
+          <header class="modal-header">
+            <h1 id="title-template-browser" data-i18n="design.template.browserTitle">项目模板</h1>
+          </header>
+          <div class="template-browser-body">
+            <aside class="template-list-pane" aria-labelledby="template-list-title">
+              <header class="template-pane-header">
+                <div>
+                  <h2 id="template-list-title" data-i18n="design.template.listTitle">模板列表</h2>
+                  <p data-i18n="design.template.listHint">内置模板与当前草稿的自定义模板</p>
+                </div>
+                <span class="template-count" data-role="template-count">0</span>
+                <button class="command-button secondary compact" type="button" data-action="refresh-templates" data-template-action data-i18n="action.refresh">刷新</button>
+              </header>
+              <div class="template-list" data-role="template-list" role="listbox" tabindex="0" aria-label="模板列表" data-i18n-aria-label="design.template.listTitle"></div>
+            </aside>
+            <section class="template-detail-pane" aria-labelledby="template-detail-title">
+              <header class="template-pane-header">
+                <h2 id="template-detail-title" data-i18n="design.template.detailTitle">模板详情</h2>
+              </header>
+              <div class="template-detail" data-role="template-detail"></div>
+            </section>
+          </div>
+          <footer class="modal-footer template-browser-footer">
+            <span class="panel-status" data-role="template-browser-status" aria-live="polite" data-i18n="design.template.status.waiting">正在等待模板数据</span>
+            <button class="command-button danger" type="button" data-action="delete-template" data-template-action disabled data-i18n="design.template.deleteCustom">删除自定义模板</button>
+            <button class="command-button" type="button" data-action="apply-template" data-template-action disabled data-i18n="design.template.apply">载入模板项目</button>
+            <button class="command-button secondary" type="button" data-action="cancel-template-browser" data-template-action data-i18n="action.close">关闭</button>
+          </footer>
+          <div class="template-confirmation-layer" data-role="template-confirmation" hidden>
+            <section class="template-confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby="template-confirmation-title">
+              <h2 id="template-confirmation-title" data-role="template-confirmation-title"></h2>
+              <p data-role="template-confirmation-message"></p>
+              <p class="template-confirmation-error" data-role="template-confirmation-error" hidden></p>
+              <div class="template-confirmation-actions">
+                <button class="command-button danger" type="button" data-action="confirm-template-delete" data-template-action hidden data-i18n="design.template.confirmDelete">永久删除</button>
+                <button class="command-button" type="button" data-action="confirm-template-apply" data-template-action hidden data-i18n="design.template.confirmApply">确认载入</button>
+                <button class="command-button secondary" type="button" data-action="cancel-template-confirmation" data-template-action data-i18n="action.cancel">取消</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-backdrop" data-role="save-template-modal" hidden aria-labelledby="title-save-template" aria-modal="true" role="dialog">
+        <div class="modal-dialog save-template-dialog" aria-busy="false">
+          <header class="modal-header">
+            <h1 id="title-save-template" data-i18n="design.template.saveTitle">另存为自定义模板</h1>
+          </header>
+          <div class="save-template-body">
+            <p class="pane-note" data-i18n="design.template.saveHint">当前草稿工作区 · 不包含智能访谈记录</p>
+            <label class="template-form-field">
+              <span data-i18n="design.template.nameLabel">模板名称</span>
+              <input class="text-input" type="text" data-role="template-name" data-content-origin="user" autocomplete="off" data-i18n-placeholder="design.template.namePlaceholder" placeholder="我的项目模板" />
+            </label>
+            <label class="template-form-field">
+              <span data-i18n="design.template.scaleLabel">目标规模</span>
+              <select class="select-input" data-role="template-scale">
+                <option value="iaa_hypercasual" data-i18n="design.profile.enum.targetScale.iaa_hypercasual">广告变现超休闲项目</option>
+                <option value="indie" data-i18n="design.profile.enum.targetScale.indie">独立游戏</option>
+                <option value="midcore" data-i18n="design.profile.enum.targetScale.midcore">中核项目</option>
+                <option value="3a" data-i18n="design.profile.enum.targetScale.3a">3A 项目</option>
+                <option value="large_service" data-i18n="design.profile.enum.targetScale.large_service">大型长线服务项目</option>
+              </select>
+            </label>
+            <p class="form-error" data-role="save-template-error" aria-live="polite" hidden></p>
+          </div>
+          <footer class="modal-footer">
+            <span class="panel-status" data-role="save-template-status" aria-live="polite" data-i18n="design.template.status.readyToSave">准备保存</span>
+            <button class="command-button" type="button" data-action="confirm-save-template" data-template-save-action data-i18n="design.template.save">保存模板</button>
+            <button class="command-button secondary" type="button" data-action="cancel-save-template" data-template-save-action data-i18n="action.cancel">取消</button>
+          </footer>
+          <div class="template-confirmation-layer" data-role="template-overwrite-confirmation" hidden>
+            <section class="template-confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby="template-overwrite-title">
+              <h2 id="template-overwrite-title" data-i18n="design.template.overwriteTitle">覆盖自定义模板</h2>
+              <p data-role="template-overwrite-message"></p>
+              <p class="template-confirmation-error" data-role="template-overwrite-error" hidden></p>
+              <div class="template-confirmation-actions">
+                <button class="command-button danger" type="button" data-action="confirm-template-overwrite" data-template-save-action data-i18n="design.template.confirmOverwrite">确认覆盖</button>
+                <button class="command-button secondary" type="button" data-action="cancel-template-overwrite" data-template-save-action data-i18n="action.cancel">取消</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-backdrop" data-role="save-manager-dialog" hidden aria-labelledby="title-save-manager" aria-modal="true" role="dialog">
+        <div class="modal-dialog save-manager-dialog">
+          <header class="modal-header">
+            <h1 id="title-save-manager" data-i18n="save.manager">存档管理</h1>
+          </header>
+          <div class="save-manager-body">
+            <section class="save-create-bar" aria-labelledby="save-create-title">
+              <h2 id="save-create-title" data-i18n="utility.save.createTitle">创建存档</h2>
+              <input class="text-input save-name-input" data-role="save-name" aria-label="新存档名称" placeholder="新存档名称" data-i18n-aria-label="utility.save.newName" data-i18n-placeholder="utility.save.newName" />
+              <button class="command-button" type="button" data-action="create-blank-save" data-save-action data-i18n="utility.save.createBlank">新建项目存档</button>
+              <button class="command-button secondary" type="button" data-action="create-save-copy" data-save-action data-i18n="utility.save.createCopy">另存为副本</button>
+            </section>
+            <div class="save-manager-workspace">
+              <aside class="save-list-pane" aria-labelledby="save-list-title">
+                <header class="save-pane-header">
+                  <h2 id="save-list-title" data-i18n="utility.save.listTitle">存档列表</h2>
+                  <span class="save-count" data-role="save-count">0</span>
+                  <button class="command-button secondary compact" type="button" data-action="refresh-saves" data-save-action data-i18n="action.refresh">刷新</button>
+                </header>
+                <div class="save-list" data-role="save-table" data-content-origin="save" role="listbox" tabindex="0" aria-label="存档列表" data-i18n-aria-label="utility.save.listTitle">
+                  <div class="empty-list" data-i18n="state.waitingSaveIndex">等待存档索引</div>
+                </div>
+              </aside>
+              <section class="save-detail-pane" aria-labelledby="save-detail-title">
+                <header class="save-pane-header">
+                  <h2 id="save-detail-title" data-i18n="utility.save.detailTitle">存档详情</h2>
+                </header>
+                <div class="save-detail" data-role="save-detail" data-content-origin="save">
+                  <div class="empty-list" data-i18n="utility.save.detailEmpty">选择一个存档查看详情</div>
+                </div>
+                <div class="save-detail-actions">
+                  <input class="text-input save-rename-input" data-role="save-rename-name" aria-label="重命名为" placeholder="重命名为" data-i18n-aria-label="utility.save.renameName" data-i18n-placeholder="utility.save.renameName" />
+                  <button class="command-button secondary" type="button" data-action="rename-save" data-save-action data-i18n="action.rename">重命名</button>
+                  <button class="command-button" type="button" data-action="save-selected-save" data-save-action data-i18n="utility.save.saveCurrent">保存当前</button>
+                  <button class="command-button secondary" type="button" data-action="load-save" data-save-action data-i18n="utility.save.loadSelected">加载</button>
+                  <button class="command-button secondary" type="button" data-action="open-save-directory" data-save-action data-i18n="utility.save.openDirectory">打开目录</button>
+                  <button class="command-button danger" type="button" data-action="delete-save" data-save-action data-i18n="utility.save.deleteSelected">删除</button>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="modal-footer">
+            <span class="panel-status" data-role="save-manager-status" data-i18n="save.waitingStatus">设计存档：等待索引</span>
+            <button class="command-button secondary" type="button" data-action="cancel-save-manager" data-i18n="action.cancel">取消</button>
+          </footer>
+          <section class="save-confirmation-layer" data-role="save-confirmation" hidden role="alertdialog" aria-modal="true" aria-labelledby="save-confirmation-title">
+            <div class="save-confirmation-panel">
+              <h2 id="save-confirmation-title" data-role="save-confirmation-title">确认操作</h2>
+              <p data-role="save-confirmation-message"></p>
+              <p class="save-confirmation-error" data-role="save-confirmation-error" hidden></p>
+              <div class="save-confirmation-actions">
+                <button class="command-button" type="button" data-action="confirm-load-save-current" data-save-action data-i18n="utility.save.confirm.saveAndSwitch">保存并切换</button>
+                <button class="command-button secondary" type="button" data-action="confirm-load-discard" data-save-action data-i18n="utility.save.confirm.discardAndSwitch">不保存并切换</button>
+                <button class="command-button danger" type="button" data-action="confirm-delete-save" data-save-action data-i18n="utility.save.confirm.delete">永久删除</button>
+                <button class="command-button secondary" type="button" data-action="cancel-save-confirmation" data-i18n="action.cancel">取消</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="modal-backdrop" data-role="project-config-modal" hidden aria-labelledby="title-project-config" aria-modal="true" role="dialog">
+        <div class="modal-dialog project-config-dialog">
+          <header class="modal-header">
+            <h1 id="title-project-config" data-i18n="projectConfig.title">项目配置</h1>
+          </header>
+          <div class="project-config-body">
+            <section class="project-config-section">
+              <h2 data-i18n="projectConfig.environment">环境设置</h2>
+              <div class="project-config-grid">
+                <label class="project-config-field">
+                  <span class="editor-label" data-i18n="projectConfig.engine">游戏引擎</span>
+                  <select class="select-input" data-role="project-engine" aria-label="游戏引擎" data-i18n-aria-label="projectConfig.engine">
+                    <option value="unity">Unity</option>
+                    <option value="godot">Godot</option>
+                    <option value="unreal">Unreal Engine</option>
+                    <option value="custom" data-i18n="projectConfig.customEngine">自定义引擎</option>
+                  </select>
+                </label>
+                <label class="project-config-field" data-role="custom-engine-field" hidden>
+                  <span class="editor-label" data-i18n="projectConfig.engineName">引擎名称</span>
+                  <input class="text-input" data-role="custom-engine-name" aria-label="自定义引擎名称" data-i18n-aria-label="projectConfig.customEngineName" />
+                </label>
+              </div>
+            </section>
+            <section class="project-config-section">
+              <h2 data-i18n="projectConfig.paths">路径配置</h2>
+              <div class="project-config-grid">
+                <div class="project-config-field">
+                  <span class="editor-label" data-role="development-path-label" data-i18n="projectConfig.unityProjectPath">Unity 项目路径</span>
+                  <div class="native-path-field">
+                    <input class="text-input" data-role="development-project-path" aria-label="开发项目路径" data-i18n-aria-label="projectConfig.developmentPath" />
+                    <button class="command-button secondary" type="button" data-action="pick-development-project-path" data-i18n="settings.project.action.chooseFolder">选择文件夹</button>
+                  </div>
+                </div>
+                <div class="project-config-field" data-role="editor-path-field">
+                  <span class="editor-label" data-role="editor-path-label" data-i18n="projectConfig.unityEditorPath">Unity 编辑器路径</span>
+                  <div class="native-path-field">
+                    <input class="text-input" data-role="editor-path" aria-label="编辑器路径" data-i18n-aria-label="projectConfig.editorPath" />
+                    <button class="command-button secondary" type="button" data-action="pick-editor-path" data-i18n="settings.project.action.chooseFile">选择程序</button>
+                  </div>
+                  <div class="editor-discovery-controls" data-role="editor-discovery-controls">
+                    <button class="command-button secondary" type="button" data-action="discover-unity-editors" data-i18n="settings.project.action.discoverEditors">发现 Unity 编辑器</button>
+                    <select class="select-input" data-role="unity-editor-candidates" aria-label="发现的 Unity 编辑器" data-i18n-aria-label="settings.project.field.discoveredEditors" hidden></select>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="project-config-section project-preflight-section">
+              <h2 data-i18n="projectConfig.preflight">运行前检查</h2>
+              <pre data-role="project-preflight-output" data-content-origin="runtime" data-i18n="state.waitingValidation">等待保存并验证</pre>
+              <div class="project-preflight-actions" data-role="project-preflight-actions" hidden>
+                <button class="command-button secondary" type="button" data-action="preflight-reselect-project" data-i18n="settings.project.action.reselectProject">重新选择项目目录</button>
+                <button class="command-button secondary" type="button" data-action="preflight-reselect-editor" data-i18n="settings.project.action.reselectEditor">重新选择编辑器</button>
+                <button class="command-button secondary" type="button" data-action="preflight-rescan-editor" data-i18n="settings.project.action.rescanEditor">重新扫描编辑器</button>
+              </div>
+            </section>
+          </div>
+          <footer class="modal-footer">
+            <span class="panel-status" data-role="project-config-status" data-i18n="projectConfig.waitingStatus">项目配置：等待加载</span>
+            <button class="command-button secondary" type="button" data-action="validate-project-config" data-i18n="action.validate">验证</button>
+            <button class="command-button secondary" type="button" data-action="relink-project-binding" data-i18n="settings.project.action.relink">重新关联本机路径</button>
+            <button class="command-button" type="button" data-action="save-project-config" data-i18n="action.saveAndValidate">保存并验证</button>
+            <button class="command-button secondary" type="button" data-action="cancel-project-config" data-i18n="action.cancel">取消</button>
+          </footer>
+        </div>
+      </section>
+
+      <section class="modal-backdrop" data-role="ai-config-modal" hidden aria-labelledby="title-ai-config" aria-modal="true" role="dialog">
+        <div class="modal-dialog ai-config-dialog">
+          <header class="modal-header">
+            <h1 id="title-ai-config" data-i18n="aiConfig.title">AI 配置管理</h1>
+          </header>
+          <div id="ai-config-content" class="ai-config-body" role="tabpanel" aria-labelledby="ai-config-tab-dev" data-role="ai-config-content">
+            <aside class="ai-config-left">
+              <div class="tab-strip ai-config-tabs" role="tablist">
+                <button id="ai-config-tab-dev" class="mini-tab active" type="button" role="tab" aria-selected="true" aria-controls="ai-config-content" tabindex="0" data-ai-config-tab="dev" data-i18n="aiConfig.developmentApi">开发配置</button>
+                <button id="ai-config-tab-image" class="mini-tab" type="button" role="tab" aria-selected="false" aria-controls="ai-config-content" tabindex="-1" data-ai-config-tab="image" data-i18n="aiConfig.imageApi">图像生成配置</button>
+                <button id="ai-config-tab-completion" class="mini-tab" type="button" role="tab" aria-selected="false" aria-controls="ai-config-content" tabindex="-1" data-ai-config-tab="completion" data-i18n="aiConfig.completionApi">文本补全配置</button>
+              </div>
+              <div class="ai-entry-list" data-role="ai-entry-list" data-i18n="state.waitingAiConfig">等待 AI 配置</div>
+              <div class="ai-entry-actions">
+                <button class="command-button secondary" type="button" data-action="new-ai-entry" data-i18n="action.create">新建</button>
+                <button class="command-button danger" type="button" data-action="delete-ai-entry" data-i18n="action.delete">删除</button>
+              </div>
+            </aside>
+            <section class="ai-config-fields" data-role="ai-config-fields" data-content-origin="config" data-i18n="state.waitingAiConfig">等待 AI 配置</section>
+          </div>
+          <footer class="modal-footer">
+            <span class="panel-status" data-role="ai-config-status" data-i18n="aiConfig.waitingStatus">AI 配置：等待加载</span>
+            <button class="command-button secondary" type="button" data-action="apply-ai-config" data-i18n="action.apply">应用</button>
+            <button class="command-button" type="button" data-action="save-ai-config" data-i18n="action.save">保存</button>
+            <button class="command-button secondary" type="button" data-action="cancel-ai-config" data-i18n="action.cancel">取消</button>
+          </footer>
+        </div>
+      </section>
+
+      <section class="modal-backdrop" data-role="style-prompt-editor-modal" hidden aria-labelledby="title-style-prompt-editor" aria-modal="true" role="dialog">
+        <div class="modal-dialog style-prompt-dialog">
+          <header class="modal-header">
+            <h1 id="title-style-prompt-editor" data-i18n="stylePrompt.title">风格图提示词编辑</h1>
+          </header>
+          <div class="style-prompt-body">
+            <section class="style-prompt-preview-shell">
+              <h2 data-i18n="stylePrompt.current">当前提示词</h2>
+              <pre data-role="style-prompt-preview" class="style-prompt-preview" data-content-origin="ai" data-i18n="state.waitingStylePrompt">等待风格提示词</pre>
+            </section>
+            <section class="style-prompt-chat-shell">
+              <h2 data-i18n="stylePrompt.conversation">对话记录</h2>
+              <pre data-role="style-prompt-conversation" class="style-prompt-conversation" data-content-origin="ai" data-i18n="state.waitingConversation">等待对话</pre>
+              <textarea class="text-area" rows="4" data-role="style-prompt-input" aria-label="风格提示词输入" data-content-origin="user" data-i18n-aria-label="stylePrompt.input"></textarea>
+              <div class="style-prompt-actions">
+                <label class="checkline"><span data-i18n="stylePrompt.imageCount">生成张数</span>
+                  <select class="select-input" data-role="style-prompt-count" aria-label="生成张数" data-i18n-aria-label="stylePrompt.imageCount">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                  </select>
+                </label>
+                <button class="command-button secondary" type="button" data-action="send-style-prompt" data-i18n="action.send">发送</button>
+                <button class="command-button" type="button" data-action="confirm-style-prompts" data-i18n="stylePrompt.confirmGenerate">确认生成</button>
+              </div>
+            </section>
+          </div>
+          <footer class="modal-footer">
+            <span class="panel-status" data-role="style-prompt-status" data-i18n="stylePrompt.waitingStatus">风格提示词：等待输入</span>
+            <button class="command-button secondary" type="button" data-action="cancel-style-prompt-editor" data-i18n="action.cancel">取消</button>
+          </footer>
+        </div>
+      </section>
+
+      <footer class="bottom-status-bar">
+        <button class="status-segment bottom-tab active" type="button" data-bottom-tab="logs" data-role="bottom-log-tab" data-i18n="common.logs">日志</button>
+        <button class="status-segment bottom-tab" type="button" data-bottom-tab="ai" data-role="bottom-ai-tab" data-i18n="ai.interview">智能访谈</button>
+        <button class="status-segment ai-status" type="button" data-status="ready" data-i18n="ai.notConfigured">智能助手：未配置</button>
+        <button class="status-segment progress-status" type="button" data-i18n="shell.initialProgress">进度：0/15</button>
+        <span class="status-segment system-status" data-i18n="shell.ready">系统：就绪</span>
+      </footer>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

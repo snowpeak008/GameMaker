@@ -1,0 +1,18 @@
+[package]
+name = "adm-new-patch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-new-ai = { path = "../adm-new-ai" }
+adm-new-contracts = { path = "../adm-new-contracts" }
+adm-new-foundation = { path = "../adm-new-foundation" }
+adm-new-storage = { path = "../adm-new-storage" }
+fs2 = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"

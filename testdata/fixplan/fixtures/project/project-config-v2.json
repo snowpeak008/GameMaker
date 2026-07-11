@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "binding_id": "fixture_unity_binding",
+  "project_engine": "unity",
+  "pipeline_adapter": "none",
+  "custom_engine_name": "",
+  "required_editor_version": "2022.3.21f1",
+  "future_field": {
+    "keep": true,
+    "source": "logical-project-fixture"
+  }
+}
+

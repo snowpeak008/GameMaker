@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "active_profile": "fixture_legacy_cli",
+  "profiles": [
+    {
+      "id": "fixture_legacy_cli",
+      "name": "Fixture Legacy CLI",
+      "adapter": "codex",
+      "llm": {
+        "source": "cli",
+        "provider": "codex",
+        "base_url": "",
+        "api_key": "",
+        "cli_path": "fixture-bin/codex.cmd",
+        "model": "fixture-legacy-code-model",
+        "temperature": 0.2,
+        "timeout": 30
+      },
+      "image": {
+        "enabled": false,
+        "source": "none",
+        "provider": "none",
+        "base_url": "",
+        "api_key": "",
+        "cli_path": "",
+        "model": ""
+      },
+      "metadata": {
+        "fixture_extension": {
+          "keep": true
+        }
+      }
+    }
+  ]
+}
+

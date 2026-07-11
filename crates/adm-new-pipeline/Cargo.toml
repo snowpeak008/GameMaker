@@ -1,0 +1,19 @@
+[package]
+name = "adm-new-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-new-contracts = { path = "../adm-new-contracts" }
+adm-new-config = { path = "../adm-new-config" }
+adm-new-design = { path = "../adm-new-design" }
+adm-new-foundation = { path = "../adm-new-foundation" }
+adm-new-storage = { path = "../adm-new-storage" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"

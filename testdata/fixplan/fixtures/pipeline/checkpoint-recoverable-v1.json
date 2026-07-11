@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "revision": 3,
+  "identity": {
+    "run_id": "fixture_run_01",
+    "attempt_id": "fixture_attempt_02",
+    "parent_attempt_id": "fixture_attempt_01",
+    "project_id": "fixture_project_hash",
+    "draft_id": "fixture_draft",
+    "save_id": "fixture_save"
+  },
+  "range": {
+    "from_stage_id": "00",
+    "to_stage_id": "14",
+    "stage_ids": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14"]
+  },
+  "status": "recoverable",
+  "current_stage_id": "08",
+  "current_unit_id": null,
+  "next_unit_id": "08:stage",
+  "units": [
+    {
+      "stage_id": "07",
+      "unit_id": "07:stage",
+      "status": "committed",
+      "idempotency_key": "fixture-run:07:stage",
+      "started_at": "fixture:10",
+      "completed_at": "fixture:11",
+      "result_fingerprint": "fixture-result-07",
+      "output_refs": ["stage_07/style_options.json"],
+      "reconcile_required": false,
+      "failure_message": ""
+    },
+    {
+      "stage_id": "08",
+      "unit_id": "08:stage",
+      "status": "pending",
+      "idempotency_key": "fixture-run:08:stage",
+      "started_at": "",
+      "completed_at": "",
+      "result_fingerprint": "",
+      "output_refs": [],
+      "reconcile_required": false,
+      "failure_message": ""
+    }
+  ],
+  "fingerprints": {
+    "input": "fixture-input-fingerprint",
+    "configuration": "fixture-config-fingerprint",
+    "execution_plan": "fixture-plan-fingerprint",
+    "application": "fixture-app-version"
+  },
+  "resume_policy": "explicit_only",
+  "skip_manual_gates": false,
+  "stop_reason": "fixture operator request",
+  "stop_boundary": "after_unit",
+  "recovery_blocked_reason": "",
+  "created_at": "fixture:1",
+  "updated_at": "fixture:12"
+}
+
