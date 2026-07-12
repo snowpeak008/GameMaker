@@ -5138,10 +5138,46 @@ pub fn is_standalone_repo_root(path: &Path) -> bool {
     SourceProjectRoot::open(path).is_ok()
 }
 
+fn canonicalize_path_with_missing_tail(path: &Path) -> Option<PathBuf> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return None;
+    }
+    let mut cursor = path.to_path_buf();
+    let mut missing = Vec::new();
+    loop {
+        match fs::symlink_metadata(&cursor) {
+            Ok(metadata) => {
+                if release_metadata_is_reparse_or_symlink(&metadata)
+                    || (!missing.is_empty() && !metadata.is_dir())
+                {
+                    return None;
+                }
+                let mut resolved = cursor.canonicalize().ok()?;
+                for segment in missing.iter().rev() {
+                    resolved.push(segment);
+                }
+                return Some(resolved);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return None,
+        }
+        missing.push(cursor.file_name()?.to_os_string());
+        cursor = cursor.parent()?.to_path_buf();
+    }
+}
+
 fn same_path(left: &Path, right: &Path) -> bool {
-    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
-    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
-    left == right
+    match (
+        canonicalize_path_with_missing_tail(left),
+        canonicalize_path_with_missing_tail(right),
+    ) {
+        (Some(left), Some(right)) => left == right,
+        _ => false,
+    }
 }
 
 pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
@@ -5234,6 +5270,35 @@ mod tests {
         let found = find_repo_root(&root.join("nested/deeper")).unwrap();
         assert!(same_path(&found, &root));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn path_identity_canonicalizes_only_a_safe_absolute_missing_tail() {
+        let root = std::env::temp_dir().join(format!(
+            "governance_missing_path_identity_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("dist")).unwrap();
+        let canonical_root = root.canonicalize().unwrap();
+        let plain = root.join("dist/Pending/Leaf");
+        let canonical = canonical_root.join("dist/Pending/Leaf");
+        assert!(same_path(&plain, &canonical));
+        assert!(!same_path(
+            &plain,
+            &canonical_root.join("dist/pending/Leaf")
+        ));
+        assert!(!same_path(
+            &root.join("dist").join("Pending").join("..").join("Leaf"),
+            &canonical_root.join("dist/Leaf")
+        ));
+        assert!(!same_path(Path::new("dist/Pending/Leaf"), &canonical));
+        fs::write(root.join("dist/not-a-directory"), b"fixture").unwrap();
+        assert!(!same_path(
+            &root.join("dist/not-a-directory/Leaf"),
+            &canonical_root.join("dist/not-a-directory/Leaf")
+        ));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -5722,9 +5787,12 @@ mod tests {
             "governance_portable_transaction_contract_{}",
             std::process::id()
         ));
+        let _ = fs::remove_dir_all(&root);
         let evidence = valid_release_evidence_fixture(1_800_000_000);
         let portable = evidence.portable.as_ref().unwrap();
         let dist = root.join("dist");
+        fs::create_dir_all(&dist).unwrap();
+        let canonical_root = root.canonicalize().unwrap();
         let transaction_id = &portable.transaction_id;
         let receipt = json!({
             "schema_version": 1,
@@ -5762,15 +5830,21 @@ mod tests {
             "git_commit": evidence.git_commit,
         });
         assert!(
-            validate_portable_transaction_contract(&root, &evidence, portable, &receipt, &build)
-                .is_empty()
+            validate_portable_transaction_contract(
+                &canonical_root,
+                &evidence,
+                portable,
+                &receipt,
+                &build,
+            )
+            .is_empty()
         );
 
         let mut wrong_build = build.clone();
         wrong_build["transaction_id"] = json!("3".repeat(32));
         assert!(
             validate_portable_transaction_contract(
-                &root,
+                &canonical_root,
                 &evidence,
                 portable,
                 &receipt,
@@ -5784,7 +5858,7 @@ mod tests {
         inconsistent_receipt["backup_deleted"] = json!(true);
         assert!(
             validate_portable_transaction_contract(
-                &root,
+                &canonical_root,
                 &evidence,
                 portable,
                 &inconsistent_receipt,
@@ -5793,6 +5867,7 @@ mod tests {
             .iter()
             .any(|code| code == "release_portable_transaction_backup_finalization_invalid")
         );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
