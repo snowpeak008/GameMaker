@@ -64,9 +64,12 @@ Portable update and cleanup
   then with -Execute to remove only its proven backup. A failed candidate is isolated
   as .failed-* and may be removed only through the source checkout's
   tools\portable\Remove-FailedPortableArtifact.ps1 using the recorded transaction;
-  that command is also a dry run unless -Execute is supplied. Successful explicit
-  finalization retains only the five newest validated transaction receipts for that
-  output name, preventing receipt files from accumulating forever. Backup and failed
+  that command is also a dry run unless -Execute is supplied. Smoke execution uses an
+  explicit redirected process handle, waits for the GUI-subsystem
+  executable to exit, records its real exit code/output, and kills then reaps it on timeout.
+  This avoids PowerShell treating a still-running GUI executable as a completed command.
+  Successful explicit finalization retains the globally newest five receipts for the output
+  name, preventing receipt files from accumulating forever. Backup and failed
   directories are first atomically renamed to transaction-bound .retired-* tombstones;
   interrupted or partial deletion is resumed idempotently by the same command. A
   receipt left at stage_smoke_passed or backup_created is reconciled by the finalizer;

@@ -328,10 +328,10 @@ try {
     Write-PortableSwapTransaction -Path $transactionManifest -Transaction $transaction
 
     Write-Host '==> Smoke validating the complete stage before swap'
-    $smokeOutput = @(& $stagedExecutable --smoke 2>&1)
-    if ($LASTEXITCODE -ne 0) {
+    $smokeResult = Invoke-PortableSmokeProcess -Executable $stagedExecutable
+    if ($smokeResult.ExitCode -ne 0) {
         $transaction.smoke_status = 'failed'
-        throw "portable stage smoke failed: $($smokeOutput -join [Environment]::NewLine)"
+        throw "portable stage smoke failed with exit code $($smokeResult.ExitCode): $($smokeResult.Output)"
     }
     $null = Assert-PortableStage -StageRoot $stageRoot -ExpectedTransactionId $transactionId `
         -ExpectedImmutableMeasure $transaction.staged_immutable_tree

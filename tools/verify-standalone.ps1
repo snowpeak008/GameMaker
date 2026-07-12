@@ -555,8 +555,12 @@ try {
     $portableTransactionManifest = ConvertTo-NormalizedPath $newReceipts[0].FullName
     $portableRoot = Join-Path $projectRoot $script:PortableRelativeRoot
     $portableExe = Join-Path $portableRoot 'AutoDesignMaker.exe'
-    Invoke-NativeCheck 'portable_smoke' 'dist/AutoDesignMaker-NEWrust-release/AutoDesignMaker.exe --smoke' {
-        & $portableExe --smoke
+    Invoke-InternalCheck 'portable_smoke' 'dist/AutoDesignMaker-NEWrust-release/AutoDesignMaker.exe --smoke' {
+        $smokeResult = Invoke-PortableSmokeProcess -Executable $portableExe
+        if ($smokeResult.ExitCode -ne 0) {
+            throw "portable smoke failed with exit code $($smokeResult.ExitCode): $($smokeResult.Output)"
+        }
+        "exit_code=0; duration_ms=$($smokeResult.DurationMs)$([Environment]::NewLine)$($smokeResult.Output)"
     } | Out-Null
     Invoke-InternalCheck 'portable_integrity' 'internal: Assert-PortableStage dist/AutoDesignMaker-NEWrust-release' {
         $report = Assert-PortableStage $portableRoot

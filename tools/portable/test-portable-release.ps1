@@ -217,6 +217,60 @@ try {
         $null = & $portableSwapModule { Get-PortableProcesses }
     }
 
+    Run-FixtureTest 'smoke runner waits for a GUI-style process and captures its result' {
+        $scriptPath = Join-Path $fixtureRoot 'smoke-runner\success.ps1'
+        Write-FixtureText -Path $scriptPath -Value @'
+Start-Sleep -Milliseconds 350
+Write-Output 'smoke-fixture-ok'
+Write-Output ('cwd=' + (Get-Location).Path)
+exit 0
+'@
+        $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath
+        $result = Invoke-PortableSmokeProcess -Executable (Join-Path $PSHOME 'powershell.exe') `
+            -ArgumentLine $argumentLine -TimeoutMilliseconds 10000
+        Assert-Fixture ($result.ExitCode -eq 0) 'smoke runner lost the child exit code'
+        Assert-Fixture ($result.DurationMs -ge 250) 'smoke runner returned before the child exited'
+        Assert-Fixture ($result.Output -match 'smoke-fixture-ok') 'smoke runner lost redirected output'
+        Assert-Fixture ($result.Output -match ('cwd=' + [Regex]::Escape($PSHOME))) `
+            'smoke runner did not use the executable directory as its working directory'
+    }
+
+    Run-FixtureTest 'smoke runner preserves a nonzero exit code and stderr' {
+        $scriptPath = Join-Path $fixtureRoot 'smoke-runner\failure.ps1'
+        Write-FixtureText -Path $scriptPath -Value @'
+[Console]::Error.WriteLine('smoke-fixture-error')
+exit 7
+'@
+        $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath
+        $result = Invoke-PortableSmokeProcess -Executable (Join-Path $PSHOME 'powershell.exe') `
+            -ArgumentLine $argumentLine -TimeoutMilliseconds 10000
+        Assert-Fixture ($result.ExitCode -eq 7) 'smoke runner lost the nonzero child exit code'
+        Assert-Fixture ($result.Output -match 'smoke-fixture-error') 'smoke runner lost redirected stderr'
+    }
+
+    Run-FixtureTest 'smoke runner kills and reaps a timed-out process' {
+        $pidPath = Join-Path $fixtureRoot 'smoke-runner\timeout.pid'
+        $scriptPath = Join-Path $fixtureRoot 'smoke-runner\timeout.ps1'
+        $escapedPidPath = $pidPath.Replace("'", "''")
+        Write-FixtureText -Path $scriptPath -Value @"
+[System.IO.File]::WriteAllText('$escapedPidPath', [string]`$PID)
+Start-Sleep -Seconds 15
+exit 0
+"@
+        $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath
+        $timedOut = $false
+        try {
+            $null = Invoke-PortableSmokeProcess -Executable (Join-Path $PSHOME 'powershell.exe') `
+                -ArgumentLine $argumentLine -TimeoutMilliseconds 2000
+        }
+        catch { $timedOut = $_.Exception.Message -match 'timed out' }
+        Assert-Fixture $timedOut 'smoke runner did not fail closed on timeout'
+        Assert-Fixture (Test-Path -LiteralPath $pidPath -PathType Leaf) 'timeout fixture did not start'
+        [int]$childPid = Get-Content -LiteralPath $pidPath -Raw
+        Assert-Fixture ($null -eq (Get-Process -Id $childPid -ErrorAction SilentlyContinue)) `
+            'timed-out smoke process was not reaped'
+    }
+
     Run-FixtureTest 'missing dist and absent user_data normalize to the empty-tree digest' {
         $root = Join-Path $fixtureRoot 'no-dist'
         $dist = Join-Path $root 'dist'

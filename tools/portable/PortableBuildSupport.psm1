@@ -13,6 +13,66 @@ $script:RequiredPortableGroups = @(
     'pipeline/artifact_layer'
 )
 
+function Invoke-PortableSmokeProcess {
+    param(
+        [Parameter(Mandatory = $true)][string] $Executable,
+        [string] $ArgumentLine = '--smoke',
+        [ValidateRange(100, 300000)][int] $TimeoutMilliseconds = 60000
+    )
+    $executablePath = [System.IO.Path]::GetFullPath($Executable)
+    if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+        throw "portable smoke executable is missing: $executablePath"
+    }
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $executablePath
+    $startInfo.Arguments = $ArgumentLine
+    $startInfo.WorkingDirectory = [System.IO.Path]::GetDirectoryName($executablePath)
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $startInfo.StandardOutputEncoding = $utf8
+    $startInfo.StandardErrorEncoding = $utf8
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $stdoutTask = $null
+    $stderrTask = $null
+    try {
+        if (-not $process.Start()) { throw 'portable smoke process did not start' }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $killFailure = ''
+            try { $process.Kill() } catch { $killFailure = $_.Exception.Message }
+            $reaped = $false
+            try { $reaped = $process.WaitForExit(5000) } catch { $killFailure = $_.Exception.Message }
+            if (-not $reaped) {
+                throw "portable smoke process timed out after $TimeoutMilliseconds ms and was not reaped within 5000 ms: $killFailure"
+            }
+            throw "portable smoke process timed out after $TimeoutMilliseconds ms"
+        }
+        # A parameterless wait flushes redirected asynchronous stream events on Windows PowerShell 5.
+        $process.WaitForExit()
+        $stdout = [string]$stdoutTask.GetAwaiter().GetResult()
+        $stderr = [string]$stderrTask.GetAwaiter().GetResult()
+        $parts = @()
+        if (-not [string]::IsNullOrWhiteSpace($stdout)) { $parts += $stdout.TrimEnd() }
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) { $parts += $stderr.TrimEnd() }
+        [pscustomobject]@{
+            ExitCode = [int]$process.ExitCode
+            DurationMs = [int64]$watch.ElapsedMilliseconds
+            Output = [string]($parts -join [Environment]::NewLine)
+        }
+    }
+    finally {
+        $watch.Stop()
+        $process.Dispose()
+    }
+}
+
 function ConvertTo-PortableFullPath {
     param([Parameter(Mandatory = $true)][string] $Path)
     $full = [System.IO.Path]::GetFullPath($Path)
@@ -700,6 +760,7 @@ function Assert-PortableStage {
 }
 
 Export-ModuleMember -Function @(
+    'Invoke-PortableSmokeProcess',
     'ConvertTo-PortableFullPath',
     'Test-PortablePathWithin',
     'Assert-NoPortableReparseAncestors',
