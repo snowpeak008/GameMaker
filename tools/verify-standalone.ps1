@@ -440,7 +440,11 @@ try {
     $phase = 'temporary-parent-preflight'
     $volumeRoot = [IO.Path]::GetPathRoot($projectRoot)
     if ([string]::IsNullOrWhiteSpace($TempParent)) {
-        $TempParent = Join-Path $volumeRoot ("独立化验证 空间-{0}-{1}" -f $PID, [guid]::NewGuid().ToString('N'))
+        $verificationRootNonce = [guid]::NewGuid().ToString('N')
+        $TempParent = [IO.Path]::Combine(
+            $volumeRoot,
+            "独立化验证 空间-$PID-$verificationRootNonce"
+        )
     }
     $TempParent = ConvertTo-NormalizedPath $TempParent
     Assert-TempParentSafe $TempParent $projectRoot
@@ -661,14 +665,11 @@ finally {
         }
         $sourceTargets = @($sourceDryJson.results | Where-Object { $_.action -eq 'dry-run-delete' } | ForEach-Object { [string]$_.target })
         $plannedDeletes = $sourceTargets.Count
-        $sourceExecute = if ($plannedDeletes -gt 0) {
-            Invoke-CapturedNative { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\clean-generated.ps1') `
-                    -ProjectRoot $projectRoot -Kind generated -Target $sourceTargets `
-                    -ProtectedUserData $protectedUserData -Execute -Json }
-        } else {
-            Invoke-CapturedNative { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\clean-generated.ps1') `
-                    -ProjectRoot $projectRoot -Kind generated -ProtectedUserData $protectedUserData -Execute -Json }
-        }
+        # Re-discover the default allowlist in the child process instead of
+        # forwarding a string[] through `powershell.exe -File`; Windows
+        # PowerShell can rebind later array elements to positional parameters.
+        $sourceExecute = Invoke-CapturedNative { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\clean-generated.ps1') `
+                -ProjectRoot $projectRoot -Kind generated -ProtectedUserData $protectedUserData -Execute -Json }
         $null = $cleanupText.AppendLine($sourceExecute.Text)
         $sourceExecuteJson = $sourceExecute.Text | ConvertFrom-Json
         $sourceExecuteActions = @($sourceExecuteJson.results | ForEach-Object { [string]$_.action })
