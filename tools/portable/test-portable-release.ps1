@@ -212,6 +212,11 @@ function Invoke-FixtureGit {
 try {
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 
+    Run-FixtureTest 'process snapshot is compatible with Windows PowerShell 5' {
+        $portableSwapModule = Get-Module PortableSwap
+        $null = & $portableSwapModule { Get-PortableProcesses }
+    }
+
     Run-FixtureTest 'missing dist and absent user_data normalize to the empty-tree digest' {
         $root = Join-Path $fixtureRoot 'no-dist'
         $dist = Join-Path $root 'dist'

@@ -27,7 +27,7 @@ function Get-PortableProcesses {
             foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name='AutoDesignMaker.exe'" -ErrorAction Stop)) {
                 $results.Add([pscustomobject]@{ Id = $process.ProcessId; Path = [string]$process.ExecutablePath })
             }
-            return @($results)
+            return $results.ToArray()
         }
         catch {
             # Fall through to the conservative process-name check.
@@ -38,7 +38,7 @@ function Get-PortableProcesses {
         try { $path = [string]$process.Path } catch { $path = '' }
         $results.Add([pscustomobject]@{ Id = $process.Id; Path = $path })
     }
-    @($results)
+    $results.ToArray()
 }
 
 function Assert-PortableDataLocksAvailable {
