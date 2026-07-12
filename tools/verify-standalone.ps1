@@ -104,6 +104,16 @@ function Get-GitTopLevelRaw {
     [string]$output[0]
 }
 
+function Get-RelocationPathClassName {
+    # Keep this script UTF-8 without BOM and ASCII-only so Windows PowerShell
+    # 5.1 cannot misdecode a non-ASCII source literal. The resulting runtime
+    # value is the Simplified-Chinese phrase used by the relocation gate.
+    -join @(
+        [char]0x72EC, [char]0x7ACB, [char]0x5316, [char]0x9A8C,
+        [char]0x8BC1, [char]0x20, [char]0x7A7A, [char]0x95F4
+    )
+}
+
 function Get-SafeProjectRelativePath {
     param([string]$Path, [string]$Root)
     $full = ConvertTo-NormalizedPath $Path
@@ -360,11 +370,17 @@ function Invoke-SelfTest {
         'swapReceiptSha256',
         'staged_immutable_tree',
         'core.quotePath=false',
+        'Get-RelocationPathClassName',
         'source guarded dry-run',
         "'dry-run-delete', 'skipped', 'report-only'",
         'final_evidence=write-after-cleanup'
     )) {
         if (-not $sourceText.Contains($marker)) { throw "standalone evidence self-test marker missing: $marker" }
+    }
+    $pathClass = Get-RelocationPathClassName
+    if ($pathClass.Length -ne 8 -or -not $pathClass.Contains(' ') -or
+        @($pathClass.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -ne 7) {
+        throw 'relocation path class did not preserve seven non-ASCII characters and one space'
     }
     $policy = Get-Content -LiteralPath $securityAllowlist -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([int]$policy.schemaVersion -ne 1 -or $policy.projectId -ne $script:ProjectId) { throw 'security allowlist self-test failed' }
@@ -441,9 +457,10 @@ try {
     $volumeRoot = [IO.Path]::GetPathRoot($projectRoot)
     if ([string]::IsNullOrWhiteSpace($TempParent)) {
         $verificationRootNonce = [guid]::NewGuid().ToString('N')
+        $relocationPathClass = Get-RelocationPathClassName
         $TempParent = [IO.Path]::Combine(
             $volumeRoot,
-            "独立化验证 空间-$PID-$verificationRootNonce"
+            "$relocationPathClass-$PID-$verificationRootNonce"
         )
     }
     $TempParent = ConvertTo-NormalizedPath $TempParent
