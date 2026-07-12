@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "projectId": "autodesignmaker-rust-v2",
+  "classes": {
+    "project-owned": "Stored relative to the runtime data root and resolved only inside that root.",
+    "machine-binding": "May be absolute; must be revalidated on this machine and never used as an internal project path.",
+    "historical-display": "May retain old text for audit/display but must never participate in path resolution."
+  },
+  "fields": [
+    { "record": "DraftMeta", "field": "project_root", "class": "project-owned", "target": "." },
+    { "record": "DraftMeta", "field": "draft_root", "class": "project-owned", "target": "drafts/<session_id>" },
+    { "record": "DraftMeta", "field": "linked_archive_path", "class": "project-owned", "target": "saves/<save_id>" },
+    { "record": "SaveIndexEntry", "field": "path", "class": "project-owned", "target": "saves/<save_id>" },
+    { "record": "RunContext", "field": "project_root", "class": "project-owned", "target": "." },
+    { "record": "RunContext", "field": "draft_root", "class": "project-owned", "target": "drafts/<session_id>" },
+    { "record": "RunContext", "field": "source_artifacts_root", "class": "project-owned", "target": "drafts/<session_id>/source_artifacts" },
+    { "record": "RunContext", "field": "settings_snapshot", "class": "project-owned", "target": "drafts/<session_id>/runtime/project_settings.snapshot.json" },
+    { "record": "RunContext", "field": "execution_object_store", "class": "project-owned", "target": "saves/<save_id>/workspace/outputs/execution_objects/execution_objects.json" },
+    { "record": "RunContext", "field": "artifact_root", "class": "project-owned", "target": "drafts/<session_id>/outputs/artifacts" },
+    { "record": "RunContext", "field": "log_root", "class": "project-owned", "target": "drafts/<session_id>/outputs/run_logs" },
+    { "record": "RunState", "field": "run_context_path", "class": "project-owned", "target": "drafts/<session_id>/runtime/run_context.json" },
+    { "record": "SettingsSnapshot", "field": "source_settings_path", "class": "project-owned", "target": "drafts/<session_id>/project_config.json" },
+    { "record": "ProjectRuntimeSettings", "field": "development_path", "class": "machine-binding", "validation": "Unity project markers" },
+    { "record": "ProjectRuntimeSettings", "field": "editor_path", "class": "machine-binding", "validation": "Unity executable identity" },
+    { "record": "AI configuration", "field": "CLI executable/path", "class": "machine-binding", "validation": "executable discovery and explicit user selection" },
+    { "record": "pipeline/checkpoint/journal", "field": "internal paths", "class": "project-owned", "target": "relative transaction paths" },
+    { "record": "lock records", "field": "lock_path", "class": "project-owned", "target": "relative lock path" },
+    { "record": "reports and audit evidence", "field": "source path text", "class": "historical-display", "routing": false }
+  ],
+  "sensitiveFields": [
+    "AI API keys",
+    "provider tokens",
+    "CLI authentication material"
+  ]
+}

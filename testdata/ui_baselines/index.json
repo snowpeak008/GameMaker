@@ -1,0 +1,567 @@
+{
+  "schema_version": 2,
+  "gate": "ui-contract-v1",
+  "ui_contract_id": "adm-rust-v2-ui-contract-v1",
+  "evidence_manifest": "gates/ui-evidence-manifest.json",
+  "required_record_count": 93,
+  "records": [
+    {
+      "surface": "main_window",
+      "state": "normal",
+      "path": "testdata/ui_baselines/main_window/normal.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "main_window",
+      "state": "startup_error",
+      "path": "testdata/ui_baselines/main_window/startup_error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "main_window",
+      "state": "running_lock",
+      "path": "testdata/ui_baselines/main_window/running_lock.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "main_window",
+      "state": "close_while_running",
+      "path": "testdata/ui_baselines/main_window/close_while_running.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "empty_project",
+      "path": "testdata/ui_baselines/app_window/empty_project.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "loaded_project",
+      "path": "testdata/ui_baselines/app_window/loaded_project.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "long_domain_text",
+      "path": "testdata/ui_baselines/app_window/long_domain_text.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "template_selected",
+      "path": "testdata/ui_baselines/app_window/template_selected.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "save_pending",
+      "path": "testdata/ui_baselines/app_window/save_pending.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "app_window",
+      "state": "export_blocked",
+      "path": "testdata/ui_baselines/app_window/export_blocked.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_interview_window",
+      "state": "no_provider",
+      "path": "testdata/ui_baselines/ai_interview_window/no_provider.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_interview_window",
+      "state": "running_stream",
+      "path": "testdata/ui_baselines/ai_interview_window/running_stream.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_interview_window",
+      "state": "invalid_payload",
+      "path": "testdata/ui_baselines/ai_interview_window/invalid_payload.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_interview_window",
+      "state": "summary_correction",
+      "path": "testdata/ui_baselines/ai_interview_window/summary_correction.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_interview_window",
+      "state": "saved_session",
+      "path": "testdata/ui_baselines/ai_interview_window/saved_session.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "embedded_interview",
+      "state": "idle",
+      "path": "testdata/ui_baselines/embedded_interview/idle.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "embedded_interview",
+      "state": "chunked_stream",
+      "path": "testdata/ui_baselines/embedded_interview/chunked_stream.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "embedded_interview",
+      "state": "mapping_pending",
+      "path": "testdata/ui_baselines/embedded_interview/mapping_pending.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "embedded_interview",
+      "state": "mapping_failed",
+      "path": "testdata/ui_baselines/embedded_interview/mapping_failed.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "embedded_interview",
+      "state": "accepted_summary",
+      "path": "testdata/ui_baselines/embedded_interview/accepted_summary.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "bottom_panel",
+      "state": "log_tab",
+      "path": "testdata/ui_baselines/bottom_panel/log_tab.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "bottom_panel",
+      "state": "ai_tab",
+      "path": "testdata/ui_baselines/bottom_panel/ai_tab.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "bottom_panel",
+      "state": "overflow_logs",
+      "path": "testdata/ui_baselines/bottom_panel/overflow_logs.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "bottom_panel",
+      "state": "polling_update",
+      "path": "testdata/ui_baselines/bottom_panel/polling_update.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "all_pending",
+      "path": "testdata/ui_baselines/pipeline_panel/all_pending.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "mixed_status",
+      "path": "testdata/ui_baselines/pipeline_panel/mixed_status.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "running",
+      "path": "testdata/ui_baselines/pipeline_panel/running.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "stopped",
+      "path": "testdata/ui_baselines/pipeline_panel/stopped.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "blocked",
+      "path": "testdata/ui_baselines/pipeline_panel/blocked.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_panel",
+      "state": "step07_confirmation_required",
+      "path": "testdata/ui_baselines/pipeline_panel/step07_confirmation_required.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "pending",
+      "path": "testdata/ui_baselines/pipeline_step_card/pending.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "running",
+      "path": "testdata/ui_baselines/pipeline_step_card/running.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "success",
+      "path": "testdata/ui_baselines/pipeline_step_card/success.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "failed",
+      "path": "testdata/ui_baselines/pipeline_step_card/failed.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "blocked",
+      "path": "testdata/ui_baselines/pipeline_step_card/blocked.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "pipeline_step_card",
+      "state": "long_message",
+      "path": "testdata/ui_baselines/pipeline_step_card/long_message.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_confirmation_dialog",
+      "state": "needs_confirmation",
+      "path": "testdata/ui_baselines/style_confirmation_dialog/needs_confirmation.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_confirmation_dialog",
+      "state": "selected_style",
+      "path": "testdata/ui_baselines/style_confirmation_dialog/selected_style.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_confirmation_dialog",
+      "state": "rejection",
+      "path": "testdata/ui_baselines/style_confirmation_dialog/rejection.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_confirmation_dialog",
+      "state": "resume_after_reload",
+      "path": "testdata/ui_baselines/style_confirmation_dialog/resume_after_reload.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_prompt_editor",
+      "state": "default_prompt",
+      "path": "testdata/ui_baselines/style_prompt_editor/default_prompt.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_prompt_editor",
+      "state": "edited_prompt",
+      "path": "testdata/ui_baselines/style_prompt_editor/edited_prompt.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_prompt_editor",
+      "state": "validation_error",
+      "path": "testdata/ui_baselines/style_prompt_editor/validation_error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "style_prompt_editor",
+      "state": "long_prompt",
+      "path": "testdata/ui_baselines/style_prompt_editor/long_prompt.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "patch_panel",
+      "state": "empty_list",
+      "path": "testdata/ui_baselines/patch_panel/empty_list.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "patch_panel",
+      "state": "patch_analyzed",
+      "path": "testdata/ui_baselines/patch_panel/patch_analyzed.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "patch_panel",
+      "state": "validation_failed",
+      "path": "testdata/ui_baselines/patch_panel/validation_failed.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "patch_panel",
+      "state": "apply_running",
+      "path": "testdata/ui_baselines/patch_panel/apply_running.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "patch_panel",
+      "state": "promoted",
+      "path": "testdata/ui_baselines/patch_panel/promoted.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "package_panel",
+      "state": "ready",
+      "path": "testdata/ui_baselines/package_panel/ready.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "package_panel",
+      "state": "blocked_by_validation",
+      "path": "testdata/ui_baselines/package_panel/blocked_by_validation.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "package_panel",
+      "state": "notes_visible",
+      "path": "testdata/ui_baselines/package_panel/notes_visible.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "package_panel",
+      "state": "package_complete",
+      "path": "testdata/ui_baselines/package_panel/package_complete.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_panel",
+      "state": "empty",
+      "path": "testdata/ui_baselines/log_panel/empty.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_panel",
+      "state": "long_list",
+      "path": "testdata/ui_baselines/log_panel/long_list.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_panel",
+      "state": "warning_error_filter",
+      "path": "testdata/ui_baselines/log_panel/warning_error_filter.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_panel",
+      "state": "autoscroll",
+      "path": "testdata/ui_baselines/log_panel/autoscroll.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_entry",
+      "state": "info",
+      "path": "testdata/ui_baselines/log_entry/info.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_entry",
+      "state": "warning",
+      "path": "testdata/ui_baselines/log_entry/warning.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_entry",
+      "state": "error",
+      "path": "testdata/ui_baselines/log_entry/error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "log_entry",
+      "state": "wrapped_text",
+      "path": "testdata/ui_baselines/log_entry/wrapped_text.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "sdk_panel",
+      "state": "no_sdks",
+      "path": "testdata/ui_baselines/sdk_panel/no_sdks.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "sdk_panel",
+      "state": "list",
+      "path": "testdata/ui_baselines/sdk_panel/list.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "sdk_panel",
+      "state": "detail",
+      "path": "testdata/ui_baselines/sdk_panel/detail.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "sdk_panel",
+      "state": "review_status",
+      "path": "testdata/ui_baselines/sdk_panel/review_status.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "sdk_panel",
+      "state": "sync_error",
+      "path": "testdata/ui_baselines/sdk_panel/sync_error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "semantic_quality_panel",
+      "state": "missing_report",
+      "path": "testdata/ui_baselines/semantic_quality_panel/missing_report.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "semantic_quality_panel",
+      "state": "pass",
+      "path": "testdata/ui_baselines/semantic_quality_panel/pass.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "semantic_quality_panel",
+      "state": "warnings",
+      "path": "testdata/ui_baselines/semantic_quality_panel/warnings.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "semantic_quality_panel",
+      "state": "blocking_issues",
+      "path": "testdata/ui_baselines/semantic_quality_panel/blocking_issues.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "save_manager_dialog",
+      "state": "empty_saves",
+      "path": "testdata/ui_baselines/save_manager_dialog/empty_saves.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "save_manager_dialog",
+      "state": "selected_save",
+      "path": "testdata/ui_baselines/save_manager_dialog/selected_save.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "save_manager_dialog",
+      "state": "dirty_save",
+      "path": "testdata/ui_baselines/save_manager_dialog/dirty_save.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "save_manager_dialog",
+      "state": "delete_confirm",
+      "path": "testdata/ui_baselines/save_manager_dialog/delete_confirm.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "save_manager_dialog",
+      "state": "load_error",
+      "path": "testdata/ui_baselines/save_manager_dialog/load_error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_config_unified_dialog",
+      "state": "profile_list",
+      "path": "testdata/ui_baselines/ai_config_unified_dialog/profile_list.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_config_unified_dialog",
+      "state": "missing_key",
+      "path": "testdata/ui_baselines/ai_config_unified_dialog/missing_key.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_config_unified_dialog",
+      "state": "image_provider",
+      "path": "testdata/ui_baselines/ai_config_unified_dialog/image_provider.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_config_unified_dialog",
+      "state": "test_failed",
+      "path": "testdata/ui_baselines/ai_config_unified_dialog/test_failed.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ai_config_unified_dialog",
+      "state": "save_success",
+      "path": "testdata/ui_baselines/ai_config_unified_dialog/save_success.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "unity_config_dialog",
+      "state": "no_path",
+      "path": "testdata/ui_baselines/unity_config_dialog/no_path.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "unity_config_dialog",
+      "state": "valid_path",
+      "path": "testdata/ui_baselines/unity_config_dialog/valid_path.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "unity_config_dialog",
+      "state": "invalid_command",
+      "path": "testdata/ui_baselines/unity_config_dialog/invalid_command.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "unity_config_dialog",
+      "state": "preflight_warnings",
+      "path": "testdata/ui_baselines/unity_config_dialog/preflight_warnings.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "workbench",
+      "state": "command_success",
+      "path": "testdata/ui_baselines/workbench/command_success.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "workbench",
+      "state": "command_failure",
+      "path": "testdata/ui_baselines/workbench/command_failure.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "workbench",
+      "state": "soft_stop",
+      "path": "testdata/ui_baselines/workbench/soft_stop.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "workbench",
+      "state": "range_run",
+      "path": "testdata/ui_baselines/workbench/range_run.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "theme",
+      "state": "token_parity_review",
+      "path": "testdata/ui_baselines/theme/token_parity_review.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "theme",
+      "state": "contrast_review",
+      "path": "testdata/ui_baselines/theme/contrast_review.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "gui_app",
+      "state": "smoke_startup",
+      "path": "testdata/ui_baselines/gui_app/smoke_startup.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "gui_app",
+      "state": "fatal_init_error",
+      "path": "testdata/ui_baselines/gui_app/fatal_init_error.json",
+      "screenshot_required": true
+    },
+    {
+      "surface": "ui_init",
+      "state": "disposition_review_only",
+      "path": "testdata/ui_baselines/ui_init/disposition_review_only.json",
+      "screenshot_required": false
+    }
+  ]
+}

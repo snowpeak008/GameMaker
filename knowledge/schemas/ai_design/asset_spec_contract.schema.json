@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asset Spec Contract",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "assets"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "asset_type", "consumer_system", "unity_target_path", "mount_point", "dimensions", "background", "acceptance_check"],
+        "properties": {
+          "asset_id": {"type": "string"},
+          "asset_type": {"type": "string"},
+          "consumer_system": {"type": "string"},
+          "unity_target_path": {"type": "string"},
+          "mount_point": {"type": "string"},
+          "dimensions": {"type": "object"},
+          "background": {"type": "string"},
+          "acceptance_check": {"type": "string"}
+        }
+      }
+    },
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

@@ -5489,7 +5489,7 @@ mod tests {
     use super::*;
     use crate::generation::parse_design_text;
     use adm_new_contracts::schema::{load_structured_file, validate_contract};
-    use adm_new_foundation::new_stable_id;
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
     use std::fs;
 
     #[test]
@@ -6134,11 +6134,9 @@ Submitted / accepted
     fn step00_02_registry_schema_contracts_are_materialized_and_valid() {
         let root = temp_root("registry_schema_contracts");
         generate_registered_stages(&root, ArtifactLocale::ZhCn);
-        let newrust_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
-        let repository_root = newrust_root.parent().unwrap().to_path_buf();
+        let repository_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let registry =
             load_structured_file(&repository_root.join("pipeline/artifact_layer/registry.json"))
                 .unwrap();

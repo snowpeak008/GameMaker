@@ -1,0 +1,1201 @@
+﻿{
+  "schemaVersion": "1.0",
+  "reportId": "prompt_eval_f5658e3ec8434f278ebbb96ebaabdf8b",
+  "createdAt": "2026-06-11T14:02:06",
+  "runtimeRoot": "<legacy-design-tool>",
+  "sampleSetId": "main_v1",
+  "sampleSetVersion": "1",
+  "mode": "offline_fixture",
+  "promptVersionSnapshot": {
+    "frameworkVersion": "1",
+    "modules": {
+      "questioning": "1",
+      "followup": "1",
+      "routing": "1",
+      "interpretation": "1",
+      "mapping": "1",
+      "confidence": "1",
+      "readiness": "1",
+      "output": "1",
+      "memory_influence": "1"
+    },
+    "manifestHash": "f811d9ad8ef940cb9ba0dc1f27d0b1dbb22d02ed5bfeaf060e9bcdd43abf2c27"
+  },
+  "summary": {
+    "sampleCount": 12,
+    "scoredSampleCount": 12,
+    "backendFailureCount": 0,
+    "acceptedAnnotationCount": 12,
+    "draftAnnotationCount": 0,
+    "rejectedAnnotationCount": 0,
+    "acceptedRealSampleCount": 0,
+    "averageScores": {
+      "followup": 1.0,
+      "mapping": 1.0,
+      "stability": 1.0,
+      "total": 1.0
+    },
+    "failurePatternCount": 0
+  },
+  "failurePatterns": [],
+  "backendFailures": [],
+  "advice": [],
+  "sampleResults": [
+    {
+      "sampleId": "core_v1_001_midcore_mastery_loop",
+      "title": "Midcore mastery loop with unclear target audience",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "target_audience",
+              "weight": 1.5,
+              "matchedKeywords": [
+                "鐩爣鐜╁",
+                "浜虹兢",
+                "鍙椾紬",
+                "player"
+              ]
+            },
+            {
+              "id": "failure_retry_driver",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "澶辫触",
+                "閲嶈瘯",
+                "鎸姌",
+                "retry"
+              ]
+            },
+            {
+              "id": "first_day_signal",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "棣栨棩",
+                "D1",
+                "楠岃瘉",
+                "鐣欏瓨"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "mastery_tradeoff",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "绮鹃€?,
+                "鍙栬垗",
+                "浼樺厛绾?,
+                "楠岃瘉"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_002_iaa_short_session_retention",
+      "title": "IAA short-session retention promise",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "return_reason",
+              "weight": 1.5,
+              "matchedKeywords": [
+                "绗簩澶?,
+                "鍥炴潵",
+                "D1",
+                "return"
+              ]
+            },
+            {
+              "id": "ad_frequency_boundary",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "骞垮憡",
+                "棰戠巼",
+                "杈圭晫",
+                "鎵撴柇"
+              ]
+            },
+            {
+              "id": "daily_load",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鏃ュ父",
+                "浠诲姟",
+                "璐熸媴",
+                "杞婚噺"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "retention_signal",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鐣欏瓨",
+                "楠岃瘉",
+                "D1",
+                "骞垮憡"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_003_service_economy_fairness",
+      "title": "Live-service economy fairness ambiguity",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "payment_boundary",
+              "weight": 1.5,
+              "matchedKeywords": [
+                "浠樿垂",
+                "杈圭晫",
+                "寮哄害",
+                "鍏钩"
+              ]
+            },
+            {
+              "id": "free_player_path",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "鍏嶈垂鐜╁",
+                "鏂眰",
+                "璺緞",
+                "杩借刀"
+              ]
+            },
+            {
+              "id": "season_resource_signal",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "璧涘",
+                "璧勬簮",
+                "楠岃瘉",
+                "娑堣€?
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "fairness_tradeoff",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鍏钩",
+                "鍙栬垗",
+                "閿佹",
+                "椋庨櫓"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_004_social_coop_identity",
+      "title": "Co-op social identity and moderation tradeoff",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "coop_success_condition",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "缁勯槦",
+                "鎴愬氨",
+                "鍗忎綔",
+                "鑳滃埄"
+              ]
+            },
+            {
+              "id": "identity_display_boundary",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "韬唤",
+                "灞曠ず",
+                "杞绘澗鎰?,
+                "杈圭晫"
+              ]
+            },
+            {
+              "id": "moderation_risk",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "涓炬姤",
+                "鎯╃綒",
+                "绀惧尯",
+                "椋庨櫓"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "social_priority",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "浼樺厛绾?,
+                "鍗忎綔",
+                "灞曠ず",
+                "椋庨櫓"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_005_minor_spending_pressure",
+      "title": "Minor spending and probability disclosure pressure test",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "minor_protection",
+              "weight": 1.6,
+              "matchedKeywords": [
+                "鏈垚骞翠汉",
+                "骞磋交鐢ㄦ埛",
+                "淇濇姢",
+                "闄愬埗"
+              ]
+            },
+            {
+              "id": "probability_disclosure",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "姒傜巼",
+                "灞曠ず",
+                "鎶湶",
+                "鎶藉崱"
+              ]
+            },
+            {
+              "id": "refund_dispute",
+              "weight": 1.1,
+              "matchedKeywords": [
+                "閫€娆?,
+                "浜夎",
+                "鎶曡瘔",
+                "椋庢帶"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "compliance_boundary",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鍚堣",
+                "杈圭晫",
+                "椋庨櫓",
+                "閿佸畾"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_006_launch_readiness_gap",
+      "title": "Launch readiness with unclear first cohort signal",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "launch_loop",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "棣栧彂",
+                "闂幆",
+                "鐗堟湰",
+                "楠屾敹"
+              ]
+            },
+            {
+              "id": "first_cohort_behavior",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "棣栨壒鐜╁",
+                "娆℃棩",
+                "鍙嶉",
+                "琛屼负"
+              ]
+            },
+            {
+              "id": "support_signal",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鍙嶉鍏ュ彛",
+                "鏈嶅姟鍣?,
+                "绋冲畾",
+                "鏀寔"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "readiness_checkpoint",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "楠屾敹",
+                "妫€鏌ョ偣",
+                "棣栧彂",
+                "绋冲畾"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_007_control_vs_strategy",
+      "title": "Input feel versus strategic choice ambiguity",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "failure_source",
+              "weight": 1.5,
+              "matchedKeywords": [
+                "澶辫触",
+                "鎿嶄綔",
+                "璧勬簮",
+                "瑙勫垯"
+              ]
+            },
+            {
+              "id": "control_priority",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "鎵嬫劅",
+                "鍗虫椂",
+                "杈撳叆",
+                "鍝嶅簲"
+              ]
+            },
+            {
+              "id": "strategy_priority",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "绛栫暐",
+                "閫夋嫨",
+                "鍙栬垗",
+                "鐞嗚В"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "mechanic_tradeoff",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鍙栬垗",
+                "浼樺厛绾?,
+                "澶辫触",
+                "楠岃瘉"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_008_product_promise_discovery",
+      "title": "Product promise depends on discovery and proof moment",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "first_proof_moment",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "鍓嶄笁鍒嗛挓",
+                "璇佹槑",
+                "鍗栫偣",
+                "浣撻獙"
+              ]
+            },
+            {
+              "id": "external_promise",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "鍟嗗簵椤?,
+                "灞曠ず",
+                "鎵胯",
+                "涔扮偣"
+              ]
+            },
+            {
+              "id": "content_priority",
+              "weight": 1.1,
+              "matchedKeywords": [
+                "鎺㈢储",
+                "寤洪€?,
+                "鎴愰暱",
+                "浼樺厛"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "promise_validation",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "楠岃瘉",
+                "鎵胯",
+                "浼樺厛绾?,
+                "灞曠ず"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_009_liveops_return_reason",
+      "title": "Liveops update freshness and return reason",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "freshness_target",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "鏂伴矞鎰?,
+                "鐗堟湰",
+                "闄愭椂",
+                "娲诲姩"
+              ]
+            },
+            {
+              "id": "return_reason",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "鍥炴祦",
+                "鍥炴潵",
+                "绀惧尯璇濋",
+                "璧涘"
+              ]
+            },
+            {
+              "id": "reward_chase_signal",
+              "weight": 1.1,
+              "matchedKeywords": [
+                "濂栧姳",
+                "杩介€?,
+                "闃舵鐩爣",
+                "楠岃瘉"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "liveops_priority",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "浼樺厛",
+                "楠岃瘉",
+                "鐗堟湰",
+                "鍥炴祦"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_010_ambiguous_monetization_boundary",
+      "title": "Ambiguous monetization request should not over-map",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "payment_pressure",
+              "weight": 1.5,
+              "matchedKeywords": [
+                "琚€间粯璐?,
+                "浠樿垂鍘嬪姏",
+                "绀煎寘",
+                "鍟嗕笟鍖?
+              ]
+            },
+            {
+              "id": "rare_resource_boundary",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "绋€鏈夎祫婧?,
+                "绋€缂?,
+                "浠峰€?,
+                "杈圭晫"
+              ]
+            },
+            {
+              "id": "trade_limit_uncertainty",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "浜ゆ槗闄愬埗",
+                "闄愬埗",
+                "椋庨櫓",
+                "涓嶇‘瀹?
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "conservative_mapping",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "妯＄硦",
+                "婢勬竻",
+                "鍙栬垗",
+                "淇濆畧"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_011_content_scope_pressure",
+      "title": "Content scope and production pressure",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "content_priority",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "鍙欎簨",
+                "鎺㈢储",
+                "鍐呭",
+                "浼樺厛"
+              ]
+            },
+            {
+              "id": "production_boundary",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "鍒朵綔閲?,
+                "澶辨帶",
+                "杈圭晫",
+                "鎴愭湰"
+              ]
+            },
+            {
+              "id": "consumption_pattern",
+              "weight": 1.1,
+              "matchedKeywords": [
+                "閲嶅鍒峰彇",
+                "鍒嗘敮閫夋嫨",
+                "棣栧彂",
+                "鍚庣画"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "content_tradeoff",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鍙栬垗",
+                "鍒朵綔閲?,
+                "棣栧彂",
+                "楠岃瘉"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    },
+    {
+      "sampleId": "core_v1_012_metric_validation_gap",
+      "title": "Metric validation gap between retention and economy",
+      "source": "synthetic_expected_fixture",
+      "scoreEligible": true,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": 1.0,
+          "missingInfoScore": 1.0,
+          "decisionPushScore": 1.0,
+          "noWasteScore": 1.0,
+          "nonRepeatScore": 1.0,
+          "noPrematureConclusionScore": 1.0,
+          "questionCount": 4,
+          "matchedMissingInfo": [
+            {
+              "id": "retention_metric",
+              "weight": 1.4,
+              "matchedKeywords": [
+                "D1",
+                "D7",
+                "鐣欏瓨",
+                "鎸囨爣"
+              ]
+            },
+            {
+              "id": "economy_metric",
+              "weight": 1.2,
+              "matchedKeywords": [
+                "璧勬簮搴撳瓨",
+                "浠樿垂璺緞",
+                "缁忔祹",
+                "搴撳瓨"
+              ]
+            },
+            {
+              "id": "experience_validity",
+              "weight": 1.3,
+              "matchedKeywords": [
+                "浣撻獙鏈夋晥",
+                "璇佹槑",
+                "琛屼负",
+                "楠岃瘉"
+              ]
+            }
+          ],
+          "matchedDecisionSignals": [
+            {
+              "id": "metric_alignment",
+              "weight": 1.0,
+              "matchedKeywords": [
+                "鎸囨爣",
+                "楠岃瘉",
+                "浼樺厛绾?,
+                "璇佹槑"
+              ]
+            }
+          ],
+          "forbiddenKeywordHits": [],
+          "prematureConclusionHits": []
+        },
+        "mapping": {
+          "score": 1.0,
+          "requiredHitScore": 1.0,
+          "wrongSelectionCount": 0,
+          "missedSelectionCount": 0,
+          "criticalMissedCount": 0,
+          "invalidOptionRefCount": 0,
+          "invalidShapeCount": 0,
+          "predictedRefs": [
+            "...",
+            "..."
+          ],
+          "missedRefs": [],
+          "criticalMissedRefs": [],
+          "wrongRefs": [],
+          "invalidRefs": [],
+          "invalidShapes": []
+        },
+        "stability": {
+          "score": 1.0,
+          "schemaErrors": [],
+          "invalidOptionRefs": [],
+          "invalidShapes": [],
+          "memoryDisclosureHits": [],
+          "checks": {
+            "schemaValid": true,
+            "fixedOptionBoundaryValid": true,
+            "implicitRuleKept": true
+          }
+        },
+        "total": 1.0
+      },
+      "failureSignals": []
+    }
+  ],
+  "promotionPolicy": {
+    "stage": "warning_only",
+    "blocksPromotion": false
+  }
+}

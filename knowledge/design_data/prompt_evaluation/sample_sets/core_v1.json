@@ -1,0 +1,654 @@
+{
+  "schemaVersion": "1.0",
+  "sampleSetId": "core_v1",
+  "sampleSetVersion": "1",
+  "description": "Third-phase first-stage prompt evaluation set. It covers high-frequency commercial game project types first and leaves room for all 16 domains.",
+  "coveragePolicy": {
+    "firstStageSampleCount": "12-20",
+    "futureSampleCount": "40-60",
+    "domainCoverage": "high_frequency_first",
+    "futureDomainCoverage": "all_16_domains",
+    "codexSmokeDefault": "3-5 samples",
+    "promotionPolicy": "warning_only"
+  },
+  "samples": [
+    {
+      "id": "core_v1_001_midcore_mastery_loop",
+      "title": "Midcore mastery loop with unclear target audience",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": true,
+      "projectType": "midcore",
+      "domainTags": ["product_positioning_design", "core_experience_design", "gameplay_system_design"],
+      "projectContext": {
+        "projectName": "Anonymous midcore prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "content_updates",
+          "socialModel": "async_light",
+          "platformScope": "multi_platform",
+          "regionScope": "multi_region",
+          "targetScale": "midcore"
+        }
+      },
+      "userMessage": "我们想做一个中度商业化的战斗收集项目，核心是玩家不断精通阵容和操作，但现在目标人群、失败后的重试动力、以及首日怎么验证还没想清楚。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "target_audience", "weight": 1.5, "keywords": ["目标玩家", "人群", "受众", "player"]},
+            {"id": "failure_retry_driver", "weight": 1.4, "keywords": ["失败", "重试", "挫折", "retry"]},
+            {"id": "first_day_signal", "weight": 1.2, "keywords": ["首日", "D1", "验证", "留存"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "mastery_tradeoff", "weight": 1.0, "keywords": ["精通", "取舍", "优先级", "验证"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["core_fun_decision"],
+          "requiredRefs": [
+            {"nodeId": "core_fun_decision", "itemId": "zhu_yao_le_qu_lai_yuan", "groupId": "core_feeling_target", "optionId": "mastery_growth"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "core_fun_decision", "itemId": "zhu_yao_le_qu_lai_yuan", "groupId": "core_loop_dynamic", "optionId": "learn_apply_master"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_002_iaa_short_session_retention",
+      "title": "IAA short-session retention promise",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": true,
+      "projectType": "iaa_hypercasual",
+      "domainTags": ["product_positioning_design", "retention_lifecycle_design", "data_validation_design"],
+      "projectContext": {
+        "projectName": "Anonymous IAA prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "content_updates",
+          "socialModel": "none",
+          "platformScope": "single_platform",
+          "regionScope": "single_region",
+          "targetScale": "iaa_hypercasual"
+        }
+      },
+      "userMessage": "这是一个一分钟一局的休闲项目，我们希望广告变现，但不想让日常任务太重。现在不清楚玩家第二天为什么回来，也没有明确广告频率边界。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "return_reason", "weight": 1.5, "keywords": ["第二天", "回来", "D1", "return"]},
+            {"id": "ad_frequency_boundary", "weight": 1.3, "keywords": ["广告", "频率", "边界", "打断"]},
+            {"id": "daily_load", "weight": 1.0, "keywords": ["日常", "任务", "负担", "轻量"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "retention_signal", "weight": 1.0, "keywords": ["留存", "验证", "D1", "广告"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["retention_onboarding_decision"],
+          "requiredRefs": [
+            {"nodeId": "retention_onboarding_decision", "itemId": "shou_ci_ti_yan_mu_biao", "groupId": "retention_experience", "optionId": "daily_reason"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "retention_onboarding_decision", "itemId": "shou_ci_ti_yan_mu_biao", "groupId": "retention_return_dynamic", "optionId": "d1_return"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_003_service_economy_fairness",
+      "title": "Live-service economy fairness ambiguity",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": true,
+      "projectType": "large_service",
+      "domainTags": ["economy_monetization_design", "balance_design", "compliance_risk_design"],
+      "projectContext": {
+        "projectName": "Anonymous live service prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "live_service",
+          "socialModel": "multiplayer",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "large_service"
+        }
+      },
+      "userMessage": "我们想做长期付费和赛季资源循环，但担心强度售卖、稀有资源追逐、免费玩家断层互相冲突。需要先知道哪些公平边界必须锁死。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "payment_boundary", "weight": 1.5, "keywords": ["付费", "边界", "强度", "公平"]},
+            {"id": "free_player_path", "weight": 1.3, "keywords": ["免费玩家", "断层", "路径", "追赶"]},
+            {"id": "season_resource_signal", "weight": 1.0, "keywords": ["赛季", "资源", "验证", "消耗"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "fairness_tradeoff", "weight": 1.0, "keywords": ["公平", "取舍", "锁死", "风险"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["economy_loop_decision"],
+          "requiredRefs": [
+            {"nodeId": "economy_loop_decision", "itemId": "zi_yuan_chan_chu", "groupId": "economy_value_experience", "optionId": "fair_growth"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "economy_loop_decision", "itemId": "zi_yuan_chan_chu", "groupId": "economy_fairness_boundary", "optionId": "power_selling"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_004_social_coop_identity",
+      "title": "Co-op social identity and moderation tradeoff",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": true,
+      "projectType": "midcore",
+      "domainTags": ["social_community_design", "compliance_risk_design", "ux_interface_design"],
+      "projectContext": {
+        "projectName": "Anonymous co-op prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "live_service",
+          "socialModel": "community_driven",
+          "platformScope": "multi_platform",
+          "regionScope": "multi_region",
+          "targetScale": "midcore"
+        }
+      },
+      "userMessage": "我们希望玩家靠组队成就和身份展示留下来，但担心举报惩罚、匹配规则和社区话题会影响轻松感，应该先追问什么？",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "coop_success_condition", "weight": 1.4, "keywords": ["组队", "成就", "协作", "胜利"]},
+            {"id": "identity_display_boundary", "weight": 1.2, "keywords": ["身份", "展示", "轻松感", "边界"]},
+            {"id": "moderation_risk", "weight": 1.2, "keywords": ["举报", "惩罚", "社区", "风险"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "social_priority", "weight": 1.0, "keywords": ["优先级", "协作", "展示", "风险"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["social_relationship_decision"],
+          "requiredRefs": [
+            {"nodeId": "social_relationship_decision", "itemId": "hao_you_guan_xi", "groupId": "social_relation_experience", "optionId": "cooperative_achievement"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "social_relationship_decision", "itemId": "hao_you_guan_xi", "groupId": "social_mechanic", "optionId": "team_objective"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_005_minor_spending_pressure",
+      "title": "Minor spending and probability disclosure pressure test",
+      "sourceType": "synthetic_stress",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "large_service",
+      "domainTags": ["compliance_risk_design", "economy_monetization_design"],
+      "projectContext": {
+        "projectName": "Anonymous compliance stress case",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "live_service",
+          "socialModel": "multiplayer",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "large_service"
+        }
+      },
+      "userMessage": "我们的抽卡和礼包面向年轻用户也会看到，团队想提高转化，但我担心未成年人消费、概率展示、冲动付费和退款争议。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "minor_protection", "weight": 1.6, "keywords": ["未成年人", "年轻用户", "保护", "限制"]},
+            {"id": "probability_disclosure", "weight": 1.3, "keywords": ["概率", "展示", "披露", "抽卡"]},
+            {"id": "refund_dispute", "weight": 1.1, "keywords": ["退款", "争议", "投诉", "风控"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "compliance_boundary", "weight": 1.0, "keywords": ["合规", "边界", "风险", "锁定"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["compliance_age_rating_decision"],
+          "requiredRefs": [
+            {"nodeId": "compliance_age_rating_decision", "itemId": "nei_rong_chi_du", "groupId": "compliance_protection_goal", "optionId": "spending_protection"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "compliance_age_rating_decision", "itemId": "nei_rong_chi_du", "groupId": "compliance_protection_mechanic", "optionId": "probability_disclosure"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_006_launch_readiness_gap",
+      "title": "Launch readiness with unclear first cohort signal",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "indie",
+      "domainTags": ["launch_readiness_design", "data_validation_design", "release_growth_design"],
+      "projectContext": {
+        "projectName": "Anonymous launch prototype",
+        "profile": {
+          "businessModel": "buyout",
+          "operationModel": "content_updates",
+          "socialModel": "none",
+          "platformScope": "multi_platform",
+          "regionScope": "multi_region",
+          "targetScale": "indie"
+        }
+      },
+      "userMessage": "我们准备首发版本，但新手引导、服务器稳定性、反馈入口和首批玩家次日行为还没有共同验收口径。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "launch_loop", "weight": 1.4, "keywords": ["首发", "闭环", "版本", "验收"]},
+            {"id": "first_cohort_behavior", "weight": 1.3, "keywords": ["首批玩家", "次日", "反馈", "行为"]},
+            {"id": "support_signal", "weight": 1.0, "keywords": ["反馈入口", "服务器", "稳定", "支持"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "readiness_checkpoint", "weight": 1.0, "keywords": ["验收", "检查点", "首发", "稳定"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["launch_version_decision"],
+          "requiredRefs": [
+            {"nodeId": "launch_version_decision", "itemId": "shou_fa_ti_yan_bi_huan", "groupId": "launch_experience", "optionId": "launch_loop_closed"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "launch_version_decision", "itemId": "shou_fa_ti_yan_bi_huan", "groupId": "launch_first_cohort_dynamic", "optionId": "next_day_return"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_007_control_vs_strategy",
+      "title": "Input feel versus strategic choice ambiguity",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "3a",
+      "domainTags": ["gameplay_system_design", "core_experience_design", "balance_design"],
+      "projectContext": {
+        "projectName": "Anonymous action strategy prototype",
+        "profile": {
+          "businessModel": "buyout",
+          "operationModel": "offline_single_release",
+          "socialModel": "none",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "3a"
+        }
+      },
+      "userMessage": "玩家既要即时操作手感，又要有战斗前策略选择。现在我们不确定失败应该来自操作失误、资源取舍还是规则理解。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "failure_source", "weight": 1.5, "keywords": ["失败", "操作", "资源", "规则"]},
+            {"id": "control_priority", "weight": 1.2, "keywords": ["手感", "即时", "输入", "响应"]},
+            {"id": "strategy_priority", "weight": 1.2, "keywords": ["策略", "选择", "取舍", "理解"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "mechanic_tradeoff", "weight": 1.0, "keywords": ["取舍", "优先级", "失败", "验证"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["input_control_decision"],
+          "requiredRefs": [
+            {"nodeId": "input_control_decision", "itemId": "shu_ru_yi_tu", "groupId": "gameplay_control_experience", "optionId": "direct_control"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "input_control_decision", "itemId": "shu_ru_yi_tu", "groupId": "gameplay_action_dynamic", "optionId": "resource_tradeoff"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_008_product_promise_discovery",
+      "title": "Product promise depends on discovery and proof moment",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "indie",
+      "domainTags": ["product_positioning_design", "content_design", "release_growth_design"],
+      "projectContext": {
+        "projectName": "Anonymous discovery prototype",
+        "profile": {
+          "businessModel": "buyout",
+          "operationModel": "content_updates",
+          "socialModel": "async_light",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "indie"
+        }
+      },
+      "userMessage": "卖点是探索未知世界，但我们不知道前三分钟应该证明什么，也不确定商店页该展示探索、建造还是成长。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "first_proof_moment", "weight": 1.4, "keywords": ["前三分钟", "证明", "卖点", "体验"]},
+            {"id": "external_promise", "weight": 1.3, "keywords": ["商店页", "展示", "承诺", "买点"]},
+            {"id": "content_priority", "weight": 1.1, "keywords": ["探索", "建造", "成长", "优先"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "promise_validation", "weight": 1.0, "keywords": ["验证", "承诺", "优先级", "展示"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["product_vision_decision"],
+          "requiredRefs": [
+            {"nodeId": "product_vision_decision", "itemId": "he_xin_ti_yan_cheng_nuo", "groupId": "core_feeling_type", "optionId": "immersive_discovery"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "product_vision_decision", "itemId": "he_xin_ti_yan_cheng_nuo", "groupId": "promise_proof_moment", "optionId": "first_three_minutes"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_009_liveops_return_reason",
+      "title": "Liveops update freshness and return reason",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "large_service",
+      "domainTags": ["liveops_version_design", "retention_lifecycle_design", "social_community_design"],
+      "projectContext": {
+        "projectName": "Anonymous liveops prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "live_service",
+          "socialModel": "community_driven",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "large_service"
+        }
+      },
+      "userMessage": "下个版本想靠限时活动和社区话题拉回流，但不确定新鲜感、阶段目标、奖励追逐和赛季进度哪个应该先验证。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "freshness_target", "weight": 1.3, "keywords": ["新鲜感", "版本", "限时", "活动"]},
+            {"id": "return_reason", "weight": 1.4, "keywords": ["回流", "回来", "社区话题", "赛季"]},
+            {"id": "reward_chase_signal", "weight": 1.1, "keywords": ["奖励", "追逐", "阶段目标", "验证"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "liveops_priority", "weight": 1.0, "keywords": ["优先", "验证", "版本", "回流"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["liveops_launch_content_decision"],
+          "requiredRefs": [
+            {"nodeId": "liveops_launch_content_decision", "itemId": "shou_fa_he_xin_nei_rong", "groupId": "liveops_version_experience", "optionId": "freshness"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "liveops_launch_content_decision", "itemId": "shou_fa_he_xin_nei_rong", "groupId": "liveops_activity_dynamic", "optionId": "reward_chase"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_010_ambiguous_monetization_boundary",
+      "title": "Ambiguous monetization request should not over-map",
+      "sourceType": "synthetic_stress",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "midcore",
+      "domainTags": ["economy_monetization_design", "compliance_risk_design"],
+      "projectContext": {
+        "projectName": "Anonymous monetization stress case",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "content_updates",
+          "socialModel": "async_light",
+          "platformScope": "multi_platform",
+          "regionScope": "multi_region",
+          "targetScale": "midcore"
+        }
+      },
+      "userMessage": "商业化方向还很模糊，只知道想做一些礼包和稀有资源，但不确定玩家会不会觉得被逼付费，也不知道要不要交易限制。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "payment_pressure", "weight": 1.5, "keywords": ["被逼付费", "付费压力", "礼包", "商业化"]},
+            {"id": "rare_resource_boundary", "weight": 1.2, "keywords": ["稀有资源", "稀缺", "价值", "边界"]},
+            {"id": "trade_limit_uncertainty", "weight": 1.0, "keywords": ["交易限制", "限制", "风险", "不确定"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "conservative_mapping", "weight": 1.0, "keywords": ["模糊", "澄清", "取舍", "保守"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["economy_loop_decision"],
+          "requiredRefs": [
+            {"nodeId": "economy_loop_decision", "itemId": "zi_yuan_chan_chu", "groupId": "economy_value_experience", "optionId": "scarcity_chase"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "economy_loop_decision", "itemId": "zi_yuan_chan_chu", "groupId": "economy_fairness_boundary", "optionId": "payment_pressure"}
+          ],
+          "forbiddenRefs": [
+            {"nodeId": "economy_loop_decision", "itemId": "zi_yuan_chan_chu", "groupId": "economy_fairness_boundary", "optionId": "power_selling"}
+          ]
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_011_content_scope_pressure",
+      "title": "Content scope and production pressure",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "3a",
+      "domainTags": ["content_design", "documentation_collaboration_design", "launch_readiness_design"],
+      "projectContext": {
+        "projectName": "Anonymous content-heavy prototype",
+        "profile": {
+          "businessModel": "buyout",
+          "operationModel": "content_updates",
+          "socialModel": "none",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "3a"
+        }
+      },
+      "userMessage": "内容体验想做叙事沉浸和探索惊喜，但制作量可能失控。我们需要知道首发内容、重复刷取、分支选择和后续补内容怎么取舍。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "content_priority", "weight": 1.4, "keywords": ["叙事", "探索", "内容", "优先"]},
+            {"id": "production_boundary", "weight": 1.3, "keywords": ["制作量", "失控", "边界", "成本"]},
+            {"id": "consumption_pattern", "weight": 1.1, "keywords": ["重复刷取", "分支选择", "首发", "后续"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "content_tradeoff", "weight": 1.0, "keywords": ["取舍", "制作量", "首发", "验证"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["content_type_decision"],
+          "requiredRefs": [
+            {"nodeId": "content_type_decision", "itemId": "he_xin_nei_rong", "groupId": "content_experience", "optionId": "narrative_immersion"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "content_type_decision", "itemId": "he_xin_nei_rong", "groupId": "content_consumption_dynamic", "optionId": "first_discovery"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    },
+    {
+      "id": "core_v1_012_metric_validation_gap",
+      "title": "Metric validation gap between retention and economy",
+      "sourceType": "synthetic_standard",
+      "anonymized": true,
+      "redactionNotes": "No real project identifiers.",
+      "codexSmoke": false,
+      "projectType": "large_service",
+      "domainTags": ["data_validation_design", "retention_lifecycle_design", "economy_monetization_design"],
+      "projectContext": {
+        "projectName": "Anonymous metric validation prototype",
+        "profile": {
+          "businessModel": "free_to_play",
+          "operationModel": "live_service",
+          "socialModel": "multiplayer",
+          "platformScope": "multi_platform",
+          "regionScope": "global",
+          "targetScale": "large_service"
+        }
+      },
+      "userMessage": "团队讨论留存和付费时各说各的，有人看 D1/D7，有人看资源库存和付费路径，但还没有定义哪些行为能证明体验有效。",
+      "annotation": {
+        "status": "accepted",
+        "expectedFollowup": {
+          "missingInfo": [
+            {"id": "retention_metric", "weight": 1.4, "keywords": ["D1", "D7", "留存", "指标"]},
+            {"id": "economy_metric", "weight": 1.2, "keywords": ["资源库存", "付费路径", "经济", "库存"]},
+            {"id": "experience_validity", "weight": 1.3, "keywords": ["体验有效", "证明", "行为", "验证"]}
+          ],
+          "decisionPushSignals": [
+            {"id": "metric_alignment", "weight": 1.0, "keywords": ["指标", "验证", "优先级", "证明"]}
+          ],
+          "forbiddenKeywords": ["后台记忆", "提示词版本", "直接选"],
+          "prematureConclusionKeywords": ["已经确定", "无需再确认", "直接选择"],
+          "maxQuestionCount": 4
+        },
+        "expectedMapping": {
+          "allowedNodeIds": ["data_goal_metric_decision"],
+          "requiredRefs": [
+            {"nodeId": "data_goal_metric_decision", "itemId": "liu_cun_zhi_biao", "groupId": "data_validation_goal", "optionId": "retention_valid"}
+          ],
+          "criticalRefs": [
+            {"nodeId": "data_goal_metric_decision", "itemId": "liu_cun_zhi_biao", "groupId": "data_behavior_evidence", "optionId": "payment_path"}
+          ],
+          "forbiddenRefs": []
+        },
+        "expectedOutputStability": {
+          "requireSchemaValid": true,
+          "forbidUnknownOptions": true,
+          "forbidMemoryDisclosure": true
+        }
+      }
+    }
+  ]
+}

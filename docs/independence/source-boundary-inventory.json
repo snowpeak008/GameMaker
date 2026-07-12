@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "projectId": "autodesignmaker-rust-v2",
+  "recordedAt": "2026-07-11",
+  "sourceRootContract": ".project_root",
+  "resourceManifest": "knowledge/resource-manifest.json",
+  "authoritativeGroups": [
+    {
+      "path": "knowledge/design_data",
+      "files": 156,
+      "bytes": 67648538,
+      "treeSha256": "c788afc15b76b3251fcff4cc98a7168cd97b73b7732ca42004dc8292659f44a5"
+    },
+    {
+      "path": "knowledge/schemas",
+      "files": 93,
+      "bytes": 115563,
+      "treeSha256": "6c1dda8d7cca9c7df8dbeecf54b9f120582c284a98a3227493dc8fc20128ac09"
+    },
+    {
+      "path": "knowledge/market_data",
+      "files": 1,
+      "bytes": 1017,
+      "treeSha256": "6821579b91512168f2fbd719fa46a7f1f8b9fa76cb98fb049e01945e91d6a66b"
+    },
+    {
+      "path": "knowledge/sdks",
+      "files": 2,
+      "bytes": 178,
+      "treeSha256": "b29ea05ee566c69b4f4095afc356747062ded14dd410af2299f50eaaba0f08a2"
+    },
+    {
+      "path": "knowledge/skills",
+      "files": 16,
+      "bytes": 41810,
+      "treeSha256": "10e0c1e6cc30910a154064f4332f306afb7d99a002bdaf095c4f9d0962867d39"
+    },
+    {
+      "path": "pipeline/artifact_layer",
+      "files": 3,
+      "bytes": 60974,
+      "treeSha256": "120db7b6faaa30217e6c70027e229e4c533153e8b1a7a560f0e0da7783298f6f"
+    },
+    {
+      "path": "testdata/ui_baselines",
+      "files": 94,
+      "bytes": 172364,
+      "treeSha256": "742847731de2817a8dd0b3ff995d94bab4affbe214f49bb63326d4b2f731c85f"
+    }
+  ],
+  "protectedLocalData": [
+    {
+      "path": "dist/AutoDesignMaker-NEWrust/user_data",
+      "files": 291,
+      "bytes": 13954471,
+      "treeSha256": "7778cac532c1fcf1798191f9d2eec7093a77d0293e2d59a9f5a1db7da35468ae",
+      "tracked": false,
+      "cleanupPolicy": "never-delete-with-general-cleaner"
+    }
+  ],
+  "excludedLegacyGroups": [
+    "knowledge/ai_memory",
+    "knowledge/ucos",
+    "legacy decisions",
+    "legacy governance state",
+    "parent plan files"
+  ]
+}

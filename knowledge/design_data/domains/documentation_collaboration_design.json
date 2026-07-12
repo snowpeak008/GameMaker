@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "documentation_collaboration_design",
+    "name": "设计文档与协作设计",
+    "description": "确认核心设计文档、设计表结构、验收标准、变更管理和跨职能沟通。"
+  },
+  "nodes": [
+    {
+      "id": "documentation_core_doc_decision",
+      "name": "核心设计文档决策",
+      "description": "确认愿景、核心玩法、系统、内容和上线说明文档结构。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "documentation_table_schema_decision"
+      ],
+      "domain": "documentation_collaboration_design",
+      "checklist": [
+        {
+          "id": "xiang_mu_yuan_jing_wen_dang",
+          "label": "项目愿景文档",
+          "description": "明确项目愿景文档需要记录的设计结论、引用材料和维护责任。",
+          "outputKey": "xiangMuYuanJingWenDang",
+          "legacyIds": [
+            "documentation_core_doc_decision_item_1"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "he_xin_wan_fa_wen_dang",
+          "label": "核心玩法文档",
+          "description": "明确核心玩法文档需要记录的设计结论、引用材料和维护责任。",
+          "outputKey": "heXinWanFaWenDang",
+          "legacyIds": [
+            "documentation_core_doc_decision_item_2"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "xi_tong_she_ji_wen_dang",
+          "label": "系统设计文档",
+          "description": "明确系统设计文档需要记录的设计结论、引用材料和维护责任。",
+          "outputKey": "xiTongSheJiWenDang",
+          "legacyIds": [
+            "documentation_core_doc_decision_item_3"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_she_ji_wen_dang",
+          "label": "内容设计文档",
+          "description": "明确内容设计文档需要记录的设计结论、引用材料和维护责任。",
+          "outputKey": "neiRongSheJiWenDang",
+          "legacyIds": [
+            "documentation_core_doc_decision_item_4"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "shang_xian_she_ji_shuo_ming",
+          "label": "上线设计说明",
+          "description": "明确上线设计说明需要解释的对象、信息层级和边界。",
+          "outputKey": "shangXianSheJiShuoMing",
+          "legacyIds": [
+            "documentation_core_doc_decision_item_5"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "documentation_table_schema_decision",
+      "name": "设计表结构决策",
+      "description": "确认系统表、内容表、数值表、奖励表和活动表结构。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "documentation_core_doc_decision"
+      ],
+      "unlocks": [
+        "documentation_acceptance_decision"
+      ],
+      "domain": "documentation_collaboration_design",
+      "checklist": [
+        {
+          "id": "xi_tong_biao",
+          "label": "系统表",
+          "description": "定义系统表需要包含的字段、引用关系和维护方式。",
+          "outputKey": "xiTongBiao",
+          "legacyIds": [
+            "documentation_table_schema_decision_item_1"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_biao",
+          "label": "内容表",
+          "description": "定义内容表需要包含的字段、引用关系和维护方式。",
+          "outputKey": "neiRongBiao",
+          "legacyIds": [
+            "documentation_table_schema_decision_item_2"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "shu_zhi_biao",
+          "label": "数值表",
+          "description": "定义数值表需要包含的字段、引用关系和维护方式。",
+          "outputKey": "shuZhiBiao",
+          "legacyIds": [
+            "documentation_table_schema_decision_item_3"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "jiang_li_biao",
+          "label": "奖励表",
+          "description": "定义奖励表需要包含的字段、引用关系和维护方式。",
+          "outputKey": "jiangLiBiao",
+          "legacyIds": [
+            "documentation_table_schema_decision_item_4"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_biao",
+          "label": "活动表",
+          "description": "定义活动表需要包含的字段、引用关系和维护方式。",
+          "outputKey": "huoDongBiao",
+          "legacyIds": [
+            "documentation_table_schema_decision_item_5"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "documentation_acceptance_decision",
+      "name": "验收标准决策",
+      "description": "确认体验、系统、内容、数值和上线验收标准。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "documentation_table_schema_decision"
+      ],
+      "unlocks": [
+        "documentation_change_management_decision"
+      ],
+      "domain": "documentation_collaboration_design",
+      "checklist": [
+        {
+          "id": "ti_yan_yan_shou",
+          "label": "体验验收",
+          "description": "定义体验验收的检查标准、通过条件和责任边界。",
+          "outputKey": "tiYanYanShou",
+          "legacyIds": [
+            "documentation_acceptance_decision_item_1"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "xi_tong_yan_shou",
+          "label": "系统验收",
+          "description": "定义系统验收的检查标准、通过条件和责任边界。",
+          "outputKey": "xiTongYanShou",
+          "legacyIds": [
+            "documentation_acceptance_decision_item_2"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_yan_shou",
+          "label": "内容验收",
+          "description": "定义内容验收的检查标准、通过条件和责任边界。",
+          "outputKey": "neiRongYanShou",
+          "legacyIds": [
+            "documentation_acceptance_decision_item_3"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "shu_zhi_yan_shou",
+          "label": "数值验收",
+          "description": "定义数值验收的检查标准、通过条件和责任边界。",
+          "outputKey": "shuZhiYanShou",
+          "legacyIds": [
+            "documentation_acceptance_decision_item_4"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "shang_xian_yan_shou",
+          "label": "上线验收",
+          "description": "定义上线验收的检查标准、通过条件和责任边界。",
+          "outputKey": "shangXianYanShou",
+          "legacyIds": [
+            "documentation_acceptance_decision_item_5"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "documentation_change_management_decision",
+      "name": "变更管理决策",
+      "description": "确认变更原因、影响范围、回滚条件、依赖同步和版本记录。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "documentation_acceptance_decision"
+      ],
+      "unlocks": [
+        "documentation_cross_function_decision"
+      ],
+      "domain": "documentation_collaboration_design",
+      "checklist": [
+        {
+          "id": "bian_geng_yuan_yin",
+          "label": "变更原因",
+          "description": "明确变更原因在变更管理中的具体含义、适用范围和验收判断。",
+          "outputKey": "bianGengYuanYin",
+          "legacyIds": [
+            "documentation_change_management_decision_item_1"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "ying_xiang_fan_wei",
+          "label": "影响范围",
+          "description": "明确影响范围覆盖哪些内容、暂缓哪些内容，以及验收口径。",
+          "outputKey": "yingXiangFanWei",
+          "legacyIds": [
+            "documentation_change_management_decision_item_2"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "hui_gun_tiao_jian",
+          "label": "回滚条件",
+          "description": "明确回滚条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "huiGunTiaoJian",
+          "legacyIds": [
+            "documentation_change_management_decision_item_3"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "yi_lai_tong_bu",
+          "label": "依赖同步",
+          "description": "明确依赖同步在变更管理中的具体含义、适用范围和验收判断。",
+          "outputKey": "yiLaiTongBu",
+          "legacyIds": [
+            "documentation_change_management_decision_item_4"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_ji_lu",
+          "label": "版本记录",
+          "description": "明确版本记录在变更管理中的具体含义、适用范围和验收判断。",
+          "outputKey": "banBenJiLu",
+          "legacyIds": [
+            "documentation_change_management_decision_item_5"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "documentation_cross_function_decision",
+      "name": "跨职能沟通决策",
+      "description": "确认美术、音频、文案、测试和运营需求表达方式。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "documentation_core_doc_decision"
+      ],
+      "unlocks": [],
+      "domain": "documentation_collaboration_design",
+      "checklist": [
+        {
+          "id": "mei_shu_xu_qiu_biao_da",
+          "label": "美术需求表达",
+          "description": "确定美术需求表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "meiShuXuQiuBiaoDa",
+          "legacyIds": [
+            "documentation_cross_function_decision_item_1"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "yin_pin_xu_qiu_biao_da",
+          "label": "音频需求表达",
+          "description": "确定音频需求表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "yinPinXuQiuBiaoDa",
+          "legacyIds": [
+            "documentation_cross_function_decision_item_2"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "wen_an_xu_qiu_biao_da",
+          "label": "文案需求表达",
+          "description": "确定文案需求表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "wenAnXuQiuBiaoDa",
+          "legacyIds": [
+            "documentation_cross_function_decision_item_3"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "ce_shi_xu_qiu_biao_da",
+          "label": "测试需求表达",
+          "description": "确定测试需求表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "ceShiXuQiuBiaoDa",
+          "legacyIds": [
+            "documentation_cross_function_decision_item_4"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        },
+        {
+          "id": "yun_ying_xu_qiu_biao_da",
+          "label": "运营需求表达",
+          "description": "确定运营需求表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "yunYingXuQiuBiaoDa",
+          "legacyIds": [
+            "documentation_cross_function_decision_item_5"
+          ],
+          "templateRef": "shared_documentation_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

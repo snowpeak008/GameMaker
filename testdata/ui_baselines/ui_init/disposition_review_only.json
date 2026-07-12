@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "ui_contract_id": "adm-rust-v2-ui-contract-v1:ui_init",
+  "surface": "ui_init",
+  "state": "disposition_review_only",
+  "contract_surface": "package marker",
+  "web_tauri_target": "none",
+  "required_state": "no screenshot; disposition review only",
+  "screenshot_required": false,
+  "reference_evidence": {
+    "kind": "contract_only",
+    "review_note": "No screenshot is required for this contract disposition record."
+  },
+  "web_screenshot": {},
+  "interaction_trace": [
+    {
+      "action": "open ui_init",
+      "command_contract": "disposition review only",
+      "expected_result": "renders no screenshot; disposition review only without overlap or layout shift"
+    }
+  ],
+  "contract_notes": {
+    "rendering_constraints": [
+      "Platform rendering details may vary; required layout, density, state semantics, accessibility, and command behavior must remain stable."
+    ],
+    "open_blocking_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Platform control rendering may vary while preserving the independent UI contract."
+      }
+    ]
+  },
+  "command_contract": "disposition review only",
+  "record_path": "testdata/ui_baselines/ui_init/disposition_review_only.json"
+}

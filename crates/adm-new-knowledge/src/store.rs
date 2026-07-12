@@ -3,7 +3,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
-pub const UCOS_ROOT: &str = "knowledge/ucos";
+pub const RUNTIME_KNOWLEDGE_ROOT: &str = "knowledge-runtime";
+
+#[deprecated(
+    since = "0.1.0",
+    note = "use RUNTIME_KNOWLEDGE_ROOT under an explicit runtime-data root"
+)]
+pub const UCOS_ROOT: &str = RUNTIME_KNOWLEDGE_ROOT;
 
 #[derive(Debug, Clone)]
 pub struct UcosStore {
@@ -12,20 +18,30 @@ pub struct UcosStore {
 }
 
 impl UcosStore {
+    /// Uses the project's portable `user_data` area, never `knowledge/ucos`.
     pub fn new(project_root: impl Into<PathBuf>) -> Self {
         let project_root = project_root.into();
-        let knowledge_root = project_root.join(UCOS_ROOT);
-        let ucos_root = if knowledge_root.exists() {
-            knowledge_root
-        } else {
-            project_root.join("ucos")
-        };
+        let ucos_root = project_root.join("user_data").join(RUNTIME_KNOWLEDGE_ROOT);
         Self {
             project_root,
             ucos_root,
         }
     }
 
+    pub fn from_runtime_data_root(
+        project_root: impl Into<PathBuf>,
+        runtime_data_root: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            project_root: project_root.into(),
+            ucos_root: runtime_data_root.into().join(RUNTIME_KNOWLEDGE_ROOT),
+        }
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use from_runtime_data_root; this constructor remains only for explicit fixtures"
+    )]
     pub fn from_ucos_root(project_root: impl Into<PathBuf>, ucos_root: impl Into<PathBuf>) -> Self {
         Self {
             project_root: project_root.into(),
@@ -154,26 +170,19 @@ pub struct UcosInventory {
 impl UcosInventory {
     pub fn validation_errors(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.schema_files < 10 {
-            errors.push(format!(
-                "expected at least 10 UCOS schemas, got {}",
-                self.schema_files
-            ));
-        }
-        if !self.has_identity_profile {
+        if self.identity_files > 0 && !self.has_identity_profile {
             errors.push("missing identity/profile.json".to_string());
         }
-        if !self.has_identity_constraints {
+        if self.identity_files > 0 && !self.has_identity_constraints {
             errors.push("missing identity/constraints.json".to_string());
         }
-        if !self.has_identity_policy {
+        if self.identity_files > 0 && !self.has_identity_policy {
             errors.push("missing identity/policy.json".to_string());
         }
-        if !self.has_capability_registry {
+        if self.capability_skill_files + self.plugin_skill_files > 0
+            && !self.has_capability_registry
+        {
             errors.push("missing capability/registry.json".to_string());
-        }
-        if self.registry_skill_count == 0 {
-            errors.push("capability registry has no skills".to_string());
         }
         if self.capability_skill_files + self.plugin_skill_files < self.registry_skill_count {
             errors.push(format!(

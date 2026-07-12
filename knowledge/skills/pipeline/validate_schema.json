@@ -1,0 +1,44 @@
+{
+  "skill_id": "skill_validate_schema_v1",
+  "name": "validate_schema",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for validate_schema.",
+  "capabilities": [
+    "json",
+    "schema",
+    "validate"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow",
+      "pipeline"
+    ],
+    "required_inputs": [
+      "target_path"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "target_path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "target_path"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

@@ -1,9 +1,12 @@
-use crate::{AdmError, AdmResult, sanitize_identifier, unix_timestamp};
+use crate::{AdmResult, sanitize_identifier, unix_timestamp};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
 
-pub const ROOT_MARKER: &str = ".project_root";
+pub use crate::source_root::{
+    ROOT_MARKER, SOURCE_PROJECT_ID, SourceProjectManifest, SourceProjectRoot, safe_project_join,
+};
+
 pub const SESSION_ID_ENV: &str = "AUTODESIGNMAKER_SESSION_ID";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,34 +132,7 @@ impl ProjectPaths {
 }
 
 pub fn locate_project_root(start_path: impl AsRef<Path>) -> AdmResult<PathBuf> {
-    let start_path = start_path.as_ref();
-    let mut current = start_path
-        .canonicalize()
-        .unwrap_or_else(|_| start_path.to_path_buf());
-    if current.is_file() {
-        current = current
-            .parent()
-            .ok_or_else(|| AdmError::new("start path has no parent"))?
-            .to_path_buf();
-    }
-    loop {
-        if current.join(ROOT_MARKER).exists() {
-            return Ok(current);
-        }
-        let Some(parent) = current.parent() else {
-            return Err(AdmError::new(format!(
-                "unable to locate project root: {ROOT_MARKER} was not found from {}",
-                start_path.display()
-            )));
-        };
-        if parent == current {
-            return Err(AdmError::new(format!(
-                "unable to locate project root: {ROOT_MARKER} was not found from {}",
-                start_path.display()
-            )));
-        }
-        current = parent.to_path_buf();
-    }
+    SourceProjectRoot::discover(start_path).map(SourceProjectRoot::into_path)
 }
 
 pub fn pycache_prefix(project_root: &Path, env_value: Option<&str>) -> Option<PathBuf> {
@@ -217,7 +193,21 @@ mod tests {
         let root = std::env::temp_dir().join(new_stable_id("project_root").unwrap());
         let nested = root.join("core").join("utils");
         std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(root.join(ROOT_MARKER), "").unwrap();
+        std::fs::create_dir_all(root.join("knowledge")).unwrap();
+        std::fs::create_dir_all(root.join("web")).unwrap();
+        std::fs::write(root.join("Cargo.toml"), "[workspace]\nmembers=[]\n").unwrap();
+        std::fs::write(root.join("Cargo.lock"), "# fixture\n").unwrap();
+        std::fs::write(root.join("web/package-lock.json"), "{}\n").unwrap();
+        std::fs::write(
+            root.join(ROOT_MARKER),
+            r#"{"schemaVersion":1,"kind":"source-project-root","projectId":"autodesignmaker-rust-v2","workspaceManifest":"Cargo.toml","lockfiles":["Cargo.lock","web/package-lock.json"],"resourceManifest":"knowledge/resource-manifest.json"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("knowledge/resource-manifest.json"),
+            r#"{"schemaVersion":1,"projectId":"autodesignmaker-rust-v2","groups":[]}"#,
+        )
+        .unwrap();
 
         assert_eq!(
             locate_project_root(&nested).unwrap(),

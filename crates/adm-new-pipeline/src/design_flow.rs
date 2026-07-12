@@ -17,7 +17,7 @@ use adm_new_design::{
     DesignChecklistItemSpec, DesignEngineService, DesignNodeSpec, DesignOptionGroupSpec,
 };
 use adm_new_foundation::io::{read_json, write_json, write_text};
-use adm_new_foundation::paths::locate_project_root;
+use adm_new_foundation::paths::SourceProjectRoot;
 use adm_new_foundation::{AdmError, AdmResult};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -846,7 +846,12 @@ fn project_root_from_context(context: &StageContextModel) -> AdmResult<PathBuf> 
     if !context.project_root.trim().is_empty() {
         Ok(PathBuf::from(&context.project_root))
     } else {
-        locate_project_root(env!("CARGO_MANIFEST_DIR"))
+        let current_dir = std::env::current_dir().map_err(|error| {
+            AdmError::new(format!(
+                "stage context does not provide project_root and current directory is unavailable: {error}"
+            ))
+        })?;
+        SourceProjectRoot::discover(current_dir).map(SourceProjectRoot::into_path)
     }
 }
 
@@ -1597,7 +1602,9 @@ mod tests {
     use adm_new_foundation::new_stable_id;
 
     fn project_root() -> PathBuf {
-        locate_project_root(env!("CARGO_MANIFEST_DIR")).unwrap()
+        SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path()
     }
 
     fn temp_root(prefix: &str) -> PathBuf {

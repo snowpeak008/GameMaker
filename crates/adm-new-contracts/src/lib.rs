@@ -263,9 +263,10 @@ mod tests {
             player_promise: "Readable planning.".to_string(),
             core_loop: vec!["choose".to_string(), "resolve".to_string()],
         });
-        response
-            .evidence
-            .push(EvidenceRef::new("plan/NEWrust/README.md", "plan"));
+        response.evidence.push(EvidenceRef::new(
+            "docs/independence/README.md",
+            "ui_contract",
+        ));
         response
             .diagnostics
             .push(Diagnostic::info("contract skeleton ready"));

@@ -3,16 +3,23 @@
 use adm_new_contracts::package::{
     PackageManifest, PackageStatus, PackageValidationReport, REQUIRED_INTEGRATION_CHECKS,
 };
+use adm_new_foundation::source_root::{SOURCE_PROJECT_ID, SourceProjectRoot};
 use adm_new_foundation::{
-    AdmError, AdmResult, GateReport, hash_text, unix_timestamp, write_text_atomic,
+    AdmError, AdmResult, GateReport, hash_text, sha256_hex, unix_timestamp, write_text_atomic,
 };
-use adm_new_packaging::{PACKAGE_DIR, PackageRunResult, PackagingService, PackagingSources};
+use adm_new_packaging::{
+    PACKAGE_DIR, PackageRunResult, PackagingService, PackagingSources, measure_resource_tree,
+    verify_portable_resource_root, verify_source_resource_manifest,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 pub const REQUIRED_PLAN_FILES: &[&str] = &[
     "README.md",
@@ -62,14 +69,80 @@ pub const REQUIRED_RELEASE_CHECKS: &[&str] = &[
     "cargo_fmt_check",
     "cargo_check_workspace",
     "cargo_test_workspace",
+    "web_unit",
+    "web_i18n",
+    "web_design_content",
     "web_build",
     "web_e2e",
+    "web_language_gate",
     "web_ui_gate",
-    "plan_gate",
-    "parity_gate",
-    "package_gate",
+    "web_ui_baseline_gate",
+    "package_contract_self_test",
+    "resource_manifest",
+    "standalone_boundary_gate",
+    "portable_build",
+    "portable_smoke",
+    "portable_integrity",
+    "pe_architecture_crt",
+    "clean_clone_relocation",
     "anti_fake_scan",
+    "generated_cleanup",
 ];
+
+pub const SOURCE_ROOT_MARKER: &str = ".project_root";
+pub const RESOURCE_MANIFEST_PATH: &str = "knowledge/resource-manifest.json";
+pub const RELEASE_EVIDENCE_PATH: &str = "gates/standalone-release-evidence.json";
+pub const RELEASE_EVIDENCE_SCHEMA_VERSION: u32 = 2;
+pub const RELEASE_EVIDENCE_PRODUCER: &str = "tools/verify-standalone.ps1/v2";
+pub const RELEASE_PORTABLE_ROOT: &str = "dist/AutoDesignMaker-NEWrust-release";
+pub const RELEASE_PORTABLE_OUTPUT_NAME: &str = "AutoDesignMaker-NEWrust-release";
+pub const RELEASE_EVIDENCE_MAX_LIFETIME_SECONDS: u64 = 86_400;
+pub const RELEASE_EVIDENCE_CLOCK_SKEW_SECONDS: u64 = 300;
+pub const LEGACY_PLAN_GATE_DEPRECATED: &str = "legacy_plan_gate_deprecated";
+pub const LEGACY_HANDOFF_GATE_DEPRECATED: &str = "legacy_handoff_gate_deprecated";
+pub const LEGACY_PYTHON_GATE_DEPRECATED: &str = "legacy_python_gate_deprecated";
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StandaloneReleaseEvidence {
+    schema_version: u32,
+    producer: String,
+    evidence_id: String,
+    project_id: String,
+    status: String,
+    git_commit: String,
+    source_tree_clean: bool,
+    generated_at_unix: u64,
+    expires_at_unix: u64,
+    checks: BTreeMap<String, ReleaseCommandEvidence>,
+    portable: Option<ReleasePortableEvidence>,
+    errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleaseCommandEvidence {
+    status: String,
+    command: String,
+    exit_code: i32,
+    duration_ms: u64,
+    output_sha256: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleasePortableEvidence {
+    root: String,
+    executable: String,
+    executable_sha256: String,
+    build_manifest_sha256: String,
+    resource_manifest_sha256: String,
+    git_commit: String,
+    swap_receipt: String,
+    swap_receipt_sha256: String,
+    transaction_id: String,
+    transaction_status: String,
+}
 
 pub const REQUIRED_UI_PARITY_V3_RECORD_COUNT: usize = 93;
 pub const REQUIRED_UNIT_TEST_MIGRATION_COUNT: usize = 68;
@@ -92,7 +165,7 @@ pub const REQUIRED_UNIT_TEST_TARGET_DOMAINS: &[&str] = &[
     "adm-new-save",
     "adm-new-sdk",
     "adm-new-web",
-    "NEWrust/gates",
+    "gates",
 ];
 
 pub const REQUIRED_INTEGRATION_TEST_TARGET_DOMAINS: &[&str] = &[
@@ -101,26 +174,26 @@ pub const REQUIRED_INTEGRATION_TEST_TARGET_DOMAINS: &[&str] = &[
     "adm-new-pipeline",
     "adm-new-save",
     "adm-new-design",
-    "NEWrust/gates",
+    "gates",
 ];
 
 pub const REQUIRED_FINAL_HANDOFF_V3_GATE_REFS: &[&str] = &[
-    "NEWrust/gates/plan-gate.adm",
-    "NEWrust/gates/parity-gate.adm",
-    "NEWrust/gates/package-gate.adm",
-    "NEWrust/gates/release-gate.adm",
-    "NEWrust/gates/validation-gate.adm",
-    "NEWrust/gates/iteration-gate.adm",
-    "NEWrust/gates/ui-gate.adm",
-    "NEWrust/gates/ui-shell-gate.adm",
-    "NEWrust/gates/ui-workbench-gate.adm",
-    "NEWrust/gates/ui-ai-gate.adm",
-    "NEWrust/gates/ui-pipeline-gate.adm",
-    "NEWrust/gates/ui-utility-gate.adm",
-    "NEWrust/gates/ui-settings-style-gate.adm",
-    "NEWrust/gates/ui-parity-v3-gate.adm",
-    "NEWrust/gates/unit-test-migration-gate.adm",
-    "NEWrust/gates/integration-test-migration-gate.adm",
+    "gates/plan-gate.adm",
+    "gates/parity-gate.adm",
+    "gates/package-gate.adm",
+    "gates/release-gate.adm",
+    "gates/validation-gate.adm",
+    "gates/iteration-gate.adm",
+    "gates/ui-gate.adm",
+    "gates/ui-shell-gate.adm",
+    "gates/ui-workbench-gate.adm",
+    "gates/ui-ai-gate.adm",
+    "gates/ui-pipeline-gate.adm",
+    "gates/ui-utility-gate.adm",
+    "gates/ui-settings-style-gate.adm",
+    "gates/ui-parity-v3-gate.adm",
+    "gates/unit-test-migration-gate.adm",
+    "gates/integration-test-migration-gate.adm",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,91 +312,91 @@ pub const REQUIRED_VALIDATION_MARKERS: &[ValidationMarkerCheck] = &[
     ValidationMarkerCheck {
         id: "config_validator",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn validate_config_tables",
     },
     ValidationMarkerCheck {
         id: "context_lint",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn lint_context_file",
     },
     ValidationMarkerCheck {
         id: "contract_validator",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn validate_contract_file_report",
     },
     ValidationMarkerCheck {
         id: "output_validator",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn validate_agent_output",
     },
     ValidationMarkerCheck {
         id: "pipeline_quality_metrics",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn collect_pipeline_quality_metrics",
     },
     ValidationMarkerCheck {
         id: "pipeline_quality_plan_002",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn check_pipeline_plan_002",
     },
     ValidationMarkerCheck {
         id: "design_semantic_quality",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn collect_design_semantic_quality",
     },
     ValidationMarkerCheck {
         id: "design_semantic_quality_outputs",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pub fn write_design_semantic_quality_outputs",
     },
     ValidationMarkerCheck {
         id: "cli_validate_config",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"config\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validate_context",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"context\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validate_contract",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"contract\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validate_output",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"output\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validate_pipeline_quality",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"pipeline-quality\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validate_design_semantic_quality",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"design-semantic-quality\" =>",
     },
     ValidationMarkerCheck {
         id: "cli_validation_a29_test",
         category: "cli-test",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "validation_cli_commands_cover_a29_validators",
     },
 ];
@@ -332,55 +405,55 @@ pub const REQUIRED_ITERATION_MARKERS: &[IterationMarkerCheck] = &[
     IterationMarkerCheck {
         id: "iteration_spec_parser",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn parse_iteration_spec_text",
     },
     IterationMarkerCheck {
         id: "iteration_spec_discovery",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn discover_iteration_specs",
     },
     IterationMarkerCheck {
         id: "delta_scheduler",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn build_delta_execution_plan",
     },
     IterationMarkerCheck {
         id: "artifact_inheritor",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn inherit_skipped_artifacts",
     },
     IterationMarkerCheck {
         id: "iteration_prepare",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn prepare_iteration",
     },
     IterationMarkerCheck {
         id: "iteration_resume_summary",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "pub fn summarize_iteration_resume_plan",
     },
     IterationMarkerCheck {
         id: "cli_iteration_command",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"iteration\" | \"iterate\" => run_iteration_command",
     },
     IterationMarkerCheck {
         id: "cli_iteration_help",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "fn print_iteration_help",
     },
     IterationMarkerCheck {
         id: "cli_iteration_a30_test",
         category: "cli-test",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "iteration_cli_commands_cover_a30_iteration_flow",
     },
 ];
@@ -389,61 +462,61 @@ pub const REQUIRED_UI_SHELL_MARKERS: &[UiShellMarkerCheck] = &[
     UiShellMarkerCheck {
         id: "desktop_shell_config",
         category: "desktop-tauri",
-        relative_path: "NEWrust/apps/desktop-tauri/src/lib.rs",
+        relative_path: "apps/desktop-tauri/src/lib.rs",
         marker: "pub fn default_shell_config",
     },
     UiShellMarkerCheck {
         id: "desktop_smoke_report",
         category: "desktop-tauri",
-        relative_path: "NEWrust/apps/desktop-tauri/src/lib.rs",
+        relative_path: "apps/desktop-tauri/src/lib.rs",
         marker: "pub fn desktop_smoke_report",
     },
     UiShellMarkerCheck {
         id: "desktop_center_window",
         category: "desktop-tauri",
-        relative_path: "NEWrust/apps/desktop-tauri/src/lib.rs",
+        relative_path: "apps/desktop-tauri/src/lib.rs",
         marker: "pub fn center_window_position",
     },
     UiShellMarkerCheck {
         id: "tauri_min_width",
         category: "desktop-tauri",
-        relative_path: "NEWrust/apps/desktop-tauri/tauri.conf.json",
+        relative_path: "apps/desktop-tauri/tauri.conf.json",
         marker: "\"minWidth\": 1180",
     },
     UiShellMarkerCheck {
         id: "shell_command_theme_state",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/shell.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/shell.rs",
         marker: "pub struct ShellThemeToken",
     },
     UiShellMarkerCheck {
         id: "shell_command_startup_state",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/shell.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/shell.rs",
         marker: "pub struct ShellStartupState",
     },
     UiShellMarkerCheck {
         id: "web_theme_module",
         category: "web",
-        relative_path: "NEWrust/web/src/theme.js",
+        relative_path: "web/src/theme.js",
         marker: "export const THEME_TOKENS",
     },
     UiShellMarkerCheck {
         id: "web_theme_apply",
         category: "web",
-        relative_path: "NEWrust/web/src/theme.js",
+        relative_path: "web/src/theme.js",
         marker: "export function applyThemeTokens",
     },
     UiShellMarkerCheck {
         id: "web_shell_theme_marker",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-theme=\"adm-light\"",
     },
     UiShellMarkerCheck {
         id: "web_shell_unit_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "minimum desktop width should match Python shell",
     },
 ];
@@ -470,61 +543,61 @@ pub const REQUIRED_UI_WORKBENCH_MARKERS: &[UiWorkbenchMarkerCheck] = &[
     UiWorkbenchMarkerCheck {
         id: "application_autosave_report",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "pub struct DesignAutosaveReport",
     },
     UiWorkbenchMarkerCheck {
         id: "application_gameplay_update",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "pub struct GameplaySystemUpdateRequest",
     },
     UiWorkbenchMarkerCheck {
         id: "application_template_snapshot",
         category: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "pub fn save_template_snapshot",
     },
     UiWorkbenchMarkerCheck {
         id: "tauri_autosave_command",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/design.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/design.rs",
         marker: "pub struct AutosaveDesignRequest",
     },
     UiWorkbenchMarkerCheck {
         id: "tauri_template_command",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/design.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/design.rs",
         marker: "pub struct TemplateSelectionRequest",
     },
     UiWorkbenchMarkerCheck {
         id: "tauri_gameplay_command",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/design.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/design.rs",
         marker: "pub fn update_gameplay_system",
     },
     UiWorkbenchMarkerCheck {
         id: "web_workbench_builders",
         category: "web",
-        relative_path: "NEWrust/web/src/features/design.js",
+        relative_path: "web/src/features/design.js",
         marker: "export function buildAutosaveDesignRequest",
     },
     UiWorkbenchMarkerCheck {
         id: "web_workbench_gameplay_marker",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"gameplay-systems\"",
     },
     UiWorkbenchMarkerCheck {
         id: "web_workbench_unit_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "gameplay weights should summarize",
     },
     UiWorkbenchMarkerCheck {
         id: "cli_ui_workbench_gate",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"ui-workbench-gate\" => run_gate(\"ui-workbench\", ui_workbench_gate_report)",
     },
 ];
@@ -563,49 +636,49 @@ pub const REQUIRED_UI_AI_MARKERS: &[UiAiMarkerCheck] = &[
     UiAiMarkerCheck {
         id: "tauri_ai_stream_view",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/ai.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/ai.rs",
         marker: "pub struct AiStreamEventView",
     },
     UiAiMarkerCheck {
         id: "tauri_ai_background_jobs",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/ai.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/ai.rs",
         marker: "pub struct AiBackgroundJobStatus",
     },
     UiAiMarkerCheck {
         id: "web_ai_controller",
         category: "web",
-        relative_path: "NEWrust/web/src/features/ai-interview.js",
+        relative_path: "web/src/features/ai-interview.js",
         marker: "export class AiInterviewController",
     },
     UiAiMarkerCheck {
         id: "web_ai_stream_normalizer",
         category: "web",
-        relative_path: "NEWrust/web/src/features/ai-interview.js",
+        relative_path: "web/src/features/ai-interview.js",
         marker: "export function normalizeAiStreamEvents",
     },
     UiAiMarkerCheck {
         id: "web_ai_stream_marker",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"ai-stream-timeline\"",
     },
     UiAiMarkerCheck {
         id: "web_bottom_ai_tab",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-bottom-tab=\"ai\"",
     },
     UiAiMarkerCheck {
         id: "web_ai_unit_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "controller should apply command state",
     },
     UiAiMarkerCheck {
         id: "cli_ui_ai_gate",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"ui-ai-gate\" => run_gate(\"ui-ai\", ui_ai_gate_report)",
     },
 ];
@@ -644,49 +717,49 @@ pub const REQUIRED_UI_PIPELINE_MARKERS: &[UiPipelineMarkerCheck] = &[
     UiPipelineMarkerCheck {
         id: "tauri_pipeline_semantic_quality_view",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/pipeline.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/pipeline.rs",
         marker: "pub struct PipelineSemanticQualityView",
     },
     UiPipelineMarkerCheck {
         id: "tauri_pipeline_issue_return_view",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/pipeline.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/pipeline.rs",
         marker: "pub struct PipelineIssueReturnView",
     },
     UiPipelineMarkerCheck {
         id: "web_pipeline_semantic_normalizer",
         category: "web",
-        relative_path: "NEWrust/web/src/features/pipeline.js",
+        relative_path: "web/src/features/pipeline.js",
         marker: "export function normalizeSemanticQuality",
     },
     UiPipelineMarkerCheck {
         id: "web_pipeline_semantic_panel_marker",
         category: "web",
-        relative_path: "NEWrust/web/src/features/pipeline.js",
+        relative_path: "web/src/features/pipeline.js",
         marker: "setAttribute(\"data-role\", \"semantic-quality-panel\")",
     },
     UiPipelineMarkerCheck {
         id: "web_pipeline_semantic_css",
         category: "web",
-        relative_path: "NEWrust/web/src/styles.css",
+        relative_path: "web/src/styles.css",
         marker: ".semantic-quality-panel",
     },
     UiPipelineMarkerCheck {
         id: "web_pipeline_full_tree_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "pipeline stages should normalize full Step00-14 tree",
     },
     UiPipelineMarkerCheck {
         id: "web_pipeline_semantic_return_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "semantic return targets should normalize",
     },
     UiPipelineMarkerCheck {
         id: "cli_ui_pipeline_gate",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"ui-pipeline-gate\" => run_gate(\"ui-pipeline\", ui_pipeline_gate_report)",
     },
 ];
@@ -719,73 +792,73 @@ pub const REQUIRED_UI_UTILITY_MARKERS: &[UiUtilityMarkerCheck] = &[
     UiUtilityMarkerCheck {
         id: "tauri_save_commands",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/save.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/save.rs",
         marker: "pub trait SaveCommandService",
     },
     UiUtilityMarkerCheck {
         id: "tauri_save_crud",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/save.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/save.rs",
         marker: "fn save_commands_call_real_service_and_serialize_reports",
     },
     UiUtilityMarkerCheck {
         id: "web_save_index_normalizer",
         category: "web",
-        relative_path: "NEWrust/web/src/features/utility-panels.js",
+        relative_path: "web/src/features/utility-panels.js",
         marker: "export function normalizeSaveIndex",
     },
     UiUtilityMarkerCheck {
         id: "web_project_state_converter",
         category: "web",
-        relative_path: "NEWrust/web/src/features/utility-panels.js",
+        relative_path: "web/src/features/utility-panels.js",
         marker: "export function buildProjectStateFromDesignView",
     },
     UiUtilityMarkerCheck {
         id: "web_save_dialog_renderer",
         category: "web",
-        relative_path: "NEWrust/web/src/features/utility-panels.js",
+        relative_path: "web/src/features/utility-panels.js",
         marker: "export function renderSaveManagerDialog",
     },
     UiUtilityMarkerCheck {
         id: "web_save_manager_html",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"save-manager-dialog\"",
     },
     UiUtilityMarkerCheck {
         id: "web_save_table_html",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"save-table\"",
     },
     UiUtilityMarkerCheck {
         id: "web_save_manager_css",
         category: "web",
-        relative_path: "NEWrust/web/src/styles.css",
+        relative_path: "web/src/styles.css",
         marker: ".save-manager-dialog",
     },
     UiUtilityMarkerCheck {
         id: "web_save_conversion_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "checklist should map by item id",
     },
     UiUtilityMarkerCheck {
         id: "web_save_manager_screenshot_gate",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/ui-gate.mjs",
+        relative_path: "web/scripts/ui-gate.mjs",
         marker: "save_manager",
     },
     UiUtilityMarkerCheck {
         id: "web_save_fixture",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/fixtures.mjs",
+        relative_path: "web/scripts/fixtures.mjs",
         marker: "export function sampleSaveIndex",
     },
     UiUtilityMarkerCheck {
         id: "cli_ui_utility_gate",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"ui-utility-gate\" => run_gate(\"ui-utility\", ui_utility_gate_report)",
     },
 ];
@@ -818,91 +891,91 @@ pub const REQUIRED_UI_SETTINGS_STYLE_MARKERS: &[UiSettingsStyleMarkerCheck] = &[
     UiSettingsStyleMarkerCheck {
         id: "tauri_project_config_request",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/config.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/config.rs",
         marker: "pub struct SaveProjectConfigRequest",
     },
     UiSettingsStyleMarkerCheck {
         id: "tauri_project_preflight_command",
         category: "tauri-command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/config.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/config.rs",
         marker: "pub fn run_project_preflight",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_settings_style_module",
         category: "web",
-        relative_path: "NEWrust/web/src/features/settings-style.js",
+        relative_path: "web/src/features/settings-style.js",
         marker: "export function buildProjectConfigSaveRequest",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_style_prompt_parser",
         category: "web",
-        relative_path: "NEWrust/web/src/features/settings-style.js",
+        relative_path: "web/src/features/settings-style.js",
         marker: "export function parseStylePromptResponse",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_style_prompt_override",
         category: "web",
-        relative_path: "NEWrust/web/src/features/settings-style.js",
+        relative_path: "web/src/features/settings-style.js",
         marker: "export function buildStylePromptOverrideRequest",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_pipeline_prompt_editor_action",
         category: "web",
-        relative_path: "NEWrust/web/src/features/pipeline.js",
+        relative_path: "web/src/features/pipeline.js",
         marker: "open-style-prompt-editor",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_project_config_html",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"project-config-modal\"",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_style_prompt_html",
         category: "web",
-        relative_path: "NEWrust/web/src/index.html",
+        relative_path: "web/src/index.html",
         marker: "data-role=\"style-prompt-editor-modal\"",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_project_config_css",
         category: "web",
-        relative_path: "NEWrust/web/src/styles.css",
+        relative_path: "web/src/styles.css",
         marker: ".project-config-dialog",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_style_prompt_css",
         category: "web",
-        relative_path: "NEWrust/web/src/styles.css",
+        relative_path: "web/src/styles.css",
         marker: ".style-prompt-dialog",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_settings_style_unit_test",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "style prompt parser should honor valid ids",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_settings_style_e2e",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/e2e.mjs",
+        relative_path: "web/scripts/e2e.mjs",
         marker: "web settings-style e2e passed",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_project_config_screenshot_gate",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/ui-gate.mjs",
+        relative_path: "web/scripts/ui-gate.mjs",
         marker: "project_config",
     },
     UiSettingsStyleMarkerCheck {
         id: "web_style_prompt_screenshot_gate",
         category: "web-test",
-        relative_path: "NEWrust/web/scripts/ui-gate.mjs",
+        relative_path: "web/scripts/ui-gate.mjs",
         marker: "style_prompt_editor",
     },
     UiSettingsStyleMarkerCheck {
         id: "cli_ui_settings_style_gate",
         category: "cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "\"ui-settings-style-gate\" => run_gate(\"ui-settings-style\", ui_settings_style_gate_report)",
     },
 ];
@@ -911,337 +984,337 @@ pub const REQUIRED_UNIT_TEST_MIGRATION_MARKERS: &[UnitTestMigrationMarkerCheck] 
     UnitTestMigrationMarkerCheck {
         id: "config_defaults",
         category: "adm-new-config",
-        relative_path: "NEWrust/crates/adm-new-config/src/lib.rs",
+        relative_path: "crates/adm-new-config/src/lib.rs",
         marker: "default_ai_config_has_three_categories_and_compat_profiles",
     },
     UnitTestMigrationMarkerCheck {
         id: "config_loader",
         category: "adm-new-config",
-        relative_path: "NEWrust/crates/adm-new-config/src/lib.rs",
+        relative_path: "crates/adm-new-config/src/lib.rs",
         marker: "app_config_loader_deep_merges_toml_and_project_settings",
     },
     UnitTestMigrationMarkerCheck {
         id: "config_validator",
         category: "adm-new-config",
-        relative_path: "NEWrust/crates/adm-new-config/src/lib.rs",
+        relative_path: "crates/adm-new-config/src/lib.rs",
         marker: "validation_checks_only_active_credentials_and_duplicate_ids",
     },
     UnitTestMigrationMarkerCheck {
         id: "foundation_paths",
         category: "adm-new-foundation",
-        relative_path: "NEWrust/crates/adm-new-foundation/src/paths.rs",
+        relative_path: "crates/adm-new-foundation/src/paths.rs",
         marker: "project_paths_match_python_draft_policy",
     },
     UnitTestMigrationMarkerCheck {
         id: "foundation_pycache",
         category: "adm-new-foundation",
-        relative_path: "NEWrust/crates/adm-new-foundation/src/paths.rs",
+        relative_path: "crates/adm-new-foundation/src/paths.rs",
         marker: "pycache_prefix_uses_project_cache_by_default",
     },
     UnitTestMigrationMarkerCheck {
         id: "foundation_structured_md",
         category: "adm-new-foundation",
-        relative_path: "NEWrust/crates/adm-new-foundation/src/structured_md.rs",
+        relative_path: "crates/adm-new-foundation/src/structured_md.rs",
         marker: "loads_data_accepts_json_fence_yaml_fence_and_raw_json",
     },
     UnitTestMigrationMarkerCheck {
         id: "ai_completion_service",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/lib.rs",
+        relative_path: "crates/adm-new-ai/src/lib.rs",
         marker: "completion_service_accepts_pure_fenced_and_embedded_json_with_retry_hint",
     },
     UnitTestMigrationMarkerCheck {
         id: "ai_schema_contracts",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/design_contracts.rs",
+        relative_path: "crates/adm-new-ai/src/design_contracts.rs",
         marker: "schema_shape_validator_checks_required_fields_mode_and_version",
     },
     UnitTestMigrationMarkerCheck {
         id: "ai_model_adapters",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/adapters.rs",
+        relative_path: "crates/adm-new-ai/src/adapters.rs",
         marker: "adapter_registry_matches_python_names",
     },
     UnitTestMigrationMarkerCheck {
         id: "ai_openai_request",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/adapters.rs",
+        relative_path: "crates/adm-new-ai/src/adapters.rs",
         marker: "openai_request_normalizes_endpoint_and_appends_input_files",
     },
     UnitTestMigrationMarkerCheck {
         id: "ai_codex_image",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/image.rs",
+        relative_path: "crates/adm-new-ai/src/image.rs",
         marker: "codex_image_command_and_output_parsers_follow_python_shape",
     },
     UnitTestMigrationMarkerCheck {
         id: "contracts_schema_registry",
         category: "adm-new-contracts",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/schema.rs",
+        relative_path: "crates/adm-new-contracts/src/schema.rs",
         marker: "schema_registry_discovers_all_project_schema_files",
     },
     UnitTestMigrationMarkerCheck {
         id: "contracts_project_state",
         category: "adm-new-contracts",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/project.rs",
+        relative_path: "crates/adm-new-contracts/src/project.rs",
         marker: "project_state_serde_roundtrip_preserves_option_provenance_and_l4_l5",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_engine_view",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/lib.rs",
+        relative_path: "crates/adm-new-design/src/lib.rs",
         marker: "design_view_model_reports_coverage_l4_l5_quality_palette",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_data_loader",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/data_loader/mod.rs",
+        relative_path: "crates/adm-new-design/src/data_loader/mod.rs",
         marker: "data_asset_inventory_v3_counts_real_design_data",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_template_registry",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/data_loader/mod.rs",
+        relative_path: "crates/adm-new-design/src/data_loader/mod.rs",
         marker: "template_registry_v3_skips_index_and_archives",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_identity_dna_open_questions",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/contracts/mod.rs",
+        relative_path: "crates/adm-new-design/src/contracts/mod.rs",
         marker: "project_dna_freeze_blocks_without_demo_flow_and_passes_with_bundle",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_playable_contracts",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/contracts/mod.rs",
+        relative_path: "crates/adm-new-design/src/contracts/mod.rs",
         marker: "playable_bundle_validator_and_tasks_cover_runtime_surface",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_semantic_archetypes",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/semantic_pipeline.rs",
+        relative_path: "crates/adm-new-design/src/semantic_pipeline.rs",
         marker: "archetype_detection_and_requirements_match_python_tests",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_semantic_program_art",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/semantic_pipeline.rs",
+        relative_path: "crates/adm-new-design/src/semantic_pipeline.rs",
         marker: "program_and_art_semantic_contracts_cover_gate_codes",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_semantic_alignment_style_tasks",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/semantic_pipeline.rs",
+        relative_path: "crates/adm-new-design/src/semantic_pipeline.rs",
         marker: "alignment_style_and_task_semanticizers_match_python_tests",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_art_pipeline",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/art_pipeline/mod.rs",
+        relative_path: "crates/adm-new-design/src/art_pipeline/mod.rs",
         marker: "stage13_materialization_reports_and_stage14_acceptance_are_schema_valid",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_structured_context",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/handoff.rs",
+        relative_path: "crates/adm-new-design/src/handoff.rs",
         marker: "structured_context_prefers_stage2_and_falls_back_to_d4_candidate",
     },
     UnitTestMigrationMarkerCheck {
         id: "design_structured_handoff",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/handoff.rs",
+        relative_path: "crates/adm-new-design/src/handoff.rs",
         marker: "structured_handoff_writes_manifest_decisions_and_candidates",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_registry",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/lib.rs",
+        relative_path: "crates/adm-new-pipeline/src/lib.rs",
         marker: "pipeline_run_range_executes_registry_order_and_records_state",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_source_reference_manifest",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/source.rs",
+        relative_path: "crates/adm-new-pipeline/src/source.rs",
         marker: "import_step_copies_sources_writes_reports_and_reference_manifest",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_generation",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/generation.rs",
+        relative_path: "crates/adm-new-pipeline/src/generation.rs",
         marker: "apply_development_plan_outputs_writes_contract_report_and_indexes",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_design_flow",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/design_flow.rs",
+        relative_path: "crates/adm-new-pipeline/src/design_flow.rs",
         marker: "d3_blocks_empty_project_but_test_mode_keeps_plugin_success",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step00_02",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step00_02.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step00_02.rs",
         marker: "step02_extracts_l5_entities_and_supplements_missing_nodes",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step03_06",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step03_06.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step03_06.rs",
         marker: "step03_converts_entities_binds_systems_and_builds_schema_valid_contract",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step03_06_reviewer",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step03_06.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step03_06.rs",
         marker: "reviewer_reports_verdict_and_stable_issue_codes",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step07",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step07.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step07.rs",
         marker: "prompt_override_is_consumed_and_limits_generated_options",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step08_14",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step08_14.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step08_14.rs",
         marker: "step08_to_step14_registry_artifacts_match_declared_schemas",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step13",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step08_14.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step08_14.rs",
         marker: "step13_and_step14_accept_correlated_unity_execution_evidence",
     },
     UnitTestMigrationMarkerCheck {
         id: "pipeline_step14",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step08_14.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step08_14.rs",
         marker: "step14_rejects_stage13_without_verified_unity_evidence",
     },
     UnitTestMigrationMarkerCheck {
         id: "artifact_registry",
         category: "adm-new-artifact",
-        relative_path: "NEWrust/crates/adm-new-artifact/src/lib.rs",
+        relative_path: "crates/adm-new-artifact/src/lib.rs",
         marker: "artifact_dependency_graph_uses_registry_and_detects_errors",
     },
     UnitTestMigrationMarkerCheck {
         id: "artifact_validation_paths",
         category: "adm-new-artifact",
-        relative_path: "NEWrust/crates/adm-new-artifact/src/lib.rs",
+        relative_path: "crates/adm-new-artifact/src/lib.rs",
         marker: "artifact_validation_fails_when_review_failed_or_schema_target_missing",
     },
     UnitTestMigrationMarkerCheck {
         id: "save_manager",
         category: "adm-new-save",
-        relative_path: "NEWrust/crates/adm-new-save/src/lib.rs",
+        relative_path: "crates/adm-new-save/src/lib.rs",
         marker: "save_service_autosaves_and_creates_formal_archive_snapshot",
     },
     UnitTestMigrationMarkerCheck {
         id: "save_parallel_isolation",
         category: "adm-new-save",
-        relative_path: "NEWrust/crates/adm-new-save/src/lib.rs",
+        relative_path: "crates/adm-new-save/src/lib.rs",
         marker: "parallel_isolation_audit_and_repair_draft_meta_mismatch",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_runtime",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/runtime.rs",
+        relative_path: "crates/adm-new-application/src/runtime.rs",
         marker: "execution_config_planner_and_state_match_python_shapes",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_parallel_runtime",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/runtime.rs",
+        relative_path: "crates/adm-new-application/src/runtime.rs",
         marker: "preflight_run_context_identity_and_pipeline_state_round_trip",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_execution_objects",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/execution_objects.rs",
+        relative_path: "crates/adm-new-application/src/execution_objects.rs",
         marker: "design_project_runs_full_execution_object_gate_and_persists",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_unattended_recovery",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/execution_objects.rs",
+        relative_path: "crates/adm-new-application/src/execution_objects.rs",
         marker: "correction_queue_and_unattended_recovery_route_failures",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_iteration",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/iteration.rs",
+        relative_path: "crates/adm-new-application/src/iteration.rs",
         marker: "prepare_iteration_creates_iteration_save_and_inherits_skipped_artifacts",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_semantic_quality",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "design_semantic_quality_detects_cross_context_and_generic_tasks",
     },
     UnitTestMigrationMarkerCheck {
         id: "application_structured_logging",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "logs_application_service_filters_latest_clears_and_exports_jsonl",
     },
     UnitTestMigrationMarkerCheck {
         id: "patch_channel",
         category: "adm-new-patch",
-        relative_path: "NEWrust/crates/adm-new-patch/src/lib.rs",
+        relative_path: "crates/adm-new-patch/src/lib.rs",
         marker: "patch_executor_apply_validate_and_promote_updates_store",
     },
     UnitTestMigrationMarkerCheck {
         id: "sdk_knowledge_base",
         category: "adm-new-sdk",
-        relative_path: "NEWrust/crates/adm-new-sdk/src/knowledge_base.rs",
+        relative_path: "crates/adm-new-sdk/src/knowledge_base.rs",
         marker: "sdk_file_store_add_review_and_context_matches_python_contract",
     },
     UnitTestMigrationMarkerCheck {
         id: "sdk_ai_extractor",
         category: "adm-new-sdk",
-        relative_path: "NEWrust/crates/adm-new-sdk/src/ai_extractor.rs",
+        relative_path: "crates/adm-new-sdk/src/ai_extractor.rs",
         marker: "adapter_extraction_uses_read_only_json_contract_prompt",
     },
     UnitTestMigrationMarkerCheck {
         id: "cli_iteration",
         category: "adm-new-cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "iteration_cli_commands_cover_a30_iteration_flow",
     },
     UnitTestMigrationMarkerCheck {
         id: "cli_patch",
         category: "adm-new-cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "patch_cli_promote_marks_record",
     },
     UnitTestMigrationMarkerCheck {
         id: "cli_validation",
         category: "adm-new-cli",
-        relative_path: "NEWrust/apps/adm-new-cli/src/main.rs",
+        relative_path: "apps/adm-new-cli/src/main.rs",
         marker: "validation_cli_commands_cover_a29_validators",
     },
     UnitTestMigrationMarkerCheck {
         id: "web_design_unit",
         category: "adm-new-web",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "default route should be design",
     },
     UnitTestMigrationMarkerCheck {
         id: "web_pipeline_semantic",
         category: "adm-new-web",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "semantic return fallback should resolve",
     },
     UnitTestMigrationMarkerCheck {
         id: "web_settings_style_unit",
         category: "adm-new-web",
-        relative_path: "NEWrust/web/scripts/test.mjs",
+        relative_path: "web/scripts/test.mjs",
         marker: "pipeline style option should normalize to style id",
     },
     UnitTestMigrationMarkerCheck {
         id: "gate_pytest_environment",
-        category: "NEWrust/gates",
-        relative_path: "NEWrust/crates/adm-new-governance/src/lib.rs",
+        category: "gates",
+        relative_path: "crates/adm-new-governance/src/lib.rs",
         marker: "unit_test_migration_gate_report",
     },
 ];
@@ -1262,97 +1335,97 @@ pub const REQUIRED_INTEGRATION_TEST_MIGRATION_MARKERS: &[IntegrationTestMigratio
     IntegrationTestMigrationMarkerCheck {
         id: "rust_config_temp_roots",
         category: "adm-new-config",
-        relative_path: "NEWrust/crates/adm-new-config/src/lib.rs",
+        relative_path: "crates/adm-new-config/src/lib.rs",
         marker: "fn temp_root(prefix: &str) -> PathBuf",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "ai_config_active_profile",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/lib.rs",
+        relative_path: "crates/adm-new-ai/src/lib.rs",
         marker: "ai_config_service_saves_normalized_v3_config_and_active_profile",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "ai_adapter_registry",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/adapters.rs",
+        relative_path: "crates/adm-new-ai/src/adapters.rs",
         marker: "adapter_registry_matches_python_names",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "ai_openai_request",
         category: "adm-new-ai",
-        relative_path: "NEWrust/crates/adm-new-ai/src/adapters.rs",
+        relative_path: "crates/adm-new-ai/src/adapters.rs",
         marker: "openai_request_normalizes_endpoint_and_appends_input_files",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_registry_order",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/lib.rs",
+        relative_path: "crates/adm-new-pipeline/src/lib.rs",
         marker: "pipeline_run_range_executes_registry_order_and_records_state",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_design_flow_registry",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/design_flow.rs",
+        relative_path: "crates/adm-new-pipeline/src/design_flow.rs",
         marker: "plugin_specs_and_stage_specs_match_python_registry",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_design_flow_d4_handoff",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/design_flow.rs",
+        relative_path: "crates/adm-new-pipeline/src/design_flow.rs",
         marker: "d4_exports_concept_package_and_propagates_handoff_blockers",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_step00_02_generators",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step00_02.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step00_02.rs",
         marker: "stage_generators_write_step00_02_outputs",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_step03_06_generators",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step03_06.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step03_06.rs",
         marker: "stage_generators_write_step03_06_outputs",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "pipeline_step08_14_semantic_chain",
         category: "adm-new-pipeline",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/stages/step08_14.rs",
+        relative_path: "crates/adm-new-pipeline/src/stages/step08_14.rs",
         marker: "step08_to_step14_registry_artifacts_match_declared_schemas",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "application_pipeline_quality_gate",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "pipeline_quality_plan_002_check_uses_stage_metrics",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "application_design_semantic_quality_gate",
         category: "adm-new-application",
-        relative_path: "NEWrust/crates/adm-new-application/src/validation_tools.rs",
+        relative_path: "crates/adm-new-application/src/validation_tools.rs",
         marker: "design_semantic_quality_detects_cross_context_and_generic_tasks",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "save_parallel_draft_meta_isolation",
         category: "adm-new-save",
-        relative_path: "NEWrust/crates/adm-new-save/src/lib.rs",
+        relative_path: "crates/adm-new-save/src/lib.rs",
         marker: "parallel_isolation_audit_and_repair_draft_meta_mismatch",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "save_parallel_artifact_isolation",
         category: "adm-new-save",
-        relative_path: "NEWrust/crates/adm-new-save/src/lib.rs",
+        relative_path: "crates/adm-new-save/src/lib.rs",
         marker: "parallel_isolation_audit_detects_save_artifact_mismatch",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "design_view_model_quality",
         category: "adm-new-design",
-        relative_path: "NEWrust/crates/adm-new-design/src/lib.rs",
+        relative_path: "crates/adm-new-design/src/lib.rs",
         marker: "design_view_model_reports_coverage_l4_l5_quality_palette",
     },
     IntegrationTestMigrationMarkerCheck {
         id: "gate_integration_test_migration",
-        category: "NEWrust/gates",
-        relative_path: "NEWrust/crates/adm-new-governance/src/lib.rs",
+        category: "gates",
+        relative_path: "crates/adm-new-governance/src/lib.rs",
         marker: "integration_test_migration_gate_report",
     },
 ];
@@ -1361,109 +1434,109 @@ pub const REQUIRED_PARITY_CHECKS: &[ParityCheck] = &[
     ParityCheck {
         id: "contracts_project_state",
         layer: "contract",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/project.rs",
+        relative_path: "crates/adm-new-contracts/src/project.rs",
         marker: "project_state_serde_roundtrip_preserves_option_provenance_and_l4_l5",
     },
     ParityCheck {
         id: "contracts_save_state",
         layer: "contract",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/save.rs",
+        relative_path: "crates/adm-new-contracts/src/save.rs",
         marker: "save_index_roundtrip_preserves_current_and_progress",
     },
     ParityCheck {
         id: "contracts_pipeline_state",
         layer: "contract",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/pipeline.rs",
+        relative_path: "crates/adm-new-contracts/src/pipeline.rs",
         marker: "pipeline_registry_and_run_state_roundtrip",
     },
     ParityCheck {
         id: "contracts_ai_config",
         layer: "contract",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/ai.rs",
+        relative_path: "crates/adm-new-contracts/src/ai.rs",
         marker: "ai_config_v3_roundtrip_preserves_categories_and_active_profile",
     },
     ParityCheck {
         id: "contracts_package",
         layer: "contract",
-        relative_path: "NEWrust/crates/adm-new-contracts/src/package.rs",
+        relative_path: "crates/adm-new-contracts/src/package.rs",
         marker: "package_validation_report_roundtrip_preserves_required_checks",
     },
     ParityCheck {
         id: "storage_repository_roundtrip",
         layer: "storage",
-        relative_path: "NEWrust/crates/adm-new-storage/src/lib.rs",
+        relative_path: "crates/adm-new-storage/src/lib.rs",
         marker: "storage_typed_json_repository_reads_missing_and_roundtrips",
     },
     ParityCheck {
         id: "domain_design_view_model",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-design/src/lib.rs",
+        relative_path: "crates/adm-new-design/src/lib.rs",
         marker: "design_view_model_reports_coverage_l4_l5_quality_palette",
     },
     ParityCheck {
         id: "domain_ai_writeback",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-ai/src/lib.rs",
+        relative_path: "crates/adm-new-ai/src/lib.rs",
         marker: "interview_high_confidence_full_output_writes_and_archives_state",
     },
     ParityCheck {
         id: "domain_pipeline_runtime",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-pipeline/src/lib.rs",
+        relative_path: "crates/adm-new-pipeline/src/lib.rs",
         marker: "pipeline_run_range_executes_registry_order_and_records_state",
     },
     ParityCheck {
         id: "domain_artifact_blockers",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-artifact/src/lib.rs",
+        relative_path: "crates/adm-new-artifact/src/lib.rs",
         marker: "artifact_preflight_blocks_missing_schema_refs_unknown_reviewer_and_upstream_failure",
     },
     ParityCheck {
         id: "domain_package_blockers",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-packaging/src/lib.rs",
+        relative_path: "crates/adm-new-packaging/src/lib.rs",
         marker: "package_missing_changed_files_blocks_even_when_step14_succeeded",
     },
     ParityCheck {
         id: "domain_patch_validation",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-patch/src/lib.rs",
+        relative_path: "crates/adm-new-patch/src/lib.rs",
         marker: "patch_service_rejects_empty_request_and_lists_by_updated_at_desc",
     },
     ParityCheck {
         id: "domain_sdk_review",
         layer: "domain",
-        relative_path: "NEWrust/crates/adm-new-sdk/src/lib.rs",
+        relative_path: "crates/adm-new-sdk/src/lib.rs",
         marker: "sdk_service_add_placeholder_and_review_status",
     },
     ParityCheck {
         id: "application_save",
         layer: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "save_application_service_delegates_create_and_load",
     },
     ParityCheck {
         id: "application_logs",
         layer: "application",
-        relative_path: "NEWrust/crates/adm-new-application/src/lib.rs",
+        relative_path: "crates/adm-new-application/src/lib.rs",
         marker: "logs_application_service_filters_latest_clears_and_exports_jsonl",
     },
     ParityCheck {
         id: "commands_error_mapping",
         layer: "command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/lib.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/lib.rs",
         marker: "adm_error_maps_to_command_error_without_service_logic",
     },
     ParityCheck {
         id: "commands_package_blocked",
         layer: "command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/package.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/package.rs",
         marker: "package_command_blocks_without_skipping_validation",
     },
     ParityCheck {
         id: "commands_config_no_key_exposure",
         layer: "command",
-        relative_path: "NEWrust/crates/adm-new-tauri-commands/src/config.rs",
+        relative_path: "crates/adm-new-tauri-commands/src/config.rs",
         marker: "config_commands_load_save_and_validate_without_exposing_keys",
     },
 ];
@@ -1580,66 +1653,27 @@ fn first_number(line: &str) -> Option<f32> {
     }
 }
 
-pub fn plan_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
-    let plan_root = repo_root.join("plan").join("NEWrust");
-    let mut report = GateReport::new("NEWrust Plan Gate");
-    report.add_row("plan_root", plan_root.display().to_string());
-
-    if !plan_root.is_dir() {
-        report.add_blocker("plan_root_missing");
-        return Ok(report);
-    }
-
-    let mut combined = String::new();
-    for file in REQUIRED_PLAN_FILES {
-        let path = plan_root.join(file);
-        if !path.is_file() {
-            report.add_blocker(format!("missing_plan_file:{file}"));
-            continue;
-        }
-        let text = fs::read_to_string(&path)?;
-        if text.trim().is_empty() {
-            report.add_blocker(format!("empty_plan_file:{file}"));
-        }
-        report.add_row(format!("plan_file:{file}"), text.len().to_string());
-        combined.push_str(&text);
-    }
-
-    for scorecard_path in REQUIRED_SCORECARDS {
-        let path = plan_root.join(scorecard_path);
-        if !path.is_file() {
-            report.add_blocker(format!("missing_scorecard:{scorecard_path}"));
-            continue;
-        }
-        let text = fs::read_to_string(&path)?;
-        match evaluate_scorecard(scorecard_path, &text) {
-            Ok(evaluation) => add_scorecard_rows(&mut report, &evaluation, &text),
-            Err(error) => report.add_blocker(format!(
-                "scorecard_parse_failed:{scorecard_path}:{}",
-                error.message()
-            )),
-        }
-    }
-
-    report.add_row("plan_hash", hash_text(&combined));
-    Ok(report)
+pub fn plan_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Plan Gate",
+        LEGACY_PLAN_GATE_DEPRECATED,
+    ))
 }
 
 pub fn parity_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Rust Parity Gate");
-    let newrust_root = repo_root.join("NEWrust");
-    report.add_row("newrust_root", newrust_root.display().to_string());
+    report.add_row("project_root", repo_root.display().to_string());
     report.add_row(
         "required_execution",
         "cargo test --workspace --quiet".to_string(),
     );
 
-    if !newrust_root.is_dir() {
-        report.add_blocker("newrust_root_missing");
+    if !is_standalone_repo_root(repo_root) {
+        report.add_blocker("standalone_project_root_invalid");
         return Ok(report);
     }
 
-    let workspace_toml = newrust_root.join("Cargo.toml");
+    let workspace_toml = repo_root.join("Cargo.toml");
     if !workspace_toml.is_file() {
         report.add_blocker("newrust_workspace_cargo_missing");
     } else {
@@ -1674,7 +1708,7 @@ pub fn parity_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
         }
     }
 
-    let ignored_tests = ignored_test_markers(&newrust_root)?;
+    let ignored_tests = ignored_test_markers(repo_root)?;
     report.add_row("ignored_test_marker_count", ignored_tests.len().to_string());
     for ignored in ignored_tests {
         report.add_blocker(format!("ignored_test_marker:{ignored}"));
@@ -1689,7 +1723,10 @@ pub fn parity_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
 
 pub fn validation_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Validation Tool Gate");
-    report.add_row("source_contract", "tools/validators/*");
+    report.add_row(
+        "source_contract",
+        "crates/adm-new-application/src/validation_tools.rs",
+    );
     report.add_row(
         "required_execution",
         "cargo test -p adm-new-application validation_tools; cargo test -p adm-new-cli validation_cli_commands_cover_a29_validators; cargo test -p adm-new-governance validation_gate",
@@ -1727,7 +1764,10 @@ pub fn validation_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
 
 pub fn iteration_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Iteration Tool Gate");
-    report.add_row("source_contract", "core/iteration/*");
+    report.add_row(
+        "source_contract",
+        "crates/adm-new-application/src/iteration.rs",
+    );
     report.add_row(
         "required_execution",
         "cargo test -p adm-new-application iteration; cargo test -p adm-new-cli iteration_cli_commands_cover_a30_iteration_flow; cargo test -p adm-new-governance iteration_gate",
@@ -1767,7 +1807,7 @@ pub fn ui_shell_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Shell Gate");
     report.add_row(
         "source_contract",
-        "core/ui/theme.py; core/ui/main_window.py; core/ui/gui_app.py",
+        "apps/desktop-tauri; crates/adm-new-tauri-commands/src/shell.rs; web/src",
     );
     report.add_row(
         "required_execution",
@@ -1804,7 +1844,15 @@ pub fn ui_shell_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn ui_workbench_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_workbench_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI Workbench Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_workbench_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Workbench Gate");
     report.add_row(
         "source_contract",
@@ -1845,7 +1893,15 @@ pub fn ui_workbench_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn ui_ai_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_ai_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI AI Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_ai_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI AI Gate");
     report.add_row(
         "source_contract",
@@ -1886,7 +1942,15 @@ pub fn ui_ai_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn ui_pipeline_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_pipeline_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI Pipeline Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_pipeline_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Pipeline Gate");
     report.add_row(
         "source_contract",
@@ -1927,7 +1991,15 @@ pub fn ui_pipeline_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn ui_utility_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_utility_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI Utility Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_utility_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Utility Gate");
     report.add_row(
         "source_contract",
@@ -1968,7 +2040,15 @@ pub fn ui_utility_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn ui_settings_style_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_settings_style_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI Settings/Style Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_settings_style_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Settings Style Gate");
     report.add_row(
         "source_contract",
@@ -2012,22 +2092,26 @@ pub fn ui_settings_style_gate_report(repo_root: &Path) -> AdmResult<GateReport> 
     Ok(report)
 }
 
-pub fn ui_parity_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn ui_parity_v3_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python UI Parity V3 Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_ui_parity_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust UI Parity V3 Gate");
     report.add_row(
         "source_contract",
-        "plan/NEWrust/full_project_reproduction/07_ui_python_baseline_plan.md",
+        "docs/migration-history/full_project_reproduction/07_ui_python_baseline_plan.md",
     );
     report.add_row(
         "required_execution",
         "npm run build; npm run ui-gate; npm run ui-baseline-gate; cargo test -p adm-new-governance ui_parity_v3_gate; cargo run -p adm-new-cli -- ui-parity-v3-gate",
     );
 
-    let baseline_root = repo_root
-        .join("plan")
-        .join("NEWrust")
-        .join("full_project_reproduction")
-        .join("ui_baselines");
+    let baseline_root = repo_root.join("testdata").join("ui_baselines");
     let index_path = baseline_root.join("index.json");
     report.add_row("baseline_root", baseline_root.display().to_string());
     report.add_row("baseline_index", index_path.display().to_string());
@@ -2197,7 +2281,15 @@ struct FinalGateStatus {
     hash: String,
 }
 
-pub fn unit_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn unit_test_migration_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python Unit-Test Migration Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_unit_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Unit Test Migration Gate");
     report.add_row(
         "source_contract",
@@ -2209,8 +2301,8 @@ pub fn unit_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport
     );
 
     let matrix_path = repo_root
-        .join("plan")
-        .join("NEWrust")
+        .join("docs")
+        .join("migration-history")
         .join("full_project_reproduction")
         .join("09_test_migration_matrix.md");
     report.add_row("matrix_path", matrix_path.display().to_string());
@@ -2314,7 +2406,7 @@ pub fn unit_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport
         }
     }
 
-    let ignored_tests = ignored_test_markers(&repo_root.join("NEWrust"))?;
+    let ignored_tests = ignored_test_markers(repo_root)?;
     report.add_row("ignored_test_marker_count", ignored_tests.len().to_string());
     for ignored in ignored_tests {
         report.add_blocker(format!("ignored_test_marker:{ignored}"));
@@ -2331,7 +2423,15 @@ pub fn unit_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport
     Ok(report)
 }
 
-pub fn integration_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+pub fn integration_test_migration_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Python Integration-Test Migration Gate",
+        LEGACY_PYTHON_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_integration_test_migration_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Integration Test Migration Gate");
     report.add_row(
         "source_contract",
@@ -2343,8 +2443,8 @@ pub fn integration_test_migration_gate_report(repo_root: &Path) -> AdmResult<Gat
     );
 
     let matrix_path = repo_root
-        .join("plan")
-        .join("NEWrust")
+        .join("docs")
+        .join("migration-history")
         .join("full_project_reproduction")
         .join("09_test_migration_matrix.md");
     report.add_row("matrix_path", matrix_path.display().to_string());
@@ -2453,7 +2553,7 @@ pub fn integration_test_migration_gate_report(repo_root: &Path) -> AdmResult<Gat
         }
     }
 
-    let ignored_tests = ignored_test_markers(&repo_root.join("NEWrust"))?;
+    let ignored_tests = ignored_test_markers(repo_root)?;
     report.add_row("ignored_test_marker_count", ignored_tests.len().to_string());
     for ignored in ignored_tests {
         report.add_blocker(format!("ignored_test_marker:{ignored}"));
@@ -2647,20 +2747,20 @@ fn looks_like_png(bytes: &[u8]) -> bool {
 }
 
 pub fn package_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
-    let mut report = GateReport::new("NEWrust Package Gate");
-    let newrust_root = repo_root.join("NEWrust");
-    report.add_row("newrust_root", newrust_root.display().to_string());
+    let mut report = GateReport::new("NEWrust Package Contract Self-Test");
+    report.add_row("project_root", repo_root.display().to_string());
+    report.add_row("scope", "synthetic-contract-fixtures-not-release-artifact");
     report.add_row(
         "required_execution",
         "cargo test -p adm-new-packaging; cargo test -p adm-new-tauri-commands package".to_string(),
     );
     report.add_row(
         "source_contract",
-        "plan/NEWrust/python_deconstruction/17_packaging_contracts.md".to_string(),
+        "crates/adm-new-contracts/src/package.rs; crates/adm-new-packaging/src/lib.rs".to_string(),
     );
 
-    if !newrust_root.is_dir() {
-        report.add_blocker("newrust_root_missing");
+    if !is_standalone_repo_root(repo_root) {
+        report.add_blocker("standalone_project_root_invalid");
         return Ok(report);
     }
 
@@ -2691,22 +2791,138 @@ pub fn package_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
+pub fn standalone_boundary_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+    let mut report = GateReport::new("NEWrust Standalone Boundary Gate");
+    report.add_row("project_root", repo_root.display().to_string());
+    report.add_row("root_contract", SOURCE_ROOT_MARKER);
+    report.add_row("resource_contract", RESOURCE_MANIFEST_PATH);
+    report.add_row("portable_contract", "tools/build-portable.ps1");
+    report.add_row("relocation_contract", "root-name-independent");
+
+    let required_files = [
+        SOURCE_ROOT_MARKER,
+        "Cargo.toml",
+        "Cargo.lock",
+        RESOURCE_MANIFEST_PATH,
+        "pipeline/artifact_layer/registry.json",
+        "web/package.json",
+        "tools/build-portable.ps1",
+        "tools/Finalize-PortableSwap.ps1",
+        "tools/clean-generated.ps1",
+        "tools/verify-standalone.ps1",
+    ];
+    for relative_path in required_files {
+        let path = repo_root.join(relative_path);
+        report.add_row(
+            format!("required_file:{relative_path}"),
+            path.is_file().to_string(),
+        );
+        if !path.is_file() {
+            report.add_blocker(format!("standalone_required_file_missing:{relative_path}"));
+        }
+    }
+
+    if !is_standalone_repo_root(repo_root) {
+        report.add_blocker("standalone_project_root_invalid");
+        return Ok(report);
+    }
+
+    let marker = read_json_file(&repo_root.join(SOURCE_ROOT_MARKER))?;
+    if string_value(&marker, "kind") != "source-project-root" {
+        report.add_blocker("source_root_marker_kind_invalid");
+    }
+    if string_value(&marker, "workspaceManifest") != "Cargo.toml" {
+        report.add_blocker("source_root_workspace_manifest_invalid");
+    }
+    if string_value(&marker, "resourceManifest") != RESOURCE_MANIFEST_PATH {
+        report.add_blocker("source_root_resource_manifest_invalid");
+    }
+
+    let resource_manifest = read_json_file(&repo_root.join(RESOURCE_MANIFEST_PATH))?;
+    let project_id = string_value(&resource_manifest, "projectId");
+    report.add_row("resource_manifest:project_id", project_id.clone());
+    if project_id.is_empty() {
+        report.add_blocker("resource_manifest_project_id_missing");
+    }
+    let group_count = resource_manifest
+        .get("groups")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or_default();
+    report.add_row("resource_manifest:group_count", group_count.to_string());
+    if group_count == 0 {
+        report.add_blocker("resource_manifest_groups_missing");
+    }
+    let resource_verification = verify_source_resource_manifest(repo_root);
+    report.add_row(
+        "resource_manifest:integrity_status",
+        resource_verification.status.clone(),
+    );
+    report.add_row(
+        "resource_manifest:verified_group_count",
+        resource_verification.groups.len().to_string(),
+    );
+    for blocker in resource_verification.blockers {
+        let path = blocker.path.unwrap_or_default();
+        report.add_blocker(format!(
+            "source_resource_integrity:{}:{}:{}",
+            blocker.code, path, blocker.message
+        ));
+    }
+
+    let nested = repo_root.join("apps").join("adm-new-cli").join("src");
+    match find_repo_root(&nested) {
+        Some(found) if same_path(&found, repo_root) => {
+            report.add_row("relocation_contract:subdirectory_resolution", "passed");
+        }
+        Some(found) => report.add_blocker(format!(
+            "relocation_contract_wrong_root:{}",
+            found.display()
+        )),
+        None => report.add_blocker("relocation_contract_root_not_found"),
+    }
+
+    for relative_path in [
+        "crates/adm-new-governance/src/lib.rs",
+        "apps/adm-new-cli/src/main.rs",
+    ] {
+        let path = repo_root.join(relative_path);
+        if !path.is_file() {
+            continue;
+        }
+        let source = fs::read_to_string(path)?;
+        let forbidden_patterns = [
+            ["repo_root.join(\"", "NEWrust", "\")"].concat(),
+            ["join(\"plan\")", ".join(\"NEWrust\")"].concat(),
+            ["containing plan", "/NEWrust"].concat(),
+        ];
+        for forbidden in forbidden_patterns {
+            if source.contains(&forbidden) {
+                report.add_blocker(format!(
+                    "standalone_parent_path_dependency:{relative_path}:{forbidden}"
+                ));
+            }
+        }
+    }
+
+    Ok(report)
+}
+
 pub fn release_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust Release Gate");
-    let newrust_root = repo_root.join("NEWrust");
-    let web_root = newrust_root.join("web");
-    report.add_row("newrust_root", newrust_root.display().to_string());
+    let web_root = repo_root.join("web");
+    report.add_row("project_root", repo_root.display().to_string());
     report.add_row("web_root", web_root.display().to_string());
     report.add_row(
         "required_release_check_count",
         REQUIRED_RELEASE_CHECKS.len().to_string(),
     );
     for check in REQUIRED_RELEASE_CHECKS {
-        report.add_row(format!("release_check:{check}"), "required");
+        report.add_row(format!("release_check:{check}"), "evidence-required");
     }
 
-    if !newrust_root.is_dir() {
-        report.add_blocker("newrust_root_missing");
+    if !is_standalone_repo_root(repo_root) {
+        report.add_blocker("standalone_project_root_invalid");
         return Ok(report);
     }
     if !web_root.is_dir() {
@@ -2714,54 +2930,20 @@ pub fn release_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
         return Ok(report);
     }
 
-    add_process_result(
+    add_release_evidence(&mut report, repo_root)?;
+
+    add_nested_gate_result(
         &mut report,
-        "cargo_fmt_check",
-        cargo_program(),
-        &["fmt", "--check"],
-        &newrust_root,
+        "standalone_boundary_gate",
+        standalone_boundary_gate_report(repo_root)?,
     );
-    add_process_result(
+    add_nested_gate_result(
         &mut report,
-        "cargo_check_workspace",
-        cargo_program(),
-        &["check", "--workspace"],
-        &newrust_root,
-    );
-    add_process_result(
-        &mut report,
-        "cargo_test_workspace",
-        cargo_program(),
-        &["test", "--workspace", "--quiet"],
-        &newrust_root,
-    );
-    add_process_result(
-        &mut report,
-        "web_build",
-        npm_program(),
-        &["run", "build"],
-        &web_root,
-    );
-    add_process_result(
-        &mut report,
-        "web_e2e",
-        npm_program(),
-        &["run", "e2e"],
-        &web_root,
-    );
-    add_process_result(
-        &mut report,
-        "web_ui_gate",
-        npm_program(),
-        &["run", "ui-gate"],
-        &web_root,
+        "package_contract_self_test",
+        package_gate_report(repo_root)?,
     );
 
-    add_nested_gate_result(&mut report, "plan_gate", plan_gate_report(repo_root)?);
-    add_nested_gate_result(&mut report, "parity_gate", parity_gate_report(repo_root)?);
-    add_nested_gate_result(&mut report, "package_gate", package_gate_report(repo_root)?);
-
-    let forbidden_markers = collect_forbidden_evidence_markers(&newrust_root)?;
+    let forbidden_markers = collect_forbidden_evidence_markers(repo_root)?;
     report.add_row(
         "anti_fake_scan:marker_count",
         forbidden_markers.len().to_string(),
@@ -2773,56 +2955,843 @@ pub fn release_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     Ok(report)
 }
 
-pub fn handoff_report(repo_root: &Path) -> AdmResult<GateReport> {
-    let manifest = build_handoff_manifest(repo_root)?;
-    let json_text = serde_json::to_string_pretty(&manifest)
-        .map_err(|error| AdmError::new(format!("failed to serialize handoff manifest: {error}")))?;
-    let markdown_text = render_handoff_markdown(&manifest);
-    let report_dir = repo_root.join("NEWrust").join("gates").join("reports");
-    let json_path = report_dir.join("final_handoff_manifest.json");
-    let markdown_path = report_dir.join("final_handoff_manifest.md");
-    write_text_atomic(&json_path, &format!("{json_text}\n"))?;
-    write_text_atomic(&markdown_path, &markdown_text)?;
-
-    let mut report = GateReport::new("NEWrust Development Handoff Report");
-    report.add_row("manifest_json", "gates/reports/final_handoff_manifest.json");
-    report.add_row("manifest_md", "gates/reports/final_handoff_manifest.md");
-    report.add_row("entry_count", manifest.entries.len().to_string());
-    report.add_row("manifest_status", manifest.status.clone());
-    report.add_row("manifest_hash", hash_text(&json_text));
-    for entry in &manifest.entries {
-        report.add_row(
-            format!("handoff:{}:status", entry.feature_id),
-            entry.status.clone(),
-        );
-        report.add_row(
-            format!("handoff:{}:python_evidence_count", entry.feature_id),
-            entry.python_evidence.len().to_string(),
-        );
-        report.add_row(
-            format!("handoff:{}:newrust_file_count", entry.feature_id),
-            entry.newrust_files.len().to_string(),
-        );
-        report.add_row(
-            format!("handoff:{}:test_count", entry.feature_id),
-            entry.tests.len().to_string(),
-        );
-        report.add_row(
-            format!("handoff:{}:gate_count", entry.feature_id),
-            entry.gate_refs.len().to_string(),
-        );
+fn add_release_evidence(report: &mut GateReport, repo_root: &Path) -> AdmResult<()> {
+    let evidence_path = repo_root.join(RELEASE_EVIDENCE_PATH);
+    report.add_row("release_evidence_path", RELEASE_EVIDENCE_PATH.to_string());
+    if !evidence_path.is_file() {
+        report.add_blocker("standalone_release_evidence_missing");
+        for check in REQUIRED_RELEASE_CHECKS {
+            report.add_row(format!("release_evidence:{check}"), "missing");
+        }
+        return Ok(());
     }
-    for blocker in manifest.blockers {
+    let metadata = fs::symlink_metadata(&evidence_path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        report.add_blocker("standalone_release_evidence_must_be_regular_file");
+        return Ok(());
+    }
+    let evidence_bytes = fs::read(&evidence_path)?;
+    let evidence: StandaloneReleaseEvidence = match serde_json::from_slice(&evidence_bytes) {
+        Ok(evidence) => evidence,
+        Err(error) => {
+            report.add_blocker(format!("standalone_release_evidence_json_invalid:{error}"));
+            return Ok(());
+        }
+    };
+    let current_commit = git_output(repo_root, &["rev-parse", "HEAD"]);
+    let current_status = git_output(
+        repo_root,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+    );
+    let current_commit_text = current_commit.clone().unwrap_or_default();
+    report.add_row(
+        "release_evidence:trust_model",
+        "same-user-stale-or-accidental-misuse-guard-not-cryptographic-attestation",
+    );
+    report.add_row("release_evidence:producer", evidence.producer.clone());
+    report.add_row("release_evidence:evidence_id", evidence.evidence_id.clone());
+    report.add_row("release_evidence:status", evidence.status.clone());
+    report.add_row("release_evidence:git_commit", evidence.git_commit.clone());
+    for blocker in
+        validate_release_evidence_structure(&evidence, unix_timestamp(), &current_commit_text)
+    {
         report.add_blocker(blocker);
     }
-    Ok(report)
+    match current_commit {
+        Some(current) if current == evidence.git_commit => {
+            report.add_row("release_evidence:current_head_matches", "true");
+        }
+        Some(current) => {
+            report.add_row("release_evidence:current_head", current);
+            report.add_blocker("standalone_release_evidence_head_mismatch");
+        }
+        None => report.add_blocker("standalone_release_git_head_unavailable"),
+    }
+    match current_status {
+        Some(status_text) if status_text.is_empty() => {
+            report.add_row("release_evidence:current_tree_clean", "true");
+        }
+        Some(_) => report.add_blocker("standalone_release_current_tree_dirty"),
+        None => report.add_blocker("standalone_release_git_status_unavailable"),
+    }
+
+    for check in REQUIRED_RELEASE_CHECKS {
+        let command_evidence = evidence.checks.get(*check);
+        let passed = command_evidence.is_some_and(|value| {
+            value.status == "passed"
+                && value.exit_code == 0
+                && !value.command.trim().is_empty()
+                && is_sha256(&value.output_sha256)
+        });
+        report.add_row(
+            format!("release_evidence:{check}"),
+            if passed {
+                "passed"
+            } else {
+                "missing-or-failed"
+            },
+        );
+        if let Some(command) = command_evidence {
+            report.add_row(
+                format!("release_evidence:{check}:command"),
+                command.command.clone(),
+            );
+            report.add_row(
+                format!("release_evidence:{check}:output_sha256"),
+                command.output_sha256.clone(),
+            );
+        }
+        if !passed {
+            report.add_blocker(format!(
+                "standalone_release_check_missing_or_failed:{check}"
+            ));
+        }
+    }
+    if let Some(portable) = &evidence.portable {
+        add_release_portable_verification(report, repo_root, &evidence, portable)?;
+    } else {
+        report.add_blocker("standalone_release_portable_evidence_missing");
+    }
+    Ok(())
 }
 
-pub fn final_handoff_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
+fn validate_release_evidence_structure(
+    evidence: &StandaloneReleaseEvidence,
+    now: u64,
+    current_commit: &str,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if evidence.schema_version != RELEASE_EVIDENCE_SCHEMA_VERSION {
+        blockers.push("standalone_release_evidence_schema_invalid".to_string());
+    }
+    if evidence.producer != RELEASE_EVIDENCE_PRODUCER {
+        blockers.push("standalone_release_evidence_producer_invalid".to_string());
+    }
+    if evidence.evidence_id.len() != 32
+        || !evidence
+            .evidence_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        blockers.push("standalone_release_evidence_id_invalid".to_string());
+    }
+    if evidence.project_id != SOURCE_PROJECT_ID {
+        blockers.push("standalone_release_evidence_project_id_invalid".to_string());
+    }
+    if evidence.status != "passed" {
+        blockers.push("standalone_release_evidence_not_passed".to_string());
+    }
+    if !evidence.source_tree_clean {
+        blockers.push("standalone_release_evidence_source_tree_not_clean".to_string());
+    }
+    if !current_commit.is_empty() && evidence.git_commit != current_commit {
+        blockers.push("standalone_release_evidence_head_mismatch".to_string());
+    }
+    if !evidence.errors.is_empty() {
+        blockers.push("standalone_release_evidence_contains_errors".to_string());
+    }
+    if evidence.generated_at_unix > now.saturating_add(RELEASE_EVIDENCE_CLOCK_SKEW_SECONDS)
+        || evidence.expires_at_unix <= now
+        || evidence.expires_at_unix <= evidence.generated_at_unix
+        || evidence.expires_at_unix - evidence.generated_at_unix
+            > RELEASE_EVIDENCE_MAX_LIFETIME_SECONDS
+    {
+        blockers.push("standalone_release_evidence_freshness_invalid".to_string());
+    }
+    let required = REQUIRED_RELEASE_CHECKS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let actual = evidence
+        .checks
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    if actual != required {
+        blockers.push("standalone_release_evidence_check_set_invalid".to_string());
+    }
+    for check in REQUIRED_RELEASE_CHECKS {
+        match evidence.checks.get(*check) {
+            Some(value)
+                if value.status == "passed"
+                    && value.exit_code == 0
+                    && !value.command.trim().is_empty()
+                    && is_sha256(&value.output_sha256) =>
+            {
+                let _ = value.duration_ms;
+            }
+            _ => blockers.push(format!("standalone_release_check_invalid:{check}")),
+        }
+    }
+    match &evidence.portable {
+        Some(portable)
+            if portable.root == RELEASE_PORTABLE_ROOT
+                && portable.executable == "AutoDesignMaker.exe"
+                && portable.git_commit == evidence.git_commit
+                && is_sha256(&portable.executable_sha256)
+                && is_sha256(&portable.build_manifest_sha256)
+                && is_sha256(&portable.resource_manifest_sha256)
+                && is_sha256(&portable.swap_receipt_sha256)
+                && portable.transaction_id.len() == 32
+                && portable
+                    .transaction_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+                && portable.transaction_status == "finalized"
+                && portable.swap_receipt
+                    == format!(
+                        "dist/.{RELEASE_PORTABLE_OUTPUT_NAME}.swap-{}.json",
+                        portable.transaction_id
+                    )
+                && is_safe_project_relative_path(&portable.swap_receipt) => {}
+        _ => blockers.push("standalone_release_portable_evidence_invalid".to_string()),
+    }
+    blockers
+}
+
+fn is_safe_project_relative_path(value: &str) -> bool {
+    let path = Path::new(value);
+    !value.trim().is_empty()
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+fn is_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn add_release_portable_verification(
+    report: &mut GateReport,
+    repo_root: &Path,
+    evidence: &StandaloneReleaseEvidence,
+    portable: &ReleasePortableEvidence,
+) -> AdmResult<()> {
+    if portable.root != RELEASE_PORTABLE_ROOT {
+        report.add_blocker("standalone_release_portable_root_invalid");
+        return Ok(());
+    }
+    let expected_receipt = format!(
+        "dist/.{RELEASE_PORTABLE_OUTPUT_NAME}.swap-{}.json",
+        portable.transaction_id
+    );
+    if !is_safe_project_relative_path(&portable.swap_receipt)
+        || portable.swap_receipt != expected_receipt
+    {
+        report.add_blocker("standalone_release_portable_receipt_path_invalid");
+        return Ok(());
+    }
+    let root = repo_root.join(RELEASE_PORTABLE_ROOT);
+    let receipt_path = repo_root.join(&portable.swap_receipt);
+    let receipt_metadata = match fs::symlink_metadata(&receipt_path) {
+        Ok(metadata)
+            if metadata.is_file() && !release_metadata_is_reparse_or_symlink(&metadata) =>
+        {
+            metadata
+        }
+        Ok(_) => {
+            report.add_blocker("release_portable_swap_receipt_must_be_regular_file");
+            return Ok(());
+        }
+        Err(error) => {
+            report.add_blocker(format!("release_portable_swap_receipt_unavailable:{error}"));
+            return Ok(());
+        }
+    };
+    let _ = receipt_metadata.len();
+    let receipt_bytes = fs::read(&receipt_path)?;
+    let receipt_hash = sha256_hex(&receipt_bytes);
+    report.add_row(
+        "release_portable:swap_receipt",
+        portable.swap_receipt.clone(),
+    );
+    report.add_row(
+        "release_portable:transaction_id",
+        portable.transaction_id.clone(),
+    );
+    if receipt_hash != portable.swap_receipt_sha256 {
+        report.add_blocker("release_portable_swap_receipt_evidence_hash_mismatch");
+    }
+    let receipt: Value = match serde_json::from_slice(&receipt_bytes) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            report.add_blocker(format!("release_portable_swap_receipt_invalid:{error}"));
+            return Ok(());
+        }
+    };
+    let verification = verify_portable_resource_root(&root);
+    report.add_row(
+        "release_portable:integrity_status",
+        verification.status.clone(),
+    );
+    for blocker in verification.blockers {
+        report.add_blocker(format!(
+            "release_portable_integrity:{}:{}",
+            blocker.code, blocker.message
+        ));
+    }
+    let build_path = root.join("build-manifest.json");
+    let resource_path = root.join("portable-resource-manifest.json");
+    let executable_path = root.join("AutoDesignMaker.exe");
+    let build_bytes = match fs::read(&build_path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            report.add_blocker(format!(
+                "release_portable_build_manifest_unavailable:{error}"
+            ));
+            return Ok(());
+        }
+    };
+    let resource_bytes = fs::read(&resource_path)?;
+    let executable_bytes = fs::read(&executable_path)?;
+    let build_hash = sha256_hex(&build_bytes);
+    let resource_hash = sha256_hex(&resource_bytes);
+    let executable_hash = sha256_hex(&executable_bytes);
+    for (actual, expected, code) in [
+        (
+            &build_hash,
+            &portable.build_manifest_sha256,
+            "release_portable_build_manifest_evidence_hash_mismatch",
+        ),
+        (
+            &resource_hash,
+            &portable.resource_manifest_sha256,
+            "release_portable_resource_manifest_evidence_hash_mismatch",
+        ),
+        (
+            &executable_hash,
+            &portable.executable_sha256,
+            "release_portable_executable_evidence_hash_mismatch",
+        ),
+    ] {
+        if actual != expected {
+            report.add_blocker(code);
+        }
+    }
+    let manifest: Value = serde_json::from_slice(&build_bytes)
+        .map_err(|error| AdmError::new(format!("invalid portable build manifest: {error}")))?;
+    for blocker in
+        validate_portable_transaction_contract(repo_root, evidence, portable, &receipt, &manifest)
+    {
+        report.add_blocker(blocker);
+    }
+    match measure_release_immutable_tree(&root) {
+        Ok((files, bytes, digest)) => {
+            let expected = receipt.get("staged_immutable_tree");
+            if expected
+                .and_then(|value| value.get("FileCount"))
+                .and_then(Value::as_u64)
+                != Some(files)
+                || expected
+                    .and_then(|value| value.get("Bytes"))
+                    .and_then(Value::as_u64)
+                    != Some(bytes)
+                || expected
+                    .and_then(|value| value.get("Digest"))
+                    .and_then(Value::as_str)
+                    != Some(digest.as_str())
+            {
+                report.add_blocker("release_portable_immutable_tree_mismatch");
+            }
+        }
+        Err(error) => report.add_blocker(format!(
+            "release_portable_immutable_tree_unavailable:{error}"
+        )),
+    }
+    for blocker in collect_unresolved_portable_output_state(
+        repo_root,
+        RELEASE_PORTABLE_OUTPUT_NAME,
+        &portable.swap_receipt,
+    )? {
+        report.add_blocker(blocker);
+    }
+    let manifest_commit = string_value(&manifest, "git_commit");
+    if manifest_commit != evidence.git_commit || manifest_commit != portable.git_commit {
+        report.add_blocker("release_portable_git_commit_mismatch");
+    }
+    for (field, expected, code) in [
+        (
+            "release_mode",
+            "formal",
+            "release_portable_release_mode_invalid",
+        ),
+        (
+            "crt_linkage",
+            "static-msvc",
+            "release_portable_crt_linkage_invalid",
+        ),
+        (
+            "pe_machine",
+            "x86_64",
+            "release_portable_pe_machine_invalid",
+        ),
+        (
+            "user_data_mode",
+            "clean_release",
+            "release_portable_user_data_mode_invalid",
+        ),
+        (
+            "executable_sha256",
+            executable_hash.as_str(),
+            "release_portable_manifest_executable_hash_mismatch",
+        ),
+        (
+            "resource_manifest_sha256",
+            resource_hash.as_str(),
+            "release_portable_manifest_resource_hash_mismatch",
+        ),
+    ] {
+        if string_value(&manifest, field) != expected {
+            report.add_blocker(code);
+        }
+    }
+    if manifest
+        .get("development_snapshot")
+        .and_then(Value::as_bool)
+        != Some(false)
+    {
+        report.add_blocker("release_portable_development_snapshot_invalid");
+    }
+    if manifest
+        .get("dynamic_crt_dependencies")
+        .and_then(Value::as_array)
+        .is_none_or(|items| !items.is_empty())
+    {
+        report.add_blocker("release_portable_dynamic_crt_dependencies_present");
+    }
+    if manifest.get("user_data_files").and_then(Value::as_u64) != Some(0)
+        || manifest.get("user_data_bytes").and_then(Value::as_u64) != Some(0)
+        || string_value(&manifest, "user_data_digest")
+            != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    {
+        report.add_blocker("release_portable_declared_user_data_not_empty");
+    }
+    if manifest
+        .get("pe_dependencies")
+        .and_then(Value::as_array)
+        .is_none()
+    {
+        report.add_blocker("release_portable_pe_dependencies_missing");
+    }
+    match measure_resource_tree(root.join("user_data")) {
+        Ok(measure) => {
+            let expected = receipt.get("staged_user_data");
+            if expected
+                .and_then(|value| value.get("FileCount"))
+                .and_then(Value::as_u64)
+                != Some(measure.files)
+                || expected
+                    .and_then(|value| value.get("Bytes"))
+                    .and_then(Value::as_u64)
+                    != Some(measure.bytes)
+                || expected
+                    .and_then(|value| value.get("Digest"))
+                    .and_then(Value::as_str)
+                    != Some(measure.tree_sha256.as_str())
+            {
+                report.add_blocker("release_portable_transaction_user_data_mismatch");
+            }
+            if measure.files != 0 || measure.bytes != 0 {
+                report.add_blocker("release_portable_actual_user_data_not_empty");
+            }
+        }
+        Err(error) => report.add_blocker(format!("release_portable_user_data_unavailable:{error}")),
+    }
+    Ok(())
+}
+
+fn measure_release_immutable_tree(root: &Path) -> AdmResult<(u64, u64, String)> {
+    fn collect(
+        root: &Path,
+        current: &Path,
+        records: &mut Vec<(String, u64, String)>,
+    ) -> AdmResult<()> {
+        for entry in fs::read_dir(current)? {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path)?;
+            if release_metadata_is_reparse_or_symlink(&metadata) {
+                return Err(AdmError::new(format!(
+                    "immutable portable tree contains a symlink: {}",
+                    path.display()
+                )));
+            }
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| AdmError::new("immutable portable path escaped its root"))?
+                .to_string_lossy()
+                .replace('\\', "/");
+            if relative == "user_data" || relative.starts_with("user_data/") {
+                continue;
+            }
+            if metadata.is_dir() {
+                collect(root, &path, records)?;
+            } else if metadata.is_file() && relative != ".portable-update.lock" {
+                let content = fs::read(&path)?;
+                let bytes = u64::try_from(content.len())
+                    .map_err(|_| AdmError::new("immutable portable file size overflow"))?;
+                records.push((relative, bytes, sha256_hex(&content)));
+            } else if !metadata.is_file() {
+                return Err(AdmError::new(format!(
+                    "immutable portable tree contains an unsupported entry: {}",
+                    path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    let metadata = fs::symlink_metadata(root)?;
+    if release_metadata_is_reparse_or_symlink(&metadata) || !metadata.is_dir() {
+        return Err(AdmError::new(
+            "immutable portable root is not a regular directory",
+        ));
+    }
+    let mut records = Vec::new();
+    collect(root, root, &mut records)?;
+    records.sort_by(|left, right| {
+        left.0
+            .to_ascii_lowercase()
+            .cmp(&right.0.to_ascii_lowercase())
+            .then_with(|| left.0.cmp(&right.0))
+    });
+    let mut total_bytes = 0_u64;
+    let lines = records
+        .iter()
+        .map(|(path, bytes, hash)| {
+            total_bytes = total_bytes
+                .checked_add(*bytes)
+                .ok_or_else(|| AdmError::new("immutable portable tree size overflow"))?;
+            Ok(format!("{path}|{bytes}|{hash}"))
+        })
+        .collect::<AdmResult<Vec<_>>>()?;
+    let files = u64::try_from(records.len())
+        .map_err(|_| AdmError::new("immutable portable file count overflow"))?;
+    Ok((files, total_bytes, sha256_hex(lines.join("\n").as_bytes())))
+}
+
+#[cfg(windows)]
+fn release_metadata_is_reparse_or_symlink(metadata: &fs::Metadata) -> bool {
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+    metadata.file_type().is_symlink()
+        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn release_metadata_is_reparse_or_symlink(metadata: &fs::Metadata) -> bool {
+    metadata.file_type().is_symlink()
+}
+
+fn validate_portable_transaction_contract(
+    repo_root: &Path,
+    evidence: &StandaloneReleaseEvidence,
+    portable: &ReleasePortableEvidence,
+    receipt: &Value,
+    build_manifest: &Value,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    let transaction_id = string_value(receipt, "transaction_id");
+    if receipt.get("schema_version").and_then(Value::as_u64) != Some(1)
+        || string_value(receipt, "kind") != "portable-swap-transaction"
+    {
+        blockers.push("release_portable_swap_receipt_identity_invalid".to_string());
+    }
+    if transaction_id != portable.transaction_id
+        || string_value(build_manifest, "transaction_id") != portable.transaction_id
+    {
+        blockers.push("release_portable_transaction_id_mismatch".to_string());
+    }
+    if string_value(receipt, "status") != "finalized"
+        || portable.transaction_status != "finalized"
+        || string_value(receipt, "smoke_status") != "passed"
+        || string_value(receipt, "finalized_at_utc").trim().is_empty()
+    {
+        blockers.push("release_portable_transaction_not_finalized".to_string());
+    }
+    if string_value(receipt, "output_name") != RELEASE_PORTABLE_OUTPUT_NAME
+        || string_value(receipt, "release_mode") != "formal"
+    {
+        blockers.push("release_portable_transaction_output_invalid".to_string());
+    }
+    let dist = repo_root.join("dist");
+    let live = repo_root.join(RELEASE_PORTABLE_ROOT);
+    let stage = dist.join(format!(
+        ".{RELEASE_PORTABLE_OUTPUT_NAME}.stage-{}",
+        portable.transaction_id
+    ));
+    let previous = dist.join(format!(
+        ".{RELEASE_PORTABLE_OUTPUT_NAME}.previous-{}",
+        portable.transaction_id
+    ));
+    let failed = dist.join(format!(
+        ".{RELEASE_PORTABLE_OUTPUT_NAME}.failed-{}",
+        portable.transaction_id
+    ));
+    for (field, expected, code) in [
+        (
+            "dist_root",
+            dist.as_path(),
+            "release_portable_transaction_dist_root_mismatch",
+        ),
+        (
+            "live_root",
+            live.as_path(),
+            "release_portable_transaction_live_root_mismatch",
+        ),
+        (
+            "stage_root",
+            stage.as_path(),
+            "release_portable_transaction_stage_root_mismatch",
+        ),
+        (
+            "backup_root",
+            previous.as_path(),
+            "release_portable_transaction_backup_root_mismatch",
+        ),
+        (
+            "failed_root",
+            failed.as_path(),
+            "release_portable_transaction_failed_root_mismatch",
+        ),
+    ] {
+        let actual = string_value(receipt, field);
+        if actual.is_empty() || !same_path(Path::new(&actual), expected) {
+            blockers.push(code.to_string());
+        }
+    }
+    for (field, suffix, code) in [
+        (
+            "backup_tombstone_root",
+            "retired-backup",
+            "release_portable_transaction_backup_tombstone_root_mismatch",
+        ),
+        (
+            "failed_tombstone_root",
+            "retired-failed",
+            "release_portable_transaction_failed_tombstone_root_mismatch",
+        ),
+    ] {
+        let actual = string_value(receipt, field);
+        let expected = dist.join(format!(
+            ".{RELEASE_PORTABLE_OUTPUT_NAME}.{suffix}-{}",
+            portable.transaction_id
+        ));
+        if actual.is_empty() || !same_path(Path::new(&actual), &expected) {
+            blockers.push(code.to_string());
+        }
+    }
+    let immutable = receipt.get("staged_immutable_tree");
+    if immutable
+        .and_then(|value| value.get("Exists"))
+        .and_then(Value::as_bool)
+        != Some(true)
+        || immutable
+            .and_then(|value| value.get("FileCount"))
+            .and_then(Value::as_u64)
+            .is_none()
+        || immutable
+            .and_then(|value| value.get("Bytes"))
+            .and_then(Value::as_u64)
+            .is_none()
+        || immutable
+            .and_then(|value| value.get("Digest"))
+            .and_then(Value::as_str)
+            .is_none_or(|digest| !is_sha256(digest))
+    {
+        blockers.push("release_portable_transaction_immutable_tree_invalid".to_string());
+    }
+    let staged_user_data = receipt.get("staged_user_data");
+    if staged_user_data
+        .and_then(|value| value.get("Exists"))
+        .and_then(Value::as_bool)
+        != Some(true)
+        || staged_user_data
+            .and_then(|value| value.get("FileCount"))
+            .and_then(Value::as_u64)
+            .is_none()
+        || staged_user_data
+            .and_then(|value| value.get("Bytes"))
+            .and_then(Value::as_u64)
+            .is_none()
+        || staged_user_data
+            .and_then(|value| value.get("Digest"))
+            .and_then(Value::as_str)
+            .is_none_or(|digest| !is_sha256(digest))
+    {
+        blockers.push("release_portable_transaction_user_data_measure_invalid".to_string());
+    }
+    let had_previous_live = receipt.get("had_previous_live").and_then(Value::as_bool);
+    let backup_deleted = receipt.get("backup_deleted").and_then(Value::as_bool);
+    if had_previous_live.is_none() || backup_deleted != had_previous_live {
+        blockers.push("release_portable_transaction_backup_finalization_invalid".to_string());
+    }
+    let manifest_commit = string_value(build_manifest, "git_commit");
+    if manifest_commit != evidence.git_commit || manifest_commit != portable.git_commit {
+        blockers.push("release_portable_transaction_head_mismatch".to_string());
+    }
+    blockers
+}
+
+fn collect_unresolved_portable_output_state(
+    repo_root: &Path,
+    output_name: &str,
+    current_receipt: &str,
+) -> AdmResult<Vec<String>> {
+    let mut blockers = Vec::new();
+    let dist = repo_root.join("dist");
+    let live = dist.join(output_name);
+    let operation_lock = format!(".{output_name}.operation.lock");
+    let receipt_prefix = format!(".{output_name}.swap-");
+    let unresolved_prefixes = [
+        format!(".{output_name}.stage-"),
+        format!(".{output_name}.previous-"),
+        format!(".{output_name}.backup-"),
+        format!(".{output_name}.failed-"),
+        format!(".{output_name}.retired-backup-"),
+        format!(".{output_name}.retired-failed-"),
+    ];
+    let mut current_receipt_count = 0usize;
+    let mut current_transaction_id = String::new();
+    for entry in fs::read_dir(&dist)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if unresolved_prefixes
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
+            blockers.push(format!(
+                "release_portable_unresolved_output_artifact:{name}"
+            ));
+            continue;
+        }
+        if !name.starts_with(&receipt_prefix) || !name.ends_with(".json") {
+            continue;
+        }
+        let relative = format!("dist/{name}");
+        let metadata = fs::symlink_metadata(entry.path())?;
+        if release_metadata_is_reparse_or_symlink(&metadata) || !metadata.is_file() {
+            blockers.push(format!("release_portable_receipt_not_regular:{name}"));
+            continue;
+        }
+        let record: Value = match fs::read(entry.path())
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        {
+            Some(record) => record,
+            None => {
+                blockers.push(format!("release_portable_receipt_invalid:{name}"));
+                continue;
+            }
+        };
+        let status = string_value(&record, "status");
+        let resolved = matches!(status.as_str(), "finalized" | "failure_artifact_finalized");
+        let name_transaction_id = name
+            .strip_prefix(&receipt_prefix)
+            .and_then(|value| value.strip_suffix(".json"))
+            .unwrap_or_default();
+        let completion_present = match status.as_str() {
+            "finalized" => !string_value(&record, "finalized_at_utc").is_empty(),
+            "failure_artifact_finalized" => {
+                !string_value(&record, "failed_artifact_deleted_at_utc").is_empty()
+            }
+            _ => false,
+        };
+        if record.get("schema_version").and_then(Value::as_u64) != Some(1)
+            || string_value(&record, "kind") != "portable-swap-transaction"
+            || string_value(&record, "output_name") != output_name
+            || name_transaction_id.len() != 32
+            || !name_transaction_id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || string_value(&record, "transaction_id") != name_transaction_id
+            || !resolved
+            || !completion_present
+        {
+            blockers.push(format!("release_portable_unresolved_receipt:{name}"));
+        }
+        if relative == current_receipt {
+            current_receipt_count += 1;
+            current_transaction_id = string_value(&record, "transaction_id");
+            if string_value(&record, "status") != "finalized" {
+                blockers.push("release_portable_current_receipt_not_finalized".to_string());
+            }
+        }
+    }
+    if current_receipt_count != 1 {
+        blockers.push("release_portable_current_receipt_count_invalid".to_string());
+    }
+    let operation_lock_path = dist.join(&operation_lock);
+    match fs::symlink_metadata(&operation_lock_path) {
+        Ok(metadata)
+            if release_metadata_is_reparse_or_symlink(&metadata) || !metadata.is_file() =>
+        {
+            blockers.push("release_portable_operation_lock_not_regular".to_string());
+        }
+        Ok(_) => {
+            // The portable coordinator opens this file with FileShare.None; an
+            // active operation therefore makes this read fail closed on Windows.
+            match fs::read(&operation_lock_path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            {
+                Some(lock)
+                    if lock.get("schema_version").and_then(Value::as_u64) == Some(1)
+                        && string_value(&lock, "kind") == "portable-output-operation-lock"
+                        && string_value(&lock, "output_name") == output_name
+                        && string_value(&lock, "transaction_id") == current_transaction_id => {}
+                _ => blockers.push("release_portable_operation_lock_active_or_stale".to_string()),
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(AdmError::new(format!(
+                "portable operation lock metadata unavailable: {error}"
+            )));
+        }
+    }
+    if live.join(".portable-update.lock").exists() {
+        blockers.push("release_portable_live_update_lock_present".to_string());
+    }
+    Ok(blockers)
+}
+
+fn git_output(repo_root: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn handoff_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy Development Handoff Report",
+        LEGACY_HANDOFF_GATE_DEPRECATED,
+    ))
+}
+
+pub fn final_handoff_v3_gate_report(_repo_root: &Path) -> AdmResult<GateReport> {
+    Ok(deprecated_gate_report(
+        "Legacy File-Level Handoff Gate",
+        LEGACY_HANDOFF_GATE_DEPRECATED,
+    ))
+}
+
+#[allow(dead_code)]
+fn legacy_final_handoff_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     let mut report = GateReport::new("NEWrust v3 Final File-Level Handoff Gate");
     report.add_row(
         "source_contract",
-        "plan/NEWrust/full_project_reproduction/final_handoff_v3.md; file-level matrices; A00-A39 gates",
+        "docs/migration-history/full_project_reproduction/final_handoff_v3.md; file-level matrices; A00-A39 gates",
     );
     report.add_row(
         "required_execution",
@@ -2830,28 +3799,33 @@ pub fn final_handoff_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     );
 
     let plan_root = repo_root
-        .join("plan")
-        .join("NEWrust")
+        .join("docs")
+        .join("migration-history")
         .join("full_project_reproduction");
     let inventory = analyze_final_inventory_matrix(
         "inventory",
-        "plan/NEWrust/full_project_reproduction/01_full_python_file_inventory.md",
-        &repo_root.join("plan/NEWrust/full_project_reproduction/01_full_python_file_inventory.md"),
+        "docs/migration-history/full_project_reproduction/01_full_python_file_inventory.md",
+        &repo_root.join(
+            "docs/migration-history/full_project_reproduction/01_full_python_file_inventory.md",
+        ),
     )?;
     let disposition = analyze_final_disposition_matrix(
         "disposition",
-        "plan/NEWrust/full_project_reproduction/03_file_disposition_matrix.md",
-        &repo_root.join("plan/NEWrust/full_project_reproduction/03_file_disposition_matrix.md"),
+        "docs/migration-history/full_project_reproduction/03_file_disposition_matrix.md",
+        &repo_root
+            .join("docs/migration-history/full_project_reproduction/03_file_disposition_matrix.md"),
     )?;
     let mapping = analyze_final_mapping_matrix(
         "rust_target_mapping",
-        "plan/NEWrust/full_project_reproduction/04_rust_target_mapping.md",
-        &repo_root.join("plan/NEWrust/full_project_reproduction/04_rust_target_mapping.md"),
+        "docs/migration-history/full_project_reproduction/04_rust_target_mapping.md",
+        &repo_root
+            .join("docs/migration-history/full_project_reproduction/04_rust_target_mapping.md"),
     )?;
     let test_matrix = analyze_final_test_matrix(
         "test_migration",
-        "plan/NEWrust/full_project_reproduction/09_test_migration_matrix.md",
-        &repo_root.join("plan/NEWrust/full_project_reproduction/09_test_migration_matrix.md"),
+        "docs/migration-history/full_project_reproduction/09_test_migration_matrix.md",
+        &repo_root
+            .join("docs/migration-history/full_project_reproduction/09_test_migration_matrix.md"),
     )?;
 
     add_final_matrix_rows(
@@ -2974,12 +3948,13 @@ pub fn final_handoff_v3_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
     write_text_atomic(&final_path, &markdown)?;
     report.add_row(
         "final_handoff_v3_path",
-        "plan/NEWrust/full_project_reproduction/final_handoff_v3.md",
+        "docs/migration-history/full_project_reproduction/final_handoff_v3.md",
     );
     report.add_row("final_handoff_v3_hash", hash_text(&markdown));
     Ok(report)
 }
 
+#[allow(dead_code)]
 fn build_handoff_manifest(repo_root: &Path) -> AdmResult<HandoffManifest> {
     let entries = handoff_entries();
     let mut blockers = Vec::new();
@@ -2995,14 +3970,15 @@ fn build_handoff_manifest(repo_root: &Path) -> AdmResult<HandoffManifest> {
         schema_version: 1,
         generated_at: format!("unix:{}", unix_timestamp()),
         status: status.to_string(),
-        plan_root: "plan/NEWrust".to_string(),
-        newrust_root: "NEWrust".to_string(),
-        gate_report_dir: "NEWrust/gates".to_string(),
+        plan_root: "docs/migration-history/NEWrust".to_string(),
+        newrust_root: ".".to_string(),
+        gate_report_dir: "gates".to_string(),
         entries,
         blockers,
     })
 }
 
+#[allow(dead_code)]
 fn validate_handoff_entry(
     repo_root: &Path,
     entry: &HandoffEntry,
@@ -3058,78 +4034,76 @@ fn validate_handoff_entry(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn handoff_entries() -> Vec<HandoffEntry> {
     vec![
         handoff_entry(
             "source_authority",
             "Python source authority and garbage isolation",
             &[
-                "plan/NEWrust/python_deconstruction/01_source_authority_index.md",
-                "plan/NEWrust/python_deconstruction/18_garbage_isolation_draft.md",
+                "docs/migration-history/python_deconstruction/01_source_authority_index.md",
+                "docs/migration-history/python_deconstruction/18_garbage_isolation_draft.md",
             ],
             &[
-                "NEWrust/crates/adm-new-governance/src/lib.rs",
-                "NEWrust/apps/adm-new-cli/src/main.rs",
+                "crates/adm-new-governance/src/lib.rs",
+                "apps/adm-new-cli/src/main.rs",
             ],
             &["cargo run -p adm-new-cli -- plan-gate"],
-            &["NEWrust/gates/plan-gate.adm"],
+            &["gates/plan-gate.adm"],
         ),
         handoff_entry(
             "data_contracts",
             "Typed data contracts and storage",
             &[
-                "plan/NEWrust/python_deconstruction/04_data_model_and_storage.md",
-                "plan/NEWrust/python_deconstruction/13_save_and_execution_object_contracts.md",
-                "plan/NEWrust/python_deconstruction/20_parity_gate_test_matrix.md",
+                "docs/migration-history/python_deconstruction/04_data_model_and_storage.md",
+                "docs/migration-history/python_deconstruction/13_save_and_execution_object_contracts.md",
+                "docs/migration-history/python_deconstruction/20_parity_gate_test_matrix.md",
             ],
             &[
-                "NEWrust/crates/adm-new-contracts/src/project.rs",
-                "NEWrust/crates/adm-new-contracts/src/save.rs",
-                "NEWrust/crates/adm-new-contracts/src/package.rs",
-                "NEWrust/crates/adm-new-storage/src/lib.rs",
+                "crates/adm-new-contracts/src/project.rs",
+                "crates/adm-new-contracts/src/save.rs",
+                "crates/adm-new-contracts/src/package.rs",
+                "crates/adm-new-storage/src/lib.rs",
             ],
             &[
                 "cargo test -p adm-new-contracts",
                 "cargo test -p adm-new-storage",
             ],
-            &["NEWrust/gates/parity-gate.adm"],
+            &["gates/parity-gate.adm"],
         ),
         handoff_entry(
             "design_workbench",
             "Design workbench parity",
             &[
-                "plan/NEWrust/python_deconstruction/11_design_engine_contracts.md",
-                "plan/NEWrust/python_deconstruction/19_ui_reproduction_specs.md",
+                "docs/migration-history/python_deconstruction/11_design_engine_contracts.md",
+                "docs/migration-history/python_deconstruction/19_ui_reproduction_specs.md",
             ],
             &[
-                "NEWrust/crates/adm-new-design/src/lib.rs",
-                "NEWrust/crates/adm-new-application/src/lib.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/design.rs",
-                "NEWrust/web/src/features/design.js",
+                "crates/adm-new-design/src/lib.rs",
+                "crates/adm-new-application/src/lib.rs",
+                "crates/adm-new-tauri-commands/src/design.rs",
+                "web/src/features/design.js",
             ],
             &[
                 "cargo test -p adm-new-design",
                 "cargo test -p adm-new-tauri-commands design",
                 "npm.cmd run e2e -- design",
             ],
-            &[
-                "NEWrust/gates/ui-gate.adm",
-                "NEWrust/gates/ui-evidence-manifest.json",
-            ],
+            &["gates/ui-gate.adm", "gates/ui-evidence-manifest.json"],
         ),
         handoff_entry(
             "ai_config_interview",
             "AI config and embedded interview parity",
             &[
-                "plan/NEWrust/python_deconstruction/14_ai_config_adapter_log_contracts.md",
-                "plan/NEWrust/python_deconstruction/16_ai_interview_and_completion_contracts.md",
-                "plan/NEWrust/python_deconstruction/19_ui_reproduction_specs.md",
+                "docs/migration-history/python_deconstruction/14_ai_config_adapter_log_contracts.md",
+                "docs/migration-history/python_deconstruction/16_ai_interview_and_completion_contracts.md",
+                "docs/migration-history/python_deconstruction/19_ui_reproduction_specs.md",
             ],
             &[
-                "NEWrust/crates/adm-new-ai/src/lib.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/ai.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/config.rs",
-                "NEWrust/web/src/features/ai-config.js",
+                "crates/adm-new-ai/src/lib.rs",
+                "crates/adm-new-tauri-commands/src/ai.rs",
+                "crates/adm-new-tauri-commands/src/config.rs",
+                "web/src/features/ai-config.js",
             ],
             &[
                 "cargo test -p adm-new-ai",
@@ -3137,21 +4111,21 @@ fn handoff_entries() -> Vec<HandoffEntry> {
                 "cargo test -p adm-new-tauri-commands config",
                 "npm.cmd run e2e -- ai-config",
             ],
-            &["NEWrust/gates/ui-gate.adm", "NEWrust/gates/parity-gate.adm"],
+            &["gates/ui-gate.adm", "gates/parity-gate.adm"],
         ),
         handoff_entry(
             "pipeline_artifacts",
             "Pipeline runtime and artifact gates",
             &[
-                "plan/NEWrust/python_deconstruction/07_pipeline_step_contracts.md",
-                "plan/NEWrust/python_deconstruction/09_artifact_validation_flow.md",
-                "plan/NEWrust/python_deconstruction/15_artifact_schema_refs_map.md",
+                "docs/migration-history/python_deconstruction/07_pipeline_step_contracts.md",
+                "docs/migration-history/python_deconstruction/09_artifact_validation_flow.md",
+                "docs/migration-history/python_deconstruction/15_artifact_schema_refs_map.md",
             ],
             &[
-                "NEWrust/crates/adm-new-pipeline/src/lib.rs",
-                "NEWrust/crates/adm-new-artifact/src/lib.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/pipeline.rs",
-                "NEWrust/web/src/features/pipeline.js",
+                "crates/adm-new-pipeline/src/lib.rs",
+                "crates/adm-new-artifact/src/lib.rs",
+                "crates/adm-new-tauri-commands/src/pipeline.rs",
+                "web/src/features/pipeline.js",
             ],
             &[
                 "cargo test -p adm-new-pipeline",
@@ -3159,43 +4133,43 @@ fn handoff_entries() -> Vec<HandoffEntry> {
                 "cargo test -p adm-new-tauri-commands pipeline",
                 "npm.cmd run e2e -- pipeline",
             ],
-            &["NEWrust/gates/parity-gate.adm", "NEWrust/gates/ui-gate.adm"],
+            &["gates/parity-gate.adm", "gates/ui-gate.adm"],
         ),
         handoff_entry(
             "save_runtime",
             "Save archive, locks, snapshots, and runtime state",
             &[
-                "plan/NEWrust/python_deconstruction/13_save_and_execution_object_contracts.md",
-                "plan/NEWrust/python_deconstruction/08_runtime_save_ai_package_flow.md",
+                "docs/migration-history/python_deconstruction/13_save_and_execution_object_contracts.md",
+                "docs/migration-history/python_deconstruction/08_runtime_save_ai_package_flow.md",
             ],
             &[
-                "NEWrust/crates/adm-new-save/src/lib.rs",
-                "NEWrust/crates/adm-new-storage/src/lib.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/save.rs",
+                "crates/adm-new-save/src/lib.rs",
+                "crates/adm-new-storage/src/lib.rs",
+                "crates/adm-new-tauri-commands/src/save.rs",
             ],
             &[
                 "cargo test -p adm-new-save",
                 "cargo test -p adm-new-storage",
                 "cargo test -p adm-new-tauri-commands save",
             ],
-            &["NEWrust/gates/parity-gate.adm"],
+            &["gates/parity-gate.adm"],
         ),
         handoff_entry(
             "utility_panels",
             "Patch, package, logs, and SDK utility panels",
             &[
-                "plan/NEWrust/python_deconstruction/14_ai_config_adapter_log_contracts.md",
-                "plan/NEWrust/python_deconstruction/17_packaging_contracts.md",
-                "plan/NEWrust/python_deconstruction/20_parity_gate_test_matrix.md",
+                "docs/migration-history/python_deconstruction/14_ai_config_adapter_log_contracts.md",
+                "docs/migration-history/python_deconstruction/17_packaging_contracts.md",
+                "docs/migration-history/python_deconstruction/20_parity_gate_test_matrix.md",
             ],
             &[
-                "NEWrust/crates/adm-new-patch/src/lib.rs",
-                "NEWrust/crates/adm-new-sdk/src/lib.rs",
-                "NEWrust/crates/adm-new-packaging/src/lib.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/package.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/logs.rs",
-                "NEWrust/crates/adm-new-tauri-commands/src/sdk.rs",
-                "NEWrust/web/src/features/utility-panels.js",
+                "crates/adm-new-patch/src/lib.rs",
+                "crates/adm-new-sdk/src/lib.rs",
+                "crates/adm-new-packaging/src/lib.rs",
+                "crates/adm-new-tauri-commands/src/package.rs",
+                "crates/adm-new-tauri-commands/src/logs.rs",
+                "crates/adm-new-tauri-commands/src/sdk.rs",
+                "web/src/features/utility-panels.js",
             ],
             &[
                 "cargo test -p adm-new-patch",
@@ -3204,24 +4178,21 @@ fn handoff_entries() -> Vec<HandoffEntry> {
                 "cargo test -p adm-new-tauri-commands package",
                 "npm.cmd run e2e -- utility-panels",
             ],
-            &[
-                "NEWrust/gates/package-gate.adm",
-                "NEWrust/gates/ui-gate.adm",
-            ],
+            &["gates/package-gate.adm", "gates/ui-gate.adm"],
         ),
         handoff_entry(
             "ui_parity",
             "Web UI pixel and interaction parity",
             &[
-                "plan/NEWrust/python_deconstruction/19_ui_reproduction_specs.md",
-                "plan/NEWrust/python_deconstruction/20_parity_gate_test_matrix.md",
+                "docs/migration-history/python_deconstruction/19_ui_reproduction_specs.md",
+                "docs/migration-history/python_deconstruction/20_parity_gate_test_matrix.md",
             ],
             &[
-                "NEWrust/web/src/index.html",
-                "NEWrust/web/src/main.js",
-                "NEWrust/web/src/styles.css",
-                "NEWrust/web/scripts/e2e.mjs",
-                "NEWrust/web/scripts/ui-gate.mjs",
+                "web/src/index.html",
+                "web/src/main.js",
+                "web/src/styles.css",
+                "web/scripts/e2e.mjs",
+                "web/scripts/ui-gate.mjs",
             ],
             &[
                 "npm.cmd run build",
@@ -3229,22 +4200,19 @@ fn handoff_entries() -> Vec<HandoffEntry> {
                 "npm.cmd run e2e",
                 "npm.cmd run ui-gate",
             ],
-            &[
-                "NEWrust/gates/ui-gate.adm",
-                "NEWrust/gates/ui-evidence-manifest.json",
-            ],
+            &["gates/ui-gate.adm", "gates/ui-evidence-manifest.json"],
         ),
         handoff_entry(
             "release_governance",
             "Plan, parity, package, and release gates",
             &[
-                "plan/NEWrust/newrust_design/09_testing_gates_release_design.md",
-                "plan/NEWrust/newrust_design/10_risk_register.md",
-                "plan/NEWrust/06_validation_and_release_gates.md",
+                "docs/migration-history/newrust_design/09_testing_gates_release_design.md",
+                "docs/migration-history/newrust_design/10_risk_register.md",
+                "docs/migration-history/06_validation_and_release_gates.md",
             ],
             &[
-                "NEWrust/crates/adm-new-governance/src/lib.rs",
-                "NEWrust/apps/adm-new-cli/src/main.rs",
+                "crates/adm-new-governance/src/lib.rs",
+                "apps/adm-new-cli/src/main.rs",
             ],
             &[
                 "cargo run -p adm-new-cli -- plan-gate",
@@ -3253,15 +4221,16 @@ fn handoff_entries() -> Vec<HandoffEntry> {
                 "cargo run -p adm-new-cli -- release-gate",
             ],
             &[
-                "NEWrust/gates/plan-gate.adm",
-                "NEWrust/gates/parity-gate.adm",
-                "NEWrust/gates/package-gate.adm",
-                "NEWrust/gates/release-gate.adm",
+                "gates/plan-gate.adm",
+                "gates/parity-gate.adm",
+                "gates/package-gate.adm",
+                "gates/release-gate.adm",
             ],
         ),
     ]
 }
 
+#[allow(dead_code)]
 fn handoff_entry(
     feature_id: &str,
     feature_name: &str,
@@ -3288,6 +4257,7 @@ fn handoff_entry(
     }
 }
 
+#[allow(dead_code)]
 fn render_handoff_markdown(manifest: &HandoffManifest) -> String {
     let mut text = String::new();
     text.push_str("# NEWrust Final Handoff Manifest\n\n");
@@ -3705,11 +4675,11 @@ fn render_final_handoff_v3_markdown(
         test_matrix.relative_path
     ));
     text.push_str(&format!(
-        "| Data asset migration files | {data_asset_count} | {} | {data_asset_count} | 0 | 0 | 0 | `plan/NEWrust/full_project_reproduction/11_data_asset_migration_matrix.md` |\n",
+        "| Data asset migration files | {data_asset_count} | {} | {data_asset_count} | 0 | 0 | 0 | `docs/migration-history/full_project_reproduction/11_data_asset_migration_matrix.md` |\n",
         REQUIRED_DATA_ASSET_MIGRATION_COUNT
     ));
     text.push_str(&format!(
-        "| UI baseline records | {ui_baseline_count} | {} | {ui_baseline_count} | 0 | 0 | 0 | `plan/NEWrust/full_project_reproduction/ui_baselines/index.json` |\n\n",
+        "| UI baseline records | {ui_baseline_count} | {} | {ui_baseline_count} | 0 | 0 | 0 | `docs/migration-history/full_project_reproduction/ui_baselines/index.json` |\n\n",
         REQUIRED_UI_PARITY_V3_RECORD_COUNT
     ));
 
@@ -3737,13 +4707,13 @@ fn render_final_handoff_v3_markdown(
         "- Non-behavioral Python package markers or obsolete helpers are accepted only where `03_file_disposition_matrix.md` and `04_rust_target_mapping.md` mark `drop_with_reason`; current accepted drop count is {}.\n",
         disposition.drop_with_reason_count
     ));
-    text.push_str("- UI v3 parity has zero approved P0/P1 deltas; desktop and narrow Web screenshots are recorded under `ui_baselines/` and `NEWrust/gates/`.\n");
+    text.push_str("- UI v3 parity has zero approved P0/P1 deltas; desktop and narrow Web screenshots are recorded under `ui_baselines/` and `gates/`.\n");
     text.push_str("- Release status is local deterministic gate pass. This file-level reproduction handoff does not assert live external AI provider credentials or a real Unity Editor runtime beyond the deterministic gates recorded here.\n\n");
 
     text.push_str("## Release Status\n\n");
     let release_status = gate_statuses
         .iter()
-        .find(|status| status.relative_path == "NEWrust/gates/release-gate.adm")
+        .find(|status| status.relative_path == "gates/release-gate.adm")
         .map(|status| status.status.as_str())
         .unwrap_or("missing");
     text.push_str(&format!(
@@ -3757,41 +4727,6 @@ fn add_nested_gate_result(report: &mut GateReport, key: &str, nested: GateReport
     if !nested.passed() {
         report.add_blocker(format!("{key}_failed"));
     }
-}
-
-fn add_process_result(
-    report: &mut GateReport,
-    key: &str,
-    program: &str,
-    args: &[&str],
-    cwd: &Path,
-) {
-    let output = Command::new(program).args(args).current_dir(cwd).output();
-    match output {
-        Ok(output) => {
-            report.add_row(format!("{key}_status"), output.status.to_string());
-            report.add_row(
-                format!("{key}_stdout_bytes"),
-                output.stdout.len().to_string(),
-            );
-            report.add_row(
-                format!("{key}_stderr_bytes"),
-                output.stderr.len().to_string(),
-            );
-            if !output.status.success() {
-                report.add_blocker(format!("{key}_failed"));
-            }
-        }
-        Err(error) => report.add_blocker(format!("{key}_unavailable:{error}")),
-    }
-}
-
-fn cargo_program() -> &'static str {
-    "cargo"
-}
-
-fn npm_program() -> &'static str {
-    if cfg!(windows) { "npm.cmd" } else { "npm" }
 }
 
 fn collect_forbidden_evidence_markers(root: &Path) -> AdmResult<Vec<String>> {
@@ -4122,6 +5057,7 @@ fn collect_ignored_test_markers(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn add_scorecard_rows(report: &mut GateReport, evaluation: &ScorecardEvaluation, text: &str) {
     let key = evaluation.relative_path.replace(['/', '\\'], ":");
     report.add_row(
@@ -4187,20 +5123,159 @@ fn add_scorecard_rows(report: &mut GateReport, evaluation: &ScorecardEvaluation,
     }
 }
 
+fn deprecated_gate_report(name: &str, code: &str) -> GateReport {
+    let mut report = GateReport::new(name);
+    report.add_row("lifecycle", "deprecated");
+    report.add_row(
+        "replacement",
+        "doctor; standalone-boundary-gate; release-gate",
+    );
+    report.add_blocker(code);
+    report
+}
+
+pub fn is_standalone_repo_root(path: &Path) -> bool {
+    SourceProjectRoot::open(path).is_ok()
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
+}
+
 pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
-    let mut current = Some(start);
-    while let Some(path) = current {
-        if path.join("plan").join("NEWrust").is_dir() {
-            return Some(path.to_path_buf());
-        }
-        current = path.parent();
-    }
-    None
+    SourceProjectRoot::discover(start)
+        .ok()
+        .map(SourceProjectRoot::into_path)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_gate_deprecated(report: GateReport, code: &str) {
+        let rendered = report.render();
+        assert!(!report.passed(), "{rendered}");
+        assert!(rendered.contains("lifecycle=deprecated"), "{rendered}");
+        assert!(rendered.contains(code), "{rendered}");
+    }
+
+    fn write_standalone_root_fixture(root: &Path) {
+        fs::create_dir_all(root.join("knowledge")).unwrap();
+        fs::create_dir_all(root.join("web")).unwrap();
+        fs::create_dir_all(root.join("nested/deeper")).unwrap();
+        fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+        fs::write(root.join("Cargo.lock"), "# fixture\n").unwrap();
+        fs::write(root.join("web/package-lock.json"), "{}\n").unwrap();
+        fs::write(
+            root.join(SOURCE_ROOT_MARKER),
+            r#"{"schemaVersion":1,"kind":"source-project-root","projectId":"autodesignmaker-rust-v2","workspaceManifest":"Cargo.toml","lockfiles":["Cargo.lock","web/package-lock.json"],"resourceManifest":"knowledge/resource-manifest.json"}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join(RESOURCE_MANIFEST_PATH),
+            r#"{"schemaVersion":1,"projectId":"autodesignmaker-rust-v2","groups":[{"path":"knowledge"}]}"#,
+        )
+        .unwrap();
+    }
+
+    fn valid_release_evidence_fixture(now: u64) -> StandaloneReleaseEvidence {
+        let checks = REQUIRED_RELEASE_CHECKS
+            .iter()
+            .map(|id| {
+                (
+                    (*id).to_string(),
+                    ReleaseCommandEvidence {
+                        status: "passed".to_string(),
+                        command: format!("fixture:{id}"),
+                        exit_code: 0,
+                        duration_ms: 1,
+                        output_sha256: "a".repeat(64),
+                    },
+                )
+            })
+            .collect();
+        StandaloneReleaseEvidence {
+            schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
+            producer: RELEASE_EVIDENCE_PRODUCER.to_string(),
+            evidence_id: "1".repeat(32),
+            project_id: SOURCE_PROJECT_ID.to_string(),
+            status: "passed".to_string(),
+            git_commit: "b".repeat(40),
+            source_tree_clean: true,
+            generated_at_unix: now - 60,
+            expires_at_unix: now + 60,
+            checks,
+            portable: Some(ReleasePortableEvidence {
+                root: RELEASE_PORTABLE_ROOT.to_string(),
+                executable: "AutoDesignMaker.exe".to_string(),
+                executable_sha256: "c".repeat(64),
+                build_manifest_sha256: "d".repeat(64),
+                resource_manifest_sha256: "e".repeat(64),
+                git_commit: "b".repeat(40),
+                swap_receipt: format!(
+                    "dist/.{RELEASE_PORTABLE_OUTPUT_NAME}.swap-{}.json",
+                    "2".repeat(32)
+                ),
+                swap_receipt_sha256: "f".repeat(64),
+                transaction_id: "2".repeat(32),
+                transaction_status: "finalized".to_string(),
+            }),
+            errors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn standalone_root_resolution_is_name_independent_and_walks_from_subdirectory() {
+        let root =
+            std::env::temp_dir().join(format!("renamed standalone 项目 {}", std::process::id()));
+        write_standalone_root_fixture(&root);
+        let found = find_repo_root(&root.join("nested/deeper")).unwrap();
+        assert!(same_path(&found, &root));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn parent_plan_directory_is_not_a_project_root() {
+        let root = std::env::temp_dir().join(format!("legacy_parent_{}", std::process::id()));
+        let legacy_child_name = ["NEW", "rust"].concat();
+        let nested = root.join("plan").join(legacy_child_name).join("child");
+        fs::create_dir_all(&nested).unwrap();
+        assert!(find_repo_root(&nested).is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn nearest_invalid_marker_blocks_outer_root_fallback() {
+        let root =
+            std::env::temp_dir().join(format!("standalone_nearest_marker_{}", std::process::id()));
+        write_standalone_root_fixture(&root);
+        let inner = root.join("nested");
+        fs::write(inner.join(SOURCE_ROOT_MARKER), "{\"kind\":\"invalid\"}").unwrap();
+        assert!(find_repo_root(&inner.join("deeper")).is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn standalone_boundary_gate_passes_for_current_repo() {
+        let cwd = std::env::current_dir().unwrap();
+        let repo_root = find_repo_root(&cwd).unwrap();
+        let report = standalone_boundary_gate_report(&repo_root).unwrap();
+        assert!(report.passed(), "{}", report.render());
+    }
+
+    #[test]
+    fn plan_and_handoff_gates_are_stably_deprecated() {
+        assert_gate_deprecated(
+            plan_gate_report(Path::new("unused")).unwrap(),
+            LEGACY_PLAN_GATE_DEPRECATED,
+        );
+        assert_gate_deprecated(
+            handoff_report(Path::new("unused")).unwrap(),
+            LEGACY_HANDOFF_GATE_DEPRECATED,
+        );
+    }
 
     #[test]
     fn final_scores_meet_new_threshold_rule() {
@@ -4284,7 +5359,9 @@ mod tests {
         let report = validation_gate_report(&repo_root).unwrap();
         let rendered = report.render();
         assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains("source_contract=tools/validators/*"));
+        assert!(
+            rendered.contains("source_contract=crates/adm-new-application/src/validation_tools.rs")
+        );
         assert!(rendered.contains("required_validation_check_count=15"));
     }
 
@@ -4309,7 +5386,7 @@ mod tests {
         let report = iteration_gate_report(&repo_root).unwrap();
         let rendered = report.render();
         assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains("source_contract=core/iteration/*"));
+        assert!(rendered.contains("source_contract=crates/adm-new-application/src/iteration.rs"));
         assert!(rendered.contains("required_iteration_check_count=9"));
     }
 
@@ -4334,7 +5411,7 @@ mod tests {
         let rendered = report.render();
         assert!(report.passed(), "{rendered}");
         assert!(rendered.contains(
-            "source_contract=core/ui/theme.py; core/ui/main_window.py; core/ui/gui_app.py"
+            "source_contract=apps/desktop-tauri; crates/adm-new-tauri-commands/src/shell.rs; web/src"
         ));
         assert!(rendered.contains("required_ui_shell_check_count=10"));
     }
@@ -4359,12 +5436,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_workbench_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/ui/app_window.py; design workbench UI; Web design workbench + Tauri design commands"
-        ));
-        assert!(rendered.contains("required_ui_workbench_check_count=13"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4387,12 +5459,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_ai_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/ui/ai_interview_window.py; core/ui/embedded_interview.py; core/ui/bottom_panel.py"
-        ));
-        assert!(rendered.contains("required_ui_ai_check_count=13"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4415,12 +5482,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_pipeline_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/ui/pipeline_panel.py; core/ui/pipeline_step_card.py; core/ui/semantic_quality_panel.py"
-        ));
-        assert!(rendered.contains("required_ui_pipeline_check_count=13"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4446,12 +5508,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_utility_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/ui/patch_panel.py; core/ui/package_panel.py; core/ui/sdk_panel.py; core/ui/save_manager_dialog.py"
-        ));
-        assert!(rendered.contains("required_ui_utility_check_count=16"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4478,12 +5535,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_settings_style_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/ui/ai_config_unified_dialog.py; core/ui/unity_config_dialog.py; core/ui/style_confirmation_dialog.py; core/ui/style_prompt_editor.py"
-        ));
-        assert!(rendered.contains("required_ui_settings_style_check_count=19"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4496,14 +5548,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = ui_parity_v3_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=plan/NEWrust/full_project_reproduction/07_ui_python_baseline_plan.md"
-        ));
-        assert!(rendered.contains("expected_ui_parity_v3_record_count=93"));
-        assert!(rendered.contains("desktop_screenshot_count=92"));
-        assert!(rendered.contains("narrow_screenshot_count=92"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4526,16 +5571,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = unit_test_migration_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(
-            rendered.contains("source_contract=core/tests/unit/*; 09_test_migration_matrix.md")
-        );
-        assert!(rendered.contains("matrix_unit_row_count=68"));
-        assert!(rendered.contains("python_unit_file_count=68"));
-        assert!(rendered.contains("expected_unit_test_migration_count=68"));
-        assert!(rendered.contains("unit_test_target_domain:adm-new-pipeline=required"));
-        assert!(rendered.contains("unit_test_target_domain:NEWrust/gates=required"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4558,16 +5594,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = integration_test_migration_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains(
-            "source_contract=core/tests/integration/*; core/tests/conftest.py; 09_test_migration_matrix.md"
-        ));
-        assert!(rendered.contains("matrix_integration_row_count=5"));
-        assert!(rendered.contains("python_integration_file_count=5"));
-        assert!(rendered.contains("expected_integration_test_migration_count=5"));
-        assert!(rendered.contains("integration_test_target_domain:adm-new-pipeline=required"));
-        assert!(rendered.contains("integration_test_target_domain:NEWrust/gates=required"));
+        assert_gate_deprecated(report, LEGACY_PYTHON_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4577,36 +5604,19 @@ mod tests {
         assert_eq!(REQUIRED_DATA_ASSET_MIGRATION_COUNT, 727);
         assert_eq!(REQUIRED_UI_PARITY_V3_RECORD_COUNT, 93);
         assert_eq!(REQUIRED_FINAL_HANDOFF_V3_COMPLETED_ATOMS, 40);
-        assert!(REQUIRED_FINAL_HANDOFF_V3_GATE_REFS.contains(&"NEWrust/gates/release-gate.adm"));
+        assert!(REQUIRED_FINAL_HANDOFF_V3_GATE_REFS.contains(&"gates/release-gate.adm"));
         assert!(
             REQUIRED_FINAL_HANDOFF_V3_GATE_REFS
-                .contains(&"NEWrust/gates/integration-test-migration-gate.adm")
+                .contains(&"gates/integration-test-migration-gate.adm")
         );
     }
 
     #[test]
-    fn final_handoff_v3_gate_current_repo_writes_file_level_report() {
+    fn final_handoff_v3_gate_is_stably_deprecated() {
         let cwd = std::env::current_dir().unwrap();
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = final_handoff_v3_gate_report(&repo_root).unwrap();
-        let rendered = report.render();
-        assert!(report.passed(), "{rendered}");
-        assert!(rendered.contains("matrix:inventory:row_count=379"));
-        assert!(rendered.contains("matrix:rust_target_mapping:row_count=379"));
-        assert!(rendered.contains("matrix:test_migration:row_count=73"));
-        assert!(rendered.contains("data_asset_migration_count=727"));
-        assert!(rendered.contains("ui_baseline_record_count=93"));
-        assert!(rendered.contains("a00_a39_completed_atom_count=40"));
-
-        let final_path = repo_root
-            .join("plan")
-            .join("NEWrust")
-            .join("full_project_reproduction")
-            .join("final_handoff_v3.md");
-        let text = fs::read_to_string(final_path).unwrap();
-        assert!(text.contains("Python file inventory rows"));
-        assert!(text.contains("legacy feature-domain handoff is evidence only"));
-        assert!(text.contains("A00-A39 completed atoms: 40 / 40"));
+        assert_gate_deprecated(report, LEGACY_HANDOFF_GATE_DEPRECATED);
     }
 
     #[test]
@@ -4625,18 +5635,300 @@ mod tests {
     }
 
     #[test]
-    fn release_gate_declares_required_checks_without_running_them() {
-        assert_eq!(REQUIRED_RELEASE_CHECKS.len(), 10);
+    fn release_gate_requires_commit_bound_standalone_evidence_for_every_check() {
+        assert_eq!(REQUIRED_RELEASE_CHECKS.len(), 21);
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"cargo_fmt_check"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"cargo_check_workspace"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"cargo_test_workspace"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_unit"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_i18n"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_design_content"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_build"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_e2e"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_language_gate"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_ui_gate"));
-        assert!(REQUIRED_RELEASE_CHECKS.contains(&"plan_gate"));
-        assert!(REQUIRED_RELEASE_CHECKS.contains(&"parity_gate"));
-        assert!(REQUIRED_RELEASE_CHECKS.contains(&"package_gate"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"web_ui_baseline_gate"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"package_contract_self_test"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"resource_manifest"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"standalone_boundary_gate"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"portable_build"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"portable_smoke"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"portable_integrity"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"pe_architecture_crt"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"clean_clone_relocation"));
         assert!(REQUIRED_RELEASE_CHECKS.contains(&"anti_fake_scan"));
+        assert!(REQUIRED_RELEASE_CHECKS.contains(&"generated_cleanup"));
+        assert!(!REQUIRED_RELEASE_CHECKS.contains(&"plan_gate"));
+        assert!(!REQUIRED_RELEASE_CHECKS.contains(&"parity_gate"));
+    }
+
+    #[test]
+    fn structured_release_evidence_accepts_only_complete_fresh_current_head_fixture() {
+        let now = 1_800_000_000;
+        let evidence = valid_release_evidence_fixture(now);
+        assert!(
+            validate_release_evidence_structure(&evidence, now, &evidence.git_commit).is_empty()
+        );
+    }
+
+    #[test]
+    fn structured_release_evidence_rejects_stale_missing_and_error_claims() {
+        let now = 1_800_000_000;
+        let mut evidence = valid_release_evidence_fixture(now);
+        evidence.expires_at_unix = now;
+        evidence.checks.remove("portable_integrity");
+        evidence.errors.push("fixture failure".to_string());
+        let blockers = validate_release_evidence_structure(&evidence, now, &evidence.git_commit);
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code == "standalone_release_evidence_freshness_invalid")
+        );
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code == "standalone_release_evidence_check_set_invalid")
+        );
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code == "standalone_release_evidence_contains_errors")
+        );
+    }
+
+    #[test]
+    fn structured_release_evidence_rejects_running_status_and_old_portable_shape() {
+        let now = 1_800_000_000;
+        let mut running = valid_release_evidence_fixture(now);
+        running.status = "running".to_string();
+        let blockers = validate_release_evidence_structure(&running, now, &running.git_commit);
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code == "standalone_release_evidence_not_passed")
+        );
+
+        let mut old_shape = serde_json::to_value(valid_release_evidence_fixture(now)).unwrap();
+        old_shape["portable"]
+            .as_object_mut()
+            .unwrap()
+            .remove("swapReceipt");
+        assert!(serde_json::from_value::<StandaloneReleaseEvidence>(old_shape).is_err());
+    }
+
+    #[test]
+    fn portable_transaction_contract_binds_receipt_output_root_head_and_transaction() {
+        let root = std::env::temp_dir().join(format!(
+            "governance_portable_transaction_contract_{}",
+            std::process::id()
+        ));
+        let evidence = valid_release_evidence_fixture(1_800_000_000);
+        let portable = evidence.portable.as_ref().unwrap();
+        let dist = root.join("dist");
+        let transaction_id = &portable.transaction_id;
+        let receipt = json!({
+            "schema_version": 1,
+            "kind": "portable-swap-transaction",
+            "transaction_id": transaction_id,
+            "output_name": RELEASE_PORTABLE_OUTPUT_NAME,
+            "release_mode": "formal",
+            "dist_root": dist,
+            "live_root": root.join(RELEASE_PORTABLE_ROOT),
+            "stage_root": dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.stage-{transaction_id}")),
+            "backup_root": dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.previous-{transaction_id}")),
+            "failed_root": dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.failed-{transaction_id}")),
+            "backup_tombstone_root": dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.retired-backup-{transaction_id}")),
+            "failed_tombstone_root": dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.retired-failed-{transaction_id}")),
+            "staged_immutable_tree": {
+                "Exists": true,
+                "FileCount": 1,
+                "Bytes": 1,
+                "Digest": "8".repeat(64),
+            },
+            "staged_user_data": {
+                "Exists": true,
+                "FileCount": 0,
+                "Bytes": 0,
+                "Digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            },
+            "had_previous_live": false,
+            "backup_deleted": false,
+            "status": "finalized",
+            "smoke_status": "passed",
+            "finalized_at_utc": "2026-07-12T00:00:00Z",
+        });
+        let build = json!({
+            "transaction_id": transaction_id,
+            "git_commit": evidence.git_commit,
+        });
+        assert!(
+            validate_portable_transaction_contract(&root, &evidence, portable, &receipt, &build)
+                .is_empty()
+        );
+
+        let mut wrong_build = build.clone();
+        wrong_build["transaction_id"] = json!("3".repeat(32));
+        assert!(
+            validate_portable_transaction_contract(
+                &root,
+                &evidence,
+                portable,
+                &receipt,
+                &wrong_build,
+            )
+            .iter()
+            .any(|code| code == "release_portable_transaction_id_mismatch")
+        );
+
+        let mut inconsistent_receipt = receipt;
+        inconsistent_receipt["backup_deleted"] = json!(true);
+        assert!(
+            validate_portable_transaction_contract(
+                &root,
+                &evidence,
+                portable,
+                &inconsistent_receipt,
+                &build,
+            )
+            .iter()
+            .any(|code| code == "release_portable_transaction_backup_finalization_invalid")
+        );
+    }
+
+    #[test]
+    fn portable_immutable_measure_excludes_user_data_and_update_lock_only() {
+        let root = std::env::temp_dir().join(format!(
+            "governance_portable_immutable_measure_{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("knowledge")).unwrap();
+        fs::create_dir_all(root.join("user_data")).unwrap();
+        fs::write(root.join("AutoDesignMaker.exe"), b"exe").unwrap();
+        fs::write(root.join("knowledge/data.json"), b"data").unwrap();
+        fs::write(root.join("user_data/save.json"), b"save-one").unwrap();
+        fs::write(root.join(".portable-update.lock"), b"lock-one").unwrap();
+
+        let before = measure_release_immutable_tree(&root).unwrap();
+        fs::write(root.join("user_data/save.json"), b"save-two").unwrap();
+        fs::write(root.join(".portable-update.lock"), b"lock-two").unwrap();
+        let after = measure_release_immutable_tree(&root).unwrap();
+
+        assert_eq!(before, after);
+        assert_eq!(before.0, 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn portable_output_state_scan_rejects_unresolved_receipts_artifacts_and_tombstones() {
+        let root = std::env::temp_dir().join(format!(
+            "governance_portable_output_state_{}",
+            std::process::id()
+        ));
+        let dist = root.join("dist");
+        fs::create_dir_all(&dist).unwrap();
+        let current_id = "4".repeat(32);
+        let current_name = format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.swap-{current_id}.json");
+        let current_relative = format!("dist/{current_name}");
+        fs::write(
+            dist.join(&current_name),
+            serde_json::to_vec(&json!({
+                "schema_version": 1,
+                "kind": "portable-swap-transaction",
+                "transaction_id": current_id,
+                "output_name": RELEASE_PORTABLE_OUTPUT_NAME,
+                "status": "finalized",
+                "finalized_at_utc": "2026-07-12T00:00:00Z",
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.operation.lock")),
+            serde_json::to_vec(&json!({
+                "schema_version": 1,
+                "kind": "portable-output-operation-lock",
+                "output_name": RELEASE_PORTABLE_OUTPUT_NAME,
+                "transaction_id": current_id,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            collect_unresolved_portable_output_state(
+                &root,
+                RELEASE_PORTABLE_OUTPUT_NAME,
+                &current_relative,
+            )
+            .unwrap()
+            .is_empty()
+        );
+
+        fs::create_dir_all(dist.join(format!(
+            ".{RELEASE_PORTABLE_OUTPUT_NAME}.stage-{}",
+            "5".repeat(32)
+        )))
+        .unwrap();
+        fs::create_dir_all(dist.join(format!(
+            ".{RELEASE_PORTABLE_OUTPUT_NAME}.retired-backup-{}",
+            "6".repeat(32)
+        )))
+        .unwrap();
+        fs::write(
+            dist.join(format!(
+                ".{RELEASE_PORTABLE_OUTPUT_NAME}.swap-{}.json",
+                "7".repeat(32)
+            )),
+            serde_json::to_vec(&json!({
+                "schema_version": 1,
+                "kind": "portable-swap-transaction",
+                "output_name": RELEASE_PORTABLE_OUTPUT_NAME,
+                "status": "finalizing",
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dist.join(format!(".{RELEASE_PORTABLE_OUTPUT_NAME}.operation.lock")),
+            b"locked",
+        )
+        .unwrap();
+        let blockers = collect_unresolved_portable_output_state(
+            &root,
+            RELEASE_PORTABLE_OUTPUT_NAME,
+            &current_relative,
+        )
+        .unwrap();
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code.contains("unresolved_output_artifact"))
+        );
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code.contains("unresolved_receipt"))
+        );
+        assert!(
+            blockers
+                .iter()
+                .any(|code| code.contains("operation_lock_active_or_stale"))
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn structured_release_evidence_parser_rejects_bom_and_legacy_boolean_checks() {
+        let bom_json = b"\xef\xbb\xbf{}";
+        assert!(serde_json::from_slice::<StandaloneReleaseEvidence>(bom_json).is_err());
+        let legacy = json!({
+            "schemaVersion": 1,
+            "projectId": SOURCE_PROJECT_ID,
+            "status": "passed",
+            "gitCommit": "b".repeat(40),
+            "sourceTreeClean": true,
+            "checks": { "cargo_fmt_check": true }
+        });
+        assert!(serde_json::from_value::<StandaloneReleaseEvidence>(legacy).is_err());
     }
 
     #[test]

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asset Usage Binding Seed",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "bindings"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "bindings": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

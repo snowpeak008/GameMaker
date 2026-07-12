@@ -69,9 +69,10 @@ pub(crate) fn unique_strings(items: impl IntoIterator<Item = String>) -> Vec<Str
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use adm_new_contracts::schema;
+    use adm_new_foundation::paths::SourceProjectRoot;
     use serde_json::{Value, json};
 
     use super::stage04::*;
@@ -342,9 +343,8 @@ mod tests {
     }
 
     fn project_root() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
+        SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
             .unwrap()
+            .into_path()
     }
 }

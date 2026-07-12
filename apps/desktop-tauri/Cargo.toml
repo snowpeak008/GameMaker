@@ -11,6 +11,7 @@ adm-new-application = { path = "../../crates/adm-new-application" }
 adm-new-contracts = { path = "../../crates/adm-new-contracts" }
 adm-new-design = { path = "../../crates/adm-new-design" }
 adm-new-foundation = { path = "../../crates/adm-new-foundation" }
+adm-new-packaging = { path = "../../crates/adm-new-packaging" }
 adm-new-pipeline = { path = "../../crates/adm-new-pipeline" }
 adm-new-storage = { path = "../../crates/adm-new-storage" }
 adm-new-tauri-commands = { path = "../../crates/adm-new-tauri-commands" }

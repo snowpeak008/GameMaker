@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "archetype_id": "tower_defense",
+  "parent_archetypes": ["strategy"],
+  "keywords": [
+    "tower defense",
+    "lane defense",
+    "plants vs. zombies",
+    "plants vs zombies",
+    "grid defense",
+    "enemy waves",
+    "sun economy",
+    "plant roles",
+    "防线",
+    "塔防",
+    "格子",
+    "路线",
+    "波次",
+    "阳光",
+    "植物",
+    "僵尸"
+  ],
+  "detection_rules": [
+    {"signal": "keyword", "text": "lane defense", "min_count": 1, "weight": 2},
+    {"signal": "keyword", "text": "格子", "min_count": 1, "weight": 1},
+    {"signal": "keyword", "text": "波次", "min_count": 1, "weight": 1},
+    {"signal": "keyword", "text": "阳光", "min_count": 1, "weight": 1},
+    {"signal": "gameplay_system", "key": "resource_economy", "min_weight": 0.1, "weight": 0.5},
+    {"signal": "gameplay_system", "key": "objective", "min_weight": 0.1, "weight": 0.5}
+  ],
+  "requirement_nodes": {
+    "p0": [
+      "core_loop_decision",
+      "input_control_decision",
+      "objective_system_decision",
+      "hud_feedback_decision",
+      "data_test_design_decision"
+    ],
+    "p1": [
+      "build_system_decision",
+      "progression_system_decision",
+      "art_direction_decision"
+    ]
+  },
+  "required_systems": [
+    {"system_id": "lane_grid_system", "description": "二维路线或格子承载敌人推进与防御单位摆放。"},
+    {"system_id": "placement_system", "description": "玩家在合法格子/槽位放置防御单位。"},
+    {"system_id": "wave_spawner", "description": "按时间或阶段生成敌人波次。"},
+    {"system_id": "resource_economy", "description": "战斗中资源限制放置节奏。"},
+    {"system_id": "enemy_pathing", "description": "敌人沿路线推进并触发失败条件。"}
+  ],
+  "required_entities": [
+    {"entity_id": "lane", "role": "path"},
+    {"entity_id": "grid_tile", "role": "placement_slot"},
+    {"entity_id": "defender_unit", "role": "player_placed_unit"},
+    {"entity_id": "enemy_unit", "role": "wave_threat"},
+    {"entity_id": "combat_resource", "role": "placement_cost"}
+  ],
+  "required_player_actions": [
+    {"action_id": "select_defender", "state_change": "selected_unit_changes"},
+    {"action_id": "place_defender", "state_change": "grid_occupancy_changes"},
+    {"action_id": "collect_resource", "state_change": "resource_amount_changes"}
+  ],
+  "required_resources": [
+    {"resource_id": "combat_resource", "example": "sun"}
+  ],
+  "required_objectives": [
+    {"objective_id": "survive_waves", "completion_condition": "all_waves_cleared", "failure_condition": "enemy_reaches_goal"}
+  ],
+  "minimum_playable_assets": [
+    {"asset_role": "defender_sprite", "consumer": "placement_system"},
+    {"asset_role": "enemy_sprite", "consumer": "wave_spawner"},
+    {"asset_role": "grid_tile_sprite", "consumer": "lane_grid_system"},
+    {"asset_role": "resource_icon", "consumer": "hud_feedback"}
+  ],
+  "style_compatibility": {
+    "required_readability": ["lane_boundaries", "unit_role_silhouette", "enemy_progression_visibility"]
+  },
+  "open_questions": [
+    {"question_id": "lane_count", "prompt": "第一版可玩关卡需要几条路线或几列格子？"},
+    {"question_id": "resource_source", "prompt": "战斗资源由时间生成、点击收集，还是击败敌人获得？"}
+  ],
+  "program_task_templates": [
+    {"task_id": "GridLaneManager", "capability": "lane grid occupancy and path indexing"},
+    {"task_id": "WaveSpawner", "capability": "enemy wave scheduling"},
+    {"task_id": "PlacementController", "capability": "defender selection and placement"}
+  ],
+  "acceptance_scenarios": [
+    {"scenario_id": "place_defender_and_survive_wave", "expected": "player can place a defender, enemies advance, and wave completion is detected"}
+  ]
+}

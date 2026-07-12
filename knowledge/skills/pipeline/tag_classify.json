@@ -1,0 +1,41 @@
+{
+  "skill_id": "skill_tag_classify_v1",
+  "name": "tag_classify",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for tag_classify.",
+  "capabilities": [
+    "tags"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow"
+    ],
+    "required_inputs": [
+      "content"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "content": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "content"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

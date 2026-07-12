@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "ui_contract_id": "adm-rust-v2-ui-contract-v1:gui_app",
+  "surface": "gui_app",
+  "state": "fatal_init_error",
+  "contract_surface": "desktop application entry",
+  "web_tauri_target": "Tauri desktop entry",
+  "required_state": "fatal init error",
+  "screenshot_required": true,
+  "reference_evidence": {
+    "kind": "independent_ui_contract",
+    "review_note": "Review layout, density, state semantics, accessibility, and command behavior against this versioned UI contract."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "gates/ui-shell.png",
+      "width": 1280,
+      "height": 820,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "gates/ui-shell-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open gui_app",
+      "command_contract": "desktop startup smoke",
+      "expected_result": "renders fatal init error without overlap or layout shift"
+    }
+  ],
+  "contract_notes": {
+    "rendering_constraints": [
+      "Platform rendering details may vary; required layout, density, state semantics, accessibility, and command behavior must remain stable."
+    ],
+    "open_blocking_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Platform control rendering may vary while preserving the independent UI contract."
+      }
+    ]
+  },
+  "command_contract": "desktop startup smoke",
+  "record_path": "testdata/ui_baselines/gui_app/fatal_init_error.json"
+}

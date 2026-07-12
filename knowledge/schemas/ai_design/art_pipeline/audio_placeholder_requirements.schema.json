@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audio Placeholder Requirements",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "requirements"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "placeholder_root": {"type": "string"},
+    "requirements": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

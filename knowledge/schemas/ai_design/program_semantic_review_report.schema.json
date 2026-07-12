@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_semantic_review_report.schema.json",
+  "title": "Program Semantic Review Report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "reviews", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "reviews": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "rework_items": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

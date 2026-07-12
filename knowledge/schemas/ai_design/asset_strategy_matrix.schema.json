@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset_strategy_matrix.schema.json",
+  "title": "Asset Strategy Matrix",
+  "type": "object",
+  "required": ["schema_version", "project_signature", "assets"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_contracts": {"type": "array", "items": {"type": "string"}},
+    "assets": {"type": "array", "items": {"type": "object"}},
+    "mount_requirements": {"type": "array", "items": {"type": "object"}},
+    "ui_slice_requirements": {"type": "array", "items": {"type": "object"}},
+    "audio_placeholders": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

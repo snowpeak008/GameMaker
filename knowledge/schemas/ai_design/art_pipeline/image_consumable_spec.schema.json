@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Image Consumable Spec",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "assets", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "unity_root": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "assets": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

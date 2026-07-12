@@ -1,0 +1,396 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "data_validation_design",
+    "name": "数据指标与验证设计",
+    "description": "确认目标指标、行为路径、测试、反馈收集、迭代判断和灰度实验。"
+  },
+  "nodes": [
+    {
+      "id": "data_goal_metric_decision",
+      "name": "设计目标指标决策",
+      "description": "确认留存、活跃、付费、内容消耗和体验质量指标。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "data_path_metric_decision"
+      ],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "liu_cun_zhi_biao",
+          "label": "留存指标",
+          "description": "定义留存指标的计算口径、观察场景和成功判断。",
+          "outputKey": "liuCunZhiBiao",
+          "legacyIds": [
+            "data_goal_metric_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "huo_yue_zhi_biao",
+          "label": "活跃指标",
+          "description": "定义活跃指标的计算口径、观察场景和成功判断。",
+          "outputKey": "huoYueZhiBiao",
+          "legacyIds": [
+            "data_goal_metric_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_zhi_biao",
+          "label": "付费指标",
+          "description": "定义付费指标的计算口径、观察场景和成功判断。",
+          "outputKey": "fuFeiZhiBiao",
+          "legacyIds": [
+            "data_goal_metric_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_xiao_hao_zhi_biao",
+          "label": "内容消耗指标",
+          "description": "定义内容消耗指标的计算口径、观察场景和成功判断。",
+          "outputKey": "neiRongXiaoHaoZhiBiao",
+          "legacyIds": [
+            "data_goal_metric_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "ti_yan_zhi_liang_zhi_biao",
+          "label": "体验质量指标",
+          "description": "定义体验质量指标的计算口径、观察场景和成功判断。",
+          "outputKey": "tiYanZhiLiangZhiBiao",
+          "legacyIds": [
+            "data_goal_metric_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "data_path_metric_decision",
+      "name": "行为路径指标决策",
+      "description": "确认新手、核心循环、付费、社交和流失路径指标。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "data_goal_metric_decision"
+      ],
+      "unlocks": [
+        "data_test_design_decision"
+      ],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "xin_shou_lu_jing",
+          "label": "新手路径",
+          "description": "描述新手路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "xinShouLuJing",
+          "legacyIds": [
+            "data_path_metric_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "he_xin_xun_huan_lu_jing",
+          "label": "核心循环路径",
+          "description": "描述核心循环路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "heXinXunHuanLuJing",
+          "legacyIds": [
+            "data_path_metric_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_lu_jing",
+          "label": "付费路径",
+          "description": "描述付费路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "fuFeiLuJing",
+          "legacyIds": [
+            "data_path_metric_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "she_jiao_lu_jing",
+          "label": "社交路径",
+          "description": "描述社交路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "sheJiaoLuJing",
+          "legacyIds": [
+            "data_path_metric_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "liu_shi_lu_jing",
+          "label": "流失路径",
+          "description": "描述流失路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "liuShiLuJing",
+          "legacyIds": [
+            "data_path_metric_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "data_test_design_decision",
+      "name": "测试设计决策",
+      "description": "确认体验、难度、经济、付费和留存测试方式。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "data_goal_metric_decision"
+      ],
+      "unlocks": [
+        "data_feedback_collection_decision"
+      ],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "ti_yan_ce_shi",
+          "label": "体验测试",
+          "description": "明确体验测试在测试设计中的具体含义、适用范围和验收判断。",
+          "outputKey": "tiYanCeShi",
+          "legacyIds": [
+            "data_test_design_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "nan_du_ce_shi",
+          "label": "难度测试",
+          "description": "明确难度测试在测试设计中的具体含义、适用范围和验收判断。",
+          "outputKey": "nanDuCeShi",
+          "legacyIds": [
+            "data_test_design_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "jing_ji_ce_shi",
+          "label": "经济测试",
+          "description": "明确经济测试在测试设计中的具体含义、适用范围和验收判断。",
+          "outputKey": "jingJiCeShi",
+          "legacyIds": [
+            "data_test_design_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_ce_shi",
+          "label": "付费测试",
+          "description": "明确付费测试的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "fuFeiCeShi",
+          "legacyIds": [
+            "data_test_design_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "liu_cun_ce_shi",
+          "label": "留存测试",
+          "description": "明确留存测试在测试设计中的具体含义、适用范围和验收判断。",
+          "outputKey": "liuCunCeShi",
+          "legacyIds": [
+            "data_test_design_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "data_feedback_collection_decision",
+      "name": "反馈收集决策",
+      "description": "确认问卷、访谈、行为观察、负反馈分类和需求优先级。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "data_test_design_decision"
+      ],
+      "unlocks": [
+        "data_iteration_decision"
+      ],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "wen_juan_wen_ti",
+          "label": "问卷问题",
+          "description": "明确问卷问题在反馈收集中的具体含义、适用范围和验收判断。",
+          "outputKey": "wenJuanWenTi",
+          "legacyIds": [
+            "data_feedback_collection_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "fang_tan_wen_ti",
+          "label": "访谈问题",
+          "description": "明确访谈问题在反馈收集中的具体含义、适用范围和验收判断。",
+          "outputKey": "fangTanWenTi",
+          "legacyIds": [
+            "data_feedback_collection_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "xing_wei_guan_cha",
+          "label": "行为观察",
+          "description": "明确行为观察在反馈收集中的具体含义、适用范围和验收判断。",
+          "outputKey": "xingWeiGuanCha",
+          "legacyIds": [
+            "data_feedback_collection_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "fu_fan_kui_fen_lei",
+          "label": "负反馈分类",
+          "description": "明确负反馈分类的划分标准、归属规则和使用场景。",
+          "outputKey": "fuFanKuiFenLei",
+          "legacyIds": [
+            "data_feedback_collection_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "xu_qiu_you_xian_ji",
+          "label": "需求优先级",
+          "description": "排列需求优先级的先后顺序，作为取舍和资源分配依据。",
+          "outputKey": "xuQiuYouXianJi",
+          "legacyIds": [
+            "data_feedback_collection_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "data_iteration_decision",
+      "name": "迭代判断决策",
+      "description": "确认保留、调整、删除、延后和重新验证条件。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "data_feedback_collection_decision"
+      ],
+      "unlocks": [
+        "data_experiment_decision"
+      ],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "bao_liu_tiao_jian",
+          "label": "保留条件",
+          "description": "明确保留条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "baoLiuTiaoJian",
+          "legacyIds": [
+            "data_iteration_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "tiao_zheng_tiao_jian",
+          "label": "调整条件",
+          "description": "明确调整条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "tiaoZhengTiaoJian",
+          "legacyIds": [
+            "data_iteration_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "shan_chu_tiao_jian",
+          "label": "删除条件",
+          "description": "明确删除条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "shanChuTiaoJian",
+          "legacyIds": [
+            "data_iteration_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "yan_hou_tiao_jian",
+          "label": "延后条件",
+          "description": "明确延后条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "yanHouTiaoJian",
+          "legacyIds": [
+            "data_iteration_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "chong_xin_yan_zheng_tiao_jian",
+          "label": "重新验证条件",
+          "description": "明确重新验证条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "chongXinYanZhengTiaoJian",
+          "legacyIds": [
+            "data_iteration_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "data_experiment_decision",
+      "name": "灰度与实验验证决策",
+      "description": "确认灰度目标、观察窗口、样本分层、成功判定和停止回滚条件。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "data_iteration_decision"
+      ],
+      "unlocks": [],
+      "domain": "data_validation_design",
+      "checklist": [
+        {
+          "id": "hui_du_mu_biao",
+          "label": "灰度目标",
+          "description": "明确灰度目标要达成的结果、对象和优先级。",
+          "outputKey": "huiDuMuBiao",
+          "legacyIds": [
+            "data_experiment_decision_item_1"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "guan_cha_chuang_kou",
+          "label": "观察窗口",
+          "description": "明确观察窗口在灰度与实验验证中的具体含义、适用范围和验收判断。",
+          "outputKey": "guanChaChuangKou",
+          "legacyIds": [
+            "data_experiment_decision_item_2"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "yang_ben_fen_ceng",
+          "label": "样本分层",
+          "description": "明确样本分层在灰度与实验验证中的具体含义、适用范围和验收判断。",
+          "outputKey": "yangBenFenCeng",
+          "legacyIds": [
+            "data_experiment_decision_item_3"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "cheng_gong_pan_ding",
+          "label": "成功判定",
+          "description": "明确成功判定在灰度与实验验证中的具体含义、适用范围和验收判断。",
+          "outputKey": "chengGongPanDing",
+          "legacyIds": [
+            "data_experiment_decision_item_4"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        },
+        {
+          "id": "ting_zhi_yu_hui_gun_tiao_jian",
+          "label": "停止与回滚条件",
+          "description": "明确停止与回滚条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "tingZhiYuHuiGunTiaoJian",
+          "legacyIds": [
+            "data_experiment_decision_item_5"
+          ],
+          "templateRef": "shared_data_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

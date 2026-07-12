@@ -9,6 +9,10 @@ pub const WEB_DIST_DIR: &str = "../../web/dist";
 pub const TAURI_CONFIG: &str = "tauri.conf.json";
 pub const WINDOW_TITLE: &str = "AutoDesignMaker NEWrust";
 
+use adm_new_packaging::{
+    PORTABLE_BUILD_MANIFEST, PORTABLE_EXECUTABLE, PORTABLE_LAUNCHER, PORTABLE_RESOURCE_MANIFEST,
+    PortableResourceRootVerificationReport, verify_portable_resource_root,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +93,7 @@ pub struct DesktopReleaseSmokeReport {
     pub design_data_file_count: usize,
     pub support_files_present: bool,
     pub isolated_data_root: bool,
+    pub portable_integrity: PortableResourceRootVerificationReport,
 }
 
 pub fn default_shell_config() -> DesktopShellConfig {
@@ -131,41 +136,26 @@ pub fn shell_state() -> &'static str {
 pub fn release_smoke_report_for(executable_dir: &std::path::Path) -> DesktopReleaseSmokeReport {
     let shell = desktop_smoke_report(&default_shell_config());
     let mut blockers = shell.blockers.clone();
-    let design_root = executable_dir.join("knowledge").join("design_data");
-    let design_data_file_count = count_files(&design_root).unwrap_or(0);
-    if design_data_file_count == 0 {
-        blockers.push("portable design data is missing or empty".to_string());
-    }
-    let registry_path = executable_dir.join("pipeline/artifact_layer/registry.json");
-    match std::fs::read_to_string(&registry_path)
-        .ok()
-        .and_then(|text| {
-            serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')).ok()
-        }) {
-        Some(registry)
-            if registry
-                .get("version")
-                .and_then(serde_json::Value::as_u64)
-                .is_some()
-                && registry
-                    .get("artifacts")
-                    .and_then(serde_json::Value::as_array)
-                    .is_some_and(|artifacts| !artifacts.is_empty()) => {}
-        Some(_) => blockers.push("portable pipeline artifact registry is invalid".to_string()),
-        None if registry_path.is_file() => {
-            blockers.push("portable pipeline artifact registry is invalid".to_string())
-        }
-        None => blockers.push("portable pipeline artifact registry is missing".to_string()),
-    }
-    let schema_root = executable_dir.join("knowledge/schemas");
-    if count_files(&schema_root).unwrap_or(0) == 0 {
-        blockers.push("portable schema directory is missing or empty".to_string());
-    }
+    let portable_integrity = verify_portable_resource_root(executable_dir);
+    blockers.extend(
+        portable_integrity
+            .blockers
+            .iter()
+            .map(|blocker| format!("portable_integrity:{blocker}")),
+    );
+    let design_data_file_count = portable_integrity
+        .groups
+        .iter()
+        .find(|group| group.path == "knowledge/design_data")
+        .and_then(|group| group.actual.as_ref())
+        .and_then(|measure| usize::try_from(measure.files).ok())
+        .unwrap_or(0);
     let support_files_present = [
-        "AutoDesignMaker.exe",
-        "Start-AutoDesignMaker.cmd",
+        PORTABLE_EXECUTABLE,
+        PORTABLE_LAUNCHER,
         "README.txt",
-        "build-manifest.json",
+        PORTABLE_BUILD_MANIFEST,
+        PORTABLE_RESOURCE_MANIFEST,
     ]
     .iter()
     .all(|name| executable_dir.join(name).is_file());
@@ -180,16 +170,25 @@ pub fn release_smoke_report_for(executable_dir: &std::path::Path) -> DesktopRele
     let isolated_data_root = !smoke_data_root.starts_with(executable_dir);
     let mut runtime_initialized = false;
     let mut runtime_shutdown_cleanly = false;
-    match runtime::AppRuntime::new(&smoke_data_root) {
-        Ok(runtime) => {
-            runtime_initialized = true;
-            match runtime.shutdown_once() {
-                Ok(()) => runtime_shutdown_cleanly = true,
-                Err(_) => blockers.push("isolated runtime shutdown failed".to_string()),
+    if portable_integrity.passed() {
+        match runtime::AppRuntime::new_with_portable_root(&smoke_data_root, executable_dir) {
+            Ok(runtime) => {
+                runtime_initialized = true;
+                match runtime.lock() {
+                    Ok(state) if state.pipeline_executor.protocol_resources_ready() => {}
+                    Ok(_) => blockers.push(
+                        "isolated runtime did not bind the portable protocol resources".to_string(),
+                    ),
+                    Err(_) => blockers.push("isolated runtime state inspection failed".to_string()),
+                }
+                match runtime.shutdown_once() {
+                    Ok(()) => runtime_shutdown_cleanly = true,
+                    Err(_) => blockers.push("isolated runtime shutdown failed".to_string()),
+                }
+                drop(runtime);
             }
-            drop(runtime);
+            Err(_) => blockers.push("isolated desktop runtime initialization failed".to_string()),
         }
-        Err(_) => blockers.push("isolated desktop runtime initialization failed".to_string()),
     }
     if !isolated_data_root {
         blockers.push("release smoke data root was not isolated".to_string());
@@ -209,23 +208,8 @@ pub fn release_smoke_report_for(executable_dir: &std::path::Path) -> DesktopRele
         design_data_file_count,
         support_files_present,
         isolated_data_root,
+        portable_integrity,
     }
-}
-
-fn count_files(root: &std::path::Path) -> std::io::Result<usize> {
-    if !root.is_dir() {
-        return Ok(0);
-    }
-    let mut count = 0;
-    for entry in std::fs::read_dir(root)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            count += count_files(&entry.path())?;
-        } else if entry.file_type()?.is_file() {
-            count += 1;
-        }
-    }
-    Ok(count)
 }
 
 pub fn run() {
@@ -448,6 +432,13 @@ pub fn desktop_smoke_report(config: &DesktopShellConfig) -> DesktopSmokeReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adm_new_foundation::sha256_hex;
+    use adm_new_packaging::{
+        PORTABLE_ARTIFACT_REGISTRY, PORTABLE_BUILD_ROOT_KIND, PORTABLE_DATA_ROOT, PORTABLE_PRODUCT,
+        PORTABLE_RESOURCE_ROOT_KIND, PORTABLE_SCHEMA_VERSION, PORTABLE_TARGET_TRIPLE,
+        REQUIRED_PORTABLE_RESOURCE_GROUPS, SOURCE_RESOURCE_MANIFEST, measure_resource_tree,
+    };
+    use serde_json::json;
 
     #[test]
     fn desktop_tauri_scaffold_exports_expected_paths() {
@@ -520,32 +511,12 @@ mod tests {
     fn release_smoke_uses_an_isolated_runtime_and_checks_bundle_support_files() {
         let bundle = std::env::temp_dir()
             .join(adm_new_foundation::new_stable_id("desktop-release-bundle").unwrap());
-        std::fs::create_dir_all(bundle.join("knowledge").join("design_data")).unwrap();
-        std::fs::write(bundle.join("knowledge/design_data/test.json"), b"{}").unwrap();
-        std::fs::create_dir_all(bundle.join("pipeline/artifact_layer")).unwrap();
-        std::fs::write(
-            bundle.join("pipeline/artifact_layer/registry.json"),
-            br#"{"version":1,"artifacts":[{"id":"stage_00.test","stage":0,"kind":"test"}]}"#,
-        )
-        .unwrap();
-        std::fs::create_dir_all(bundle.join("knowledge/schemas")).unwrap();
-        std::fs::write(
-            bundle.join("knowledge/schemas/test.schema.json"),
-            br#"{"type":"object"}"#,
-        )
-        .unwrap();
-        for name in [
-            "AutoDesignMaker.exe",
-            "Start-AutoDesignMaker.cmd",
-            "README.txt",
-            "build-manifest.json",
-        ] {
-            std::fs::write(bundle.join(name), b"fixture").unwrap();
-        }
+        write_valid_portable_bundle(&bundle);
 
         let report = release_smoke_report_for(&bundle);
 
         assert_eq!(report.status, "passed", "{:?}", report.blockers);
+        assert!(report.portable_integrity.passed());
         assert!(report.runtime_initialized);
         assert!(report.runtime_shutdown_cleanly);
         assert!(report.isolated_data_root);
@@ -571,16 +542,8 @@ mod tests {
 
         let missing_all = release_smoke_report_for(&bundle);
         assert_eq!(missing_all.status, "blocked");
-        assert!(
-            missing_all
-                .blockers
-                .contains(&"portable pipeline artifact registry is missing".to_string())
-        );
-        assert!(
-            missing_all
-                .blockers
-                .contains(&"portable schema directory is missing or empty".to_string())
-        );
+        assert!(!missing_all.portable_integrity.passed());
+        assert!(!missing_all.runtime_initialized);
 
         std::fs::create_dir_all(bundle.join("pipeline/artifact_layer")).unwrap();
         std::fs::write(
@@ -590,17 +553,106 @@ mod tests {
         .unwrap();
         let missing_schema = release_smoke_report_for(&bundle);
         assert_eq!(missing_schema.status, "blocked");
-        assert!(
-            !missing_schema
-                .blockers
-                .iter()
-                .any(|blocker| blocker.contains("artifact registry"))
-        );
-        assert!(
-            missing_schema
-                .blockers
-                .contains(&"portable schema directory is missing or empty".to_string())
-        );
+        assert!(!missing_schema.portable_integrity.passed());
+        assert!(!missing_schema.runtime_initialized);
         let _ = std::fs::remove_dir_all(bundle);
+    }
+
+    fn write_valid_portable_bundle(bundle: &std::path::Path) {
+        std::fs::create_dir_all(bundle.join("knowledge/design_data/domains")).unwrap();
+        std::fs::write(
+            bundle.join("knowledge/design_data/domains/test.json"),
+            br#"{"schemaVersion":"1.0","domain":{"id":"test_domain","name":"Test","description":"Test"},"nodes":[{"id":"test_node","name":"Test node","description":"Test","roleClass":"test","requires":[],"unlocks":[],"domain":"test_domain","checklist":[]}]}"#,
+        )
+        .unwrap();
+        for (relative, payload) in [
+            (
+                "knowledge/schemas/test.schema.json",
+                br#"{"type":"object"}"#.as_slice(),
+            ),
+            ("knowledge/market_data/test.json", b"{}".as_slice()),
+            ("knowledge/sdks/_index.json", br#"{"sdks":[]}"#.as_slice()),
+            ("knowledge/skills/test.md", b"# Test skill".as_slice()),
+            (
+                PORTABLE_ARTIFACT_REGISTRY,
+                br#"{"version":1,"artifacts":[{"id":"stage_00.test","stage":0,"kind":"test"}]}"#
+                    .as_slice(),
+            ),
+        ] {
+            let path = bundle.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, payload).unwrap();
+        }
+
+        let executable = b"MZ desktop portable fixture";
+        let launcher = b"@echo off\r\nstart \"\" \"%~dp0AutoDesignMaker.exe\"\r\n";
+        std::fs::write(bundle.join(PORTABLE_EXECUTABLE), executable).unwrap();
+        std::fs::write(bundle.join(PORTABLE_LAUNCHER), launcher).unwrap();
+        std::fs::write(bundle.join("README.txt"), b"portable fixture").unwrap();
+        std::fs::write(
+            bundle.join(SOURCE_RESOURCE_MANIFEST),
+            br#"{"schemaVersion":1,"projectId":"autodesignmaker-rust-v2"}"#,
+        )
+        .unwrap();
+
+        let groups = REQUIRED_PORTABLE_RESOURCE_GROUPS
+            .iter()
+            .map(|path| {
+                let measure = measure_resource_tree(bundle.join(path)).unwrap();
+                let mode = match *path {
+                    "knowledge/design_data" | "knowledge/schemas" | "pipeline/artifact_layer" => {
+                        "required-read-only"
+                    }
+                    _ => "seed-read-only",
+                };
+                json!({
+                    "path": path,
+                    "mode": mode,
+                    "files": measure.files,
+                    "bytes": measure.bytes,
+                    "tree_sha256": measure.tree_sha256,
+                })
+            })
+            .collect::<Vec<_>>();
+        let resource_manifest = serde_json::to_vec_pretty(&json!({
+            "schema_version": PORTABLE_SCHEMA_VERSION,
+            "root_kind": PORTABLE_RESOURCE_ROOT_KIND,
+            "groups": groups,
+        }))
+        .unwrap();
+        std::fs::write(bundle.join(PORTABLE_RESOURCE_MANIFEST), &resource_manifest).unwrap();
+
+        let registry = std::fs::read(bundle.join(PORTABLE_ARTIFACT_REGISTRY)).unwrap();
+        let source_manifest = std::fs::read(bundle.join(SOURCE_RESOURCE_MANIFEST)).unwrap();
+        let readme = std::fs::read(bundle.join("README.txt")).unwrap();
+        let build_manifest = json!({
+            "schema_version": PORTABLE_SCHEMA_VERSION,
+            "root_kind": PORTABLE_BUILD_ROOT_KIND,
+            "product": PORTABLE_PRODUCT,
+            "target_triple": PORTABLE_TARGET_TRIPLE,
+            "portable_data_root": PORTABLE_DATA_ROOT,
+            "resource_manifest": PORTABLE_RESOURCE_MANIFEST,
+            "resource_manifest_sha256": sha256_hex(&resource_manifest),
+            "source_resource_manifest": SOURCE_RESOURCE_MANIFEST,
+            "source_resource_manifest_sha256": sha256_hex(&source_manifest),
+            "executable": PORTABLE_EXECUTABLE,
+            "executable_sha256": sha256_hex(executable),
+            "executable_bytes": executable.len(),
+            "artifact_registry": PORTABLE_ARTIFACT_REGISTRY,
+            "artifact_registry_sha256": sha256_hex(&registry),
+            "launcher": PORTABLE_LAUNCHER,
+            "launcher_sha256": sha256_hex(launcher),
+            "launcher_bytes": launcher.len(),
+            "support_files": [
+                {"path": PORTABLE_LAUNCHER, "bytes": launcher.len(), "sha256": sha256_hex(launcher)},
+                {"path": "README.txt", "bytes": readme.len(), "sha256": sha256_hex(&readme)},
+                {"path": SOURCE_RESOURCE_MANIFEST, "bytes": source_manifest.len(), "sha256": sha256_hex(&source_manifest)},
+            ],
+        });
+        std::fs::write(
+            bundle.join(PORTABLE_BUILD_MANIFEST),
+            serde_json::to_vec_pretty(&build_manifest).unwrap(),
+        )
+        .unwrap();
     }
 }

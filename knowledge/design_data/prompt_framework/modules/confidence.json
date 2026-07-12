@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "confidence",
+  "moduleVersion": "1",
+  "title": "置信度",
+  "order": 6,
+  "dependencies": [],
+  "rules": [
+    {
+      "id": "high_confidence_threshold",
+      "text": "低置信内容不得写入项目输出；0.75 及以上才可作为高置信内容。"
+    },
+    {
+      "id": "conservative_when_ambiguous",
+      "text": "当一个回答可能映射到多个选项时，降低置信度并继续澄清，不要强行落选项。"
+    }
+  ],
+  "validationConstraints": {
+    "forbidDesignOptionChanges": true,
+    "forbidBackendParameterChanges": true,
+    "maxDirectDependencies": 2,
+    "maxDependencyDepth": 2
+  }
+}

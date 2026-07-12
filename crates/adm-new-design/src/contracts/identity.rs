@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use adm_new_contracts::ArtifactLocale;
 use serde_json::{Value, json};
@@ -39,15 +39,19 @@ pub fn build_project_identity_with_locale(
         "selections": selection_fingerprint(parsed),
     }));
     let template_hash = stable_hash(&json!({
-        "source_package": get_str(parsed, "source_package"),
+        "source_package_ref": stable_project_ref(&get_str(parsed, "source_package")),
         "source_input_type": get_str(parsed, "source_input_type"),
         "concept_profile": concept_profile,
     }));
-    let source_artifacts_path = first_str(parsed, &["source_package", "source"]);
+    let source_artifacts_ref =
+        stable_project_ref(&first_str(parsed, &["source_package", "source"]));
+    let source_ref = stable_project_ref(&get_str(parsed, "source"));
+    let draft_ref = format!("drafts/{draft_session_id}");
     let signature_input = json!({
         "draft_session_id": draft_session_id,
-        "output_base_dir": output_base.to_string_lossy().to_string(),
-        "source_artifacts_path": source_artifacts_path,
+        "draft_ref": draft_ref,
+        "artifact_root_ref": "outputs/artifacts",
+        "source_artifacts_ref": source_artifacts_ref,
         "decisions_hash": decisions_hash,
         "template_hash": template_hash,
         "project_name": project_name,
@@ -58,14 +62,12 @@ pub fn build_project_identity_with_locale(
     let mut blockers = Vec::new();
     for field in [
         "draft_session_id",
-        "output_base_dir",
         "project_id",
         "project_name",
         "project_signature",
     ] {
         let present = match field {
             "draft_session_id" => !draft_session_id.is_empty(),
-            "output_base_dir" => !output_base.as_os_str().is_empty(),
             "project_id" => !project_id.is_empty(),
             "project_name" => !project_name.is_empty(),
             "project_signature" => !project_signature.is_empty(),
@@ -93,12 +95,13 @@ pub fn build_project_identity_with_locale(
     .map(Value::String)
     .collect::<Vec<_>>();
     json!({
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "generated_at": now_iso(),
         "artifact_locale": artifact_locale,
         "contract_display_name": if artifact_locale == ArtifactLocale::ZhCn { "项目身份契约" } else { "Project Identity Contract" },
         "draft_session_id": draft_session_id,
-        "output_base_dir": output_base.to_string_lossy().to_string(),
+        "draft_ref": draft_ref,
+        "artifact_root_ref": "outputs/artifacts",
         "linked_save_id": linked_save_id.unwrap_or(""),
         "project_id": project_id,
         "project_name": project_name,
@@ -106,13 +109,50 @@ pub fn build_project_identity_with_locale(
         "signature_input": signature_input,
         "decisions_hash": decisions_hash,
         "template_hash": template_hash,
-        "source_artifacts_path": get_str(parsed, "source_package"),
-        "source_refs": [get_str(parsed, "source")],
+        "source_artifacts_ref": source_artifacts_ref,
+        "source_refs": [source_ref],
         "identity_terms": identity_terms,
         "excluded_template_terms": [],
         "blockers": blockers,
         "warnings": [],
     })
+}
+
+/// Convert a source/package locator into a project-owned canonical reference.
+/// Machine-specific absolute prefixes are intentionally discarded because the
+/// source content hash already supplies the durable identity.
+fn stable_project_ref(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let path = Path::new(trimmed);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|part| matches!(part, Component::Prefix(_)))
+    {
+        return path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default();
+    }
+
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => parts.push(part.to_string_lossy().to_string()),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+                    .unwrap_or_default();
+            }
+        }
+    }
+    parts.join("/")
 }
 
 pub fn build_customization_score_report(

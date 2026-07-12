@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Art Acceptance Report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "checks", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "checks": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

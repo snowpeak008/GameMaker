@@ -1,0 +1,288 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_presentation_meta_template_v1",
+  "name": "Shared presentation meta template v1",
+  "description": "Shared presentation meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "presentation_feeling_target",
+      "label": "感受目标",
+      "description": "表现设计先服务玩家感受，而不是单独追求风格堆叠。这一层把“风格定位”推进到体验目标。",
+      "outputKey": "presentationFeelingTarget",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_sensory_feeling",
+      "designQuestion": "这个表现项要强化哪种即时感受？",
+      "options": [
+        {
+          "id": "clear_readable",
+          "label": "清爽易读",
+          "description": "优先让信息和对象快速被识别。用于推进“风格定位”的具体判断。",
+          "outputKey": "clearReadable"
+        },
+        {
+          "id": "strong_impact",
+          "label": "强冲击",
+          "description": "优先制造打击、奖励或演出的冲击。用于推进“风格定位”的具体判断。",
+          "outputKey": "strongImpact"
+        },
+        {
+          "id": "immersive_mood",
+          "label": "沉浸氛围",
+          "description": "优先建立场景、音乐和视觉氛围。用于推进“风格定位”的具体判断。",
+          "outputKey": "immersiveMood"
+        },
+        {
+          "id": "friendly_light",
+          "label": "轻松亲和",
+          "description": "优先降低压力和距离感。用于推进“风格定位”的具体判断。",
+          "outputKey": "friendlyLight"
+        },
+        {
+          "id": "premium_quality",
+          "label": "高级质感",
+          "description": "优先体现品质、细节和统一性。用于推进“风格定位”的具体判断。",
+          "outputKey": "premiumQuality"
+        }
+      ]
+    },
+    {
+      "id": "presentation_sensory_dynamic",
+      "label": "感官动态",
+      "description": "把表现目标转成注意力引导和情绪节奏。这一层把“风格定位”推进到玩家动态。",
+      "outputKey": "presentationSensoryDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "sensory_feeling_to_attention",
+      "designQuestion": "玩家注意力和情绪会怎样变化？",
+      "options": [
+        {
+          "id": "attention_guidance",
+          "label": "注意力引导",
+          "description": "用视觉、动效或声音引导玩家关注。用于推进“风格定位”的具体判断。",
+          "outputKey": "attentionGuidance"
+        },
+        {
+          "id": "emotion_curve",
+          "label": "情绪起伏",
+          "description": "用表现调节紧张、释放和缓冲。用于推进“风格定位”的具体判断。",
+          "outputKey": "emotionCurve"
+        },
+        {
+          "id": "action_confirmation",
+          "label": "操作确认",
+          "description": "用反馈确认玩家输入和结果。用于推进“风格定位”的具体判断。",
+          "outputKey": "actionConfirmation"
+        },
+        {
+          "id": "reward_amplification",
+          "label": "奖励放大",
+          "description": "用声画强化奖励价值。用于推进“风格定位”的具体判断。",
+          "outputKey": "rewardAmplification"
+        },
+        {
+          "id": "failure_softening",
+          "label": "失败缓冲",
+          "description": "用表现降低失败挫败感。用于推进“风格定位”的具体判断。",
+          "outputKey": "failureSoftening"
+        }
+      ]
+    },
+    {
+      "id": "presentation_mechanic",
+      "label": "表现机制",
+      "description": "把感官动态落到美术、动效、音频和镜头规则。这一层把“风格定位”推进到机制抓手。",
+      "outputKey": "presentationMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "attention_to_presentation_mechanic",
+      "designQuestion": "用哪些表现手段稳定制造这种感受？",
+      "options": [
+        {
+          "id": "art_style",
+          "label": "美术风格",
+          "description": "用造型、材质和场景建立视觉规则。用于推进“风格定位”的具体判断。",
+          "outputKey": "artStyle"
+        },
+        {
+          "id": "animation_timing",
+          "label": "动效节奏",
+          "description": "用时长、缓入缓出和夸张度控制反馈。用于推进“风格定位”的具体判断。",
+          "outputKey": "animationTiming"
+        },
+        {
+          "id": "audio_feedback",
+          "label": "音效反馈",
+          "description": "用音色、音量和层级确认事件。用于推进“风格定位”的具体判断。",
+          "outputKey": "audioFeedback"
+        },
+        {
+          "id": "camera_cinematic",
+          "label": "镜头演出",
+          "description": "用镜头、构图和切换强化关键节点。用于推进“风格定位”的具体判断。",
+          "outputKey": "cameraCinematic"
+        },
+        {
+          "id": "color_semantics",
+          "label": "色彩语义",
+          "description": "用颜色区分状态、阵营和风险。用于推进“风格定位”的具体判断。",
+          "outputKey": "colorSemantics"
+        }
+      ]
+    },
+    {
+      "id": "presentation_consistency_boundary",
+      "label": "一致性边界",
+      "description": "表现必须限制风格漂移、反馈过载和性能成本。这一层把“风格定位”推进到边界约束。",
+      "outputKey": "presentationConsistencyBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "presentation_mechanic_to_consistency",
+      "designQuestion": "什么会破坏表现一致性或可用性？",
+      "options": [
+        {
+          "id": "style_drift",
+          "label": "风格漂移",
+          "description": "表现偏离核心风格和品牌识别。用于推进“风格定位”的具体判断。",
+          "outputKey": "styleDrift"
+        },
+        {
+          "id": "feedback_overload",
+          "label": "反馈过载",
+          "description": "过多效果干扰操作和判断。用于推进“风格定位”的具体判断。",
+          "outputKey": "feedbackOverload"
+        },
+        {
+          "id": "readability_loss",
+          "label": "可读性下降",
+          "description": "效果或氛围遮挡关键信息。用于推进“风格定位”的具体判断。",
+          "outputKey": "readabilityLoss"
+        },
+        {
+          "id": "performance_cost",
+          "label": "性能成本",
+          "description": "表现规格影响帧率、加载或包体。用于推进“风格定位”的具体判断。",
+          "outputKey": "performanceCost"
+        },
+        {
+          "id": "audience_shift",
+          "label": "审美受众偏移",
+          "description": "表现偏好远离目标玩家。用于推进“风格定位”的具体判断。",
+          "outputKey": "audienceShift"
+        }
+      ]
+    },
+    {
+      "id": "presentation_signal",
+      "label": "感受信号",
+      "description": "用识别、反馈、记忆点和性能信号验证表现价值。这一层把“风格定位”推进到验收信号。",
+      "outputKey": "presentationSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "consistency_to_sensory_signal",
+      "designQuestion": "怎样证明这个表现项真正帮到了体验？",
+      "options": [
+        {
+          "id": "first_glance_recognition",
+          "label": "第一眼识别",
+          "description": "玩家能快速识别对象、状态或卖点。用于推进“风格定位”的具体判断。",
+          "outputKey": "firstGlanceRecognition"
+        },
+        {
+          "id": "feedback_understood",
+          "label": "反馈清楚",
+          "description": "玩家能理解操作和事件反馈。用于推进“风格定位”的具体判断。",
+          "outputKey": "feedbackUnderstood"
+        },
+        {
+          "id": "key_moment_remembered",
+          "label": "关键节点记忆",
+          "description": "玩家记得奖励、失败或剧情演出。用于推进“风格定位”的具体判断。",
+          "outputKey": "keyMomentRemembered"
+        },
+        {
+          "id": "audio_visual_consistent",
+          "label": "声画一致",
+          "description": "声音、画面和动效表达同一含义。用于推进“风格定位”的具体判断。",
+          "outputKey": "audioVisualConsistent"
+        },
+        {
+          "id": "performance_stable",
+          "label": "性能稳定",
+          "description": "表现效果不破坏设备性能和流畅度。用于推进“风格定位”的具体判断。",
+          "outputKey": "performanceStable"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_presentation_feeling_target_clear_readable_vs_strong_impact",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "presentation_feeling_target",
+        "optionId": "clear_readable"
+      },
+      "targets": [
+        {
+          "groupId": "presentation_feeling_target",
+          "optionId": "strong_impact"
+        }
+      ],
+      "reason": "强冲击表现容易遮挡信息，清爽易读要求反馈克制。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_presentation_feeling_target_clear_readable_vs_immersive_mood",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "presentation_feeling_target",
+        "optionId": "clear_readable"
+      },
+      "targets": [
+        {
+          "groupId": "presentation_feeling_target",
+          "optionId": "immersive_mood"
+        }
+      ],
+      "reason": "沉浸氛围可能降低信息对比度，需要保护关键状态可读性。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_presentation_feeling_target_friendly_light_vs_strong_impact",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "presentation_feeling_target",
+        "optionId": "friendly_light"
+      },
+      "targets": [
+        {
+          "groupId": "presentation_feeling_target",
+          "optionId": "strong_impact"
+        }
+      ],
+      "reason": "轻松亲和和强冲击会拉开情绪方向，需要明确主情绪。",
+      "severity": "warning"
+    }
+  ]
+}

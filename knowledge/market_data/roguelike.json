@@ -1,0 +1,31 @@
+{
+  "genre": "roguelike_action",
+  "art_style": "stylized_action_readability",
+  "color_palette": ["高对比度", "清晰可读", "动感配色"],
+  "style_direction": "角色轮廓清晰、特效高对比、UI 极简且战斗信息优先。",
+  "reference_principles": [
+    "角色剪影在复杂背景下仍可辨识。",
+    "攻击特效应有明确前摇、命中和消散层次。",
+    "奖励图标用颜色和形状同时表达稀有度。",
+    "房间环境需要保留移动、碰撞和危险区域的可读性。"
+  ],
+  "reference_games": [
+    {
+      "name": "Hades",
+      "art_style": "神话题材高对比插画",
+      "notable_elements": ["角色轮廓", "特效层次", "紧凑 UI"]
+    },
+    {
+      "name": "Dead Cells",
+      "art_style": "高对比像素动作表现",
+      "notable_elements": ["流畅动画", "打击感特效", "奖励辨识度"]
+    }
+  ],
+  "asset_benchmarks": {
+    "character_art": 8,
+    "enemy_art": 15,
+    "vfx": 30,
+    "ui": 25,
+    "environment": 10
+  }
+}

@@ -397,7 +397,7 @@ impl RuntimeApplicationService {
     pub fn load_project_settings(&self, prefer_run_context: bool) -> ProjectRuntimeSettings {
         if prefer_run_context {
             if let Ok(Some(snapshot)) = self.load_settings_snapshot() {
-                return normalize_project_settings(&snapshot);
+                return self.resolve_project_binding(normalize_project_settings(&snapshot));
             }
         }
         let active = read_json_or(&self.active_project_settings_path(), json!({}));
@@ -643,7 +643,28 @@ impl RuntimeApplicationService {
         if let Ok(path) = std::env::var(RUN_CONTEXT_ENV) {
             let path = path.trim();
             if !path.is_empty() {
-                return PathBuf::from(path);
+                let configured = PathBuf::from(path);
+                let candidate = if configured.is_absolute() {
+                    if !configured.starts_with(&self.paths.project_root) {
+                        return self.paths.draft_dir.join(RUN_CONTEXT_RELATIVE_PATH);
+                    }
+                    configured
+                } else {
+                    if configured.components().any(|component| {
+                        matches!(
+                            component,
+                            std::path::Component::ParentDir
+                                | std::path::Component::Prefix(_)
+                                | std::path::Component::RootDir
+                        )
+                    }) {
+                        return self.paths.draft_dir.join(RUN_CONTEXT_RELATIVE_PATH);
+                    }
+                    self.paths.project_root.join(configured)
+                };
+                if path_is_inside_root(&candidate, &self.paths.project_root) {
+                    return candidate;
+                }
             }
         }
         self.paths.draft_dir.join(RUN_CONTEXT_RELATIVE_PATH)
@@ -676,7 +697,9 @@ impl RuntimeApplicationService {
                 Ok(None)
             };
         }
-        match RunContext::from_value(&value) {
+        match RunContext::from_value(&value)
+            .and_then(|context| self.normalize_and_resolve_run_context(&path, context))
+        {
             Ok(context) => Ok(Some(context)),
             Err(error) if required => Err(error),
             Err(_) => Ok(None),
@@ -722,7 +745,10 @@ impl RuntimeApplicationService {
         );
         snapshot_payload.insert(
             "source_settings_path".to_string(),
-            Value::String(self.active_project_settings_path().display().to_string()),
+            Value::String(project_relative_path(
+                &self.paths.project_root,
+                &self.active_project_settings_path(),
+            )?),
         );
         write_json_value(&snapshot, &Value::Object(snapshot_payload))?;
 
@@ -733,53 +759,95 @@ impl RuntimeApplicationService {
             .join(save_id)
             .join("workspace")
             .join(EXECUTION_OBJECT_STORE_RELATIVE_PATH);
-        let context = RunContext {
-            schema_version: "1.0".to_string(),
+        let persisted_context = RunContext {
+            schema_version: "2.0".to_string(),
             run_id: run_id.to_string(),
             draft_session_id: self.paths.session_id.clone(),
             save_id: save_id.to_string(),
-            project_root: self
-                .paths
-                .project_root
-                .canonicalize()
-                .unwrap_or_else(|_| self.paths.project_root.clone())
-                .display()
-                .to_string(),
-            draft_root: absolutize(&self.paths.draft_dir),
-            source_artifacts_root: absolutize(&self.paths.source_artifacts_dir),
-            settings_snapshot: absolutize(&snapshot),
+            project_root: ".".to_string(),
+            draft_root: project_relative_path(&self.paths.project_root, &self.paths.draft_dir)?,
+            source_artifacts_root: project_relative_path(
+                &self.paths.project_root,
+                &self.paths.source_artifacts_dir,
+            )?,
+            settings_snapshot: project_relative_path(&self.paths.project_root, &snapshot)?,
             development_path: normalized_settings.development_path,
             editor_path: normalized_settings.editor_path,
             project_engine: normalized_settings.project_engine,
             pipeline_adapter: normalized_settings.pipeline_adapter,
-            execution_object_store: absolutize(&execution_store),
-            artifact_root: absolutize(&self.paths.artifacts_dir),
-            log_root: absolutize(&self.paths.run_logs_dir),
+            execution_object_store: project_relative_path(
+                &self.paths.project_root,
+                &execution_store,
+            )?,
+            artifact_root: project_relative_path(
+                &self.paths.project_root,
+                &self.paths.artifacts_dir,
+            )?,
+            log_root: project_relative_path(&self.paths.project_root, &self.paths.run_logs_dir)?,
             owner_pid: std::process::id(),
             created_at: now_runtime_timestamp(),
             isolation_policy: isolation_policy(),
         };
-        write_json_value(&path, &to_json_value(&context)?)?;
+        write_json_value(&path, &to_json_value(&persisted_context)?)?;
         if activate {
             self.write_run_state(
-                json!({"run_context_path": path.display().to_string()}),
+                json!({"run_context_path": project_relative_path(&self.paths.project_root, &path)?}),
                 false,
                 &[],
             )?;
         }
-        Ok(context)
+        resolve_run_context_paths(persisted_context, &self.paths.project_root)
     }
 
     pub fn ensure_run_context(&self, run_id: &str, save_id: &str) -> AdmResult<RunContext> {
         if let Some(context) = self.load_run_context(false)? {
             self.write_run_state(
-                json!({"run_context_path": self.run_context_path().display().to_string()}),
+                json!({"run_context_path": project_relative_path(
+                    &self.paths.project_root,
+                    &self.run_context_path(),
+                )?}),
                 false,
                 &[],
             )?;
             return Ok(context);
         }
         self.create_run_context(run_id, save_id, None, false, true)
+    }
+
+    fn normalize_and_resolve_run_context(
+        &self,
+        path: &Path,
+        mut context: RunContext,
+    ) -> AdmResult<RunContext> {
+        let save_id = sanitize_identifier(&context.save_id)?;
+        context.schema_version = "2.0".to_string();
+        context.draft_session_id = self.paths.session_id.clone();
+        context.project_root = ".".to_string();
+        context.draft_root =
+            project_relative_path(&self.paths.project_root, &self.paths.draft_dir)?;
+        context.source_artifacts_root =
+            project_relative_path(&self.paths.project_root, &self.paths.source_artifacts_dir)?;
+        context.settings_snapshot =
+            project_relative_path(&self.paths.project_root, &self.settings_snapshot_path())?;
+        context.execution_object_store = project_relative_path(
+            &self.paths.project_root,
+            &self
+                .paths
+                .project_root
+                .join("saves")
+                .join(save_id)
+                .join("workspace")
+                .join(EXECUTION_OBJECT_STORE_RELATIVE_PATH),
+        )?;
+        context.artifact_root =
+            project_relative_path(&self.paths.project_root, &self.paths.artifacts_dir)?;
+        context.log_root =
+            project_relative_path(&self.paths.project_root, &self.paths.run_logs_dir)?;
+        let normalized = to_json_value(&context)?;
+        if normalized != read_json_or(path, json!({})) {
+            write_json_value(path, &normalized)?;
+        }
+        resolve_run_context_paths(context, &self.paths.project_root)
     }
 
     pub fn draft_meta_bound_save_id(&self) -> Option<String> {
@@ -2028,11 +2096,114 @@ fn bounded_u32(value: Option<&Value>, default: u32, minimum: u32, maximum: u32) 
     number.clamp(minimum, maximum)
 }
 
-fn absolutize(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
+fn project_relative_path(project_root: &Path, path: &Path) -> AdmResult<String> {
+    let relative = if let Ok(relative) = path.strip_prefix(project_root) {
+        relative.to_path_buf()
+    } else {
+        let canonical_root = project_root.canonicalize().map_err(|error| {
+            AdmError::new(format!(
+                "runtime data root cannot be resolved at {}: {error}",
+                project_root.display()
+            ))
+        })?;
+        path.strip_prefix(&canonical_root)
+            .map(Path::to_path_buf)
+            .map_err(|_| {
+                AdmError::new(format!(
+                    "project-owned path is outside the runtime data root: {}",
+                    path.display()
+                ))
+            })?
+    };
+    if relative.as_os_str().is_empty() {
+        return Ok(".".to_string());
+    }
+    if relative.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::Prefix(_)
+                | std::path::Component::RootDir
+        )
+    }) {
+        return Err(AdmError::new(format!(
+            "project-owned path is not portable: {}",
+            path.display()
+        )));
+    }
+    Ok(relative.to_string_lossy().replace('\\', "/"))
+}
+
+fn resolve_run_context_paths(
+    mut context: RunContext,
+    project_root: &Path,
+) -> AdmResult<RunContext> {
+    context.project_root = resolve_project_owned_path(project_root, &context.project_root)?;
+    context.draft_root = resolve_project_owned_path(project_root, &context.draft_root)?;
+    context.source_artifacts_root =
+        resolve_project_owned_path(project_root, &context.source_artifacts_root)?;
+    context.settings_snapshot =
+        resolve_project_owned_path(project_root, &context.settings_snapshot)?;
+    context.execution_object_store =
+        resolve_project_owned_path(project_root, &context.execution_object_store)?;
+    context.artifact_root = resolve_project_owned_path(project_root, &context.artifact_root)?;
+    context.log_root = resolve_project_owned_path(project_root, &context.log_root)?;
+    Ok(context)
+}
+
+fn resolve_project_owned_path(project_root: &Path, relative: &str) -> AdmResult<String> {
+    let relative = Path::new(relative.trim());
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::Prefix(_)
+                    | std::path::Component::RootDir
+            )
+        })
+    {
+        return Err(AdmError::new(format!(
+            "persisted project-owned path must be relative: {}",
+            relative.display()
+        )));
+    }
+    let candidate = if relative == Path::new(".") {
+        project_root.to_path_buf()
+    } else {
+        project_root.join(relative)
+    };
+    if !path_is_inside_root(&candidate, project_root) {
+        return Err(AdmError::new(format!(
+            "persisted project-owned path escapes the runtime data root: {}",
+            relative.display()
+        )));
+    }
+    Ok(candidate
+        .canonicalize()
+        .unwrap_or(candidate)
         .display()
-        .to_string()
+        .to_string())
+}
+
+fn path_is_inside_root(candidate: &Path, project_root: &Path) -> bool {
+    if candidate != project_root && !candidate.starts_with(project_root) {
+        return false;
+    }
+    let root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    let mut existing = candidate;
+    while !existing.exists() {
+        let Some(parent) = existing.parent() else {
+            return false;
+        };
+        existing = parent;
+    }
+    let resolved = existing
+        .canonicalize()
+        .unwrap_or_else(|_| existing.to_path_buf());
+    resolved == root || resolved.starts_with(root)
 }
 
 fn ensure_steps_object(value: &mut Value) {
@@ -2193,6 +2364,15 @@ mod tests {
             .create_run_context("run_a", "save_a", Some(custom_settings), true, false)
             .unwrap();
         assert_eq!(context.save_id, "save_a");
+        let persisted_context = fs::read_to_string(service.run_context_path()).unwrap();
+        assert!(!persisted_context.contains(&root.to_string_lossy().to_string()));
+        let persisted_context: Value = serde_json::from_str(&persisted_context).unwrap();
+        assert_eq!(persisted_context["schema_version"], "2.0");
+        assert_eq!(persisted_context["project_root"], ".");
+        assert_eq!(
+            persisted_context["source_artifacts_root"],
+            "drafts/session_a/source_artifacts"
+        );
         assert_eq!(
             identity_payload(&context).get("run_id").map(String::as_str),
             Some("run_a")
@@ -2223,6 +2403,55 @@ mod tests {
                 .is_err()
         );
         cleanup(root);
+    }
+
+    #[test]
+    fn copied_run_context_is_rebased_without_reading_the_existing_old_root() {
+        let old_root = temp_root("context_old_root");
+        let new_root = temp_root("context_new_root_中文 空格");
+        let old_service = RuntimeApplicationService::new(&old_root, "session_a").unwrap();
+        old_service
+            .create_run_context("run_a", "save_a", None, true, false)
+            .unwrap();
+        write_json_value(
+            &old_service.settings_snapshot_path(),
+            &json!({"sentinel": "old-root"}),
+        )
+        .unwrap();
+
+        let new_service = RuntimeApplicationService::new(&new_root, "session_a").unwrap();
+        fs::create_dir_all(new_service.run_context_path().parent().unwrap()).unwrap();
+        fs::copy(
+            old_service.run_context_path(),
+            new_service.run_context_path(),
+        )
+        .unwrap();
+        write_json_value(
+            &new_service.settings_snapshot_path(),
+            &json!({"sentinel": "new-root"}),
+        )
+        .unwrap();
+
+        let context = new_service.load_run_context(true).unwrap().unwrap();
+        assert_eq!(
+            PathBuf::from(&context.project_root),
+            new_root.canonicalize().unwrap()
+        );
+        assert!(
+            !context
+                .project_root
+                .contains(&old_root.to_string_lossy().to_string())
+        );
+        assert_eq!(
+            new_service.load_settings_snapshot().unwrap().unwrap()["sentinel"],
+            "new-root"
+        );
+        let migrated = fs::read_to_string(new_service.run_context_path()).unwrap();
+        assert!(!migrated.contains(&old_root.to_string_lossy().to_string()));
+        assert!(!migrated.contains(&new_root.to_string_lossy().to_string()));
+
+        cleanup(old_root);
+        cleanup(new_root);
     }
 
     #[test]
@@ -2377,7 +2606,9 @@ mod tests {
         let editor = root.join("Unity/2022.3.21f1/Editor/Unity.exe");
         fs::create_dir_all(project.join("Assets")).unwrap();
         fs::create_dir_all(project.join("ProjectSettings")).unwrap();
+        fs::create_dir_all(project.join("Packages")).unwrap();
         fs::create_dir_all(editor.parent().unwrap()).unwrap();
+        fs::write(project.join("Packages/manifest.json"), "{}").unwrap();
         fs::write(
             project.join("ProjectSettings/ProjectVersion.txt"),
             "m_EditorVersion: 2022.3.21f1\n",
@@ -2416,10 +2647,35 @@ mod tests {
         assert!(!effective.binding_id.is_empty());
         assert!(service.project_bindings_path().is_file());
 
+        service
+            .create_run_context("run_a", "save_a", Some(effective.clone()), true, false)
+            .unwrap();
+        let snapshot_path = service.settings_snapshot_path();
+        let mut snapshot = read_json_or(&snapshot_path, json!({}));
+        snapshot["development_path"] = Value::String(r"C:\stale-machine\project".to_string());
+        snapshot["editor_path"] = Value::String(r"C:\stale-machine\Unity.exe".to_string());
+        write_json_value(&snapshot_path, &snapshot).unwrap();
+        let rebound_snapshot = service.load_project_settings(true);
+        assert_eq!(
+            rebound_snapshot.development_path,
+            project.display().to_string()
+        );
+        assert_eq!(rebound_snapshot.editor_path, editor.display().to_string());
+        assert_eq!(
+            service
+                .run_actual_development_preflight(false, true)
+                .unwrap()
+                .status,
+            "passed"
+        );
+
         fs::remove_file(service.project_bindings_path()).unwrap();
         let unbound = service.load_project_settings(false);
         assert!(unbound.development_path.is_empty());
         assert!(unbound.editor_path.is_empty());
+        let unbound_snapshot = service.load_project_settings(true);
+        assert!(unbound_snapshot.development_path.is_empty());
+        assert!(unbound_snapshot.editor_path.is_empty());
         cleanup(root);
     }
 

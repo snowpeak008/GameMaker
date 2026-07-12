@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::project::ProjectState;
 
 pub const CONTRACT_FAMILY: &str = "save";
-pub const SAVE_SCHEMA_VERSION: u32 = 1;
+pub const SAVE_SCHEMA_VERSION: u32 = 2;
 
 pub type AutosaveState = ProjectState;
 

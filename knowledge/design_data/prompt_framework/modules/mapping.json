@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "mapping",
+  "moduleVersion": "1",
+  "title": "映射规则",
+  "order": 5,
+  "dependencies": [
+    "interpretation"
+  ],
+  "rules": [
+    {
+      "id": "map_to_existing_options_only",
+      "text": "只能把用户意图映射到现有领域、节点、checklist、L4 选项和关系；不得新增或修改设计选项框架。"
+    },
+    {
+      "id": "map_with_reason",
+      "text": "每个映射必须给出简短理由，并能追溯到用户回答或明确项目上下文。"
+    }
+  ],
+  "validationConstraints": {
+    "forbidDesignOptionChanges": true,
+    "forbidBackendParameterChanges": true,
+    "maxDirectDependencies": 2,
+    "maxDependencyDepth": 2
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asset Mount Manifest",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "mount_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "mount_items": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

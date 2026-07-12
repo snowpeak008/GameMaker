@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "projectId": "autodesignmaker-rust-v2",
+  "generatedFrom": "one-time legacy-project import",
+  "groups": [
+    {
+      "path": "knowledge/design_data",
+      "files": 156,
+      "bytes": 67648522,
+      "treeSha256": "9d9a0de87fd79b457c4e11357de3827c023b649bdb5fe5baa071b7abf2ae2fdc",
+      "mode": "required-read-only"
+    },
+    {
+      "path": "knowledge/schemas",
+      "files": 93,
+      "bytes": 115560,
+      "treeSha256": "4c627f41edad4d85498f12d74ad19a56b5300a58213c87628e4bcdc116e1bace",
+      "mode": "required-read-only"
+    },
+    {
+      "path": "knowledge/market_data",
+      "files": 1,
+      "bytes": 1017,
+      "treeSha256": "6821579b91512168f2fbd719fa46a7f1f8b9fa76cb98fb049e01945e91d6a66b",
+      "mode": "seed-read-only"
+    },
+    {
+      "path": "knowledge/sdks",
+      "files": 2,
+      "bytes": 178,
+      "treeSha256": "b29ea05ee566c69b4f4095afc356747062ded14dd410af2299f50eaaba0f08a2",
+      "mode": "seed-read-only"
+    },
+    {
+      "path": "knowledge/skills",
+      "files": 16,
+      "bytes": 41810,
+      "treeSha256": "10e0c1e6cc30910a154064f4332f306afb7d99a002bdaf095c4f9d0962867d39",
+      "mode": "seed-read-only"
+    },
+    {
+      "path": "pipeline/artifact_layer",
+      "files": 3,
+      "bytes": 60974,
+      "treeSha256": "120db7b6faaa30217e6c70027e229e4c533153e8b1a7a560f0e0da7783298f6f",
+      "mode": "required-read-only"
+    },
+    {
+      "path": "testdata/ui_baselines",
+      "files": 94,
+      "bytes": 172364,
+      "treeSha256": "742847731de2817a8dd0b3ff995d94bab4affbe214f49bb63326d4b2f731c85f",
+      "mode": "test-fixture"
+    }
+  ]
+}

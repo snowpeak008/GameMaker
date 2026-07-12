@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Addressable Asset Plan",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "required", "groups"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "required": {"type": "boolean"},
+    "reason": {"type": "string"},
+    "groups": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

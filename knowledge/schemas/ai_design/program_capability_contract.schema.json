@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_capability_contract.schema.json",
+  "title": "Program Capability Contract",
+  "type": "object",
+  "required": ["schema_version", "project_signature", "source_contract", "capabilities"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_contract": {"type": "string"},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["capability_id", "program_class", "acceptance_refs"],
+        "properties": {
+          "capability_id": {"type": "string"},
+          "source_entity": {"type": "string"},
+          "program_class": {"type": "string"},
+          "data_fields": {"type": "array", "items": {"type": "object"}},
+          "input_actions": {"type": "array", "items": {"type": "object"}},
+          "state_changes": {"type": "array", "items": {"type": "object"}},
+          "acceptance_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

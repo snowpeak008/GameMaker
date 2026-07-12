@@ -1,0 +1,74 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "source_review_protocol",
+    "source_review",
+    "source_review_report",
+    "reviewed_contract",
+    "corrections",
+    "rerun_plan",
+    "blocked_items"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "source_review_protocol": {"type": "string"},
+    "source_review": {"type": "string"},
+    "source_review_report": {"type": "string"},
+    "reviewed_contract": {"type": "string"},
+    "corrections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "correction_id",
+          "selected",
+          "target_stage",
+          "conflict_type",
+          "severity",
+          "correction_type",
+          "source_finding_id",
+          "affected_ids",
+          "affected_systems",
+          "affected_files",
+          "entities",
+          "source_system",
+          "target_system",
+          "required_change",
+          "forbidden_change",
+          "detail"
+        ],
+        "properties": {
+          "correction_id": {"type": "string"},
+          "selected": {"type": "boolean"},
+          "target_stage": {"type": "string"},
+          "conflict_type": {"type": "string"},
+          "severity": {"type": "string"},
+          "correction_type": {"type": "string"},
+          "source_finding_id": {"type": "string"},
+          "affected_ids": {"type": "array", "items": {"type": "string"}},
+          "affected_systems": {"type": "array", "items": {"type": "string"}},
+          "affected_files": {"type": "array", "items": {"type": "string"}},
+          "entities": {"type": "array", "items": {"type": "string"}},
+          "source_system": {"type": "string"},
+          "target_system": {"type": "string"},
+          "required_change": {"type": "string"},
+          "forbidden_change": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    },
+    "rerun_plan": {
+      "type": "object",
+      "required": ["required_stages", "commands", "reason"],
+      "properties": {
+        "required_stages": {"type": "array", "items": {"type": "string"}},
+        "commands": {"type": "array", "items": {"type": "string"}},
+        "reason": {"type": "string"}
+      }
+    },
+    "blocked_items": {"type": "array", "items": {"type": "object"}}
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "skill_id": "skill_search_v1",
+  "name": "search",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for search.",
+  "capabilities": [
+    "search",
+    "text"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow",
+      "pipeline"
+    ],
+    "required_inputs": [
+      "query"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

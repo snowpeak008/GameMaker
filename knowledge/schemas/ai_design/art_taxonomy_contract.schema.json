@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "art_taxonomy_contract.schema.json",
+  "title": "Art Taxonomy Contract",
+  "type": "object",
+  "required": ["schema_version", "project_signature", "asset_categories"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_contract": {"type": "string"},
+    "asset_categories": {"type": "array", "items": {"type": "object"}},
+    "ui_asset_types": {"type": "array", "items": {"type": "object"}},
+    "world_asset_types": {"type": "array", "items": {"type": "object"}},
+    "character_asset_types": {"type": "array", "items": {"type": "object"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

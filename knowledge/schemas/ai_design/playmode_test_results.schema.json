@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "playmode_test_results.schema.json",
+  "title": "Playmode Test Results",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "validation_levels"],
+  "properties": {
+    "schema_version": {
+      "type": ["integer", "string"]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "blocked", "environment_blocked"]
+    },
+    "validation_levels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "name", "status", "checks"],
+        "properties": {
+          "level": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

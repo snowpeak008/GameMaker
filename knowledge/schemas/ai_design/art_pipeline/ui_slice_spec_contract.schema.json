@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI Slice Spec Contract",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "slice_specs", "policy"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "slice_specs": {"type": "array", "items": {"type": "object"}},
+    "policy": {"type": "string"}
+  },
+  "additionalProperties": true
+}

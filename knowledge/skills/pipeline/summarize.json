@@ -1,0 +1,41 @@
+{
+  "skill_id": "skill_summarize_v1",
+  "name": "summarize",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for summarize.",
+  "capabilities": [
+    "summary"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow"
+    ],
+    "required_inputs": [
+      "content"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "content": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "content"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

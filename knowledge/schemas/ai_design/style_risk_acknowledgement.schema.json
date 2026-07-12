@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "style_risk_acknowledgement.schema.json",
+  "title": "Style Risk Acknowledgement",
+  "type": "object",
+  "required": ["schema_version", "status", "acknowledged_risks"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "status": {"type": "string"},
+    "style_id": {"type": "string"},
+    "acknowledged_risks": {"type": "array", "items": {"type": "object"}},
+    "human_confirmation": {"type": "object"},
+    "source_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

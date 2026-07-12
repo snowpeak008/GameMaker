@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_structure_spec.schema.json",
+  "title": "Program Structure Spec",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "valid",
+    "project_type",
+    "allowed_roots",
+    "system_path_map",
+    "path_binding_contract"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "project_type": {
+      "type": "string"
+    },
+    "development_path": {
+      "type": "string"
+    },
+    "editor_path": {
+      "type": "string"
+    },
+    "allowed_roots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preflight_blocking_issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "system_path_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "requirement_id",
+          "phase",
+          "module",
+          "target_path",
+          "test_path",
+          "allowed_write_paths",
+          "source_refs"
+        ],
+        "properties": {
+          "requirement_id": {
+            "type": "string"
+          },
+          "selection_id": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "target_path": {
+            "type": "string"
+          },
+          "test_path": {
+            "type": "string"
+          },
+          "allowed_write_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "path_binding_contract": {
+      "type": "object",
+      "required": [
+        "required_task_fields",
+        "required_topology_fields"
+      ],
+      "properties": {
+        "required_task_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_topology_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "output_file_rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

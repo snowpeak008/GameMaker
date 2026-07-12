@@ -1,0 +1,47 @@
+{
+  "skill_id": "skill_generate_json_v1",
+  "name": "generate_json",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for generate_json.",
+  "capabilities": [
+    "json",
+    "generate"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow"
+    ],
+    "required_inputs": [
+      "schema",
+      "content"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "schema": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "schema",
+      "content"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

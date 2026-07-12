@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "skill_card_v1",
+  "kind": "skill",
+  "schemaVersion": "v1",
+  "title": "Skill Card v1",
+  "type": "object",
+  "required": [
+    "kind",
+    "id",
+    "label",
+    "input",
+    "frames",
+    "effect"
+  ],
+  "properties": {
+    "kind": {
+      "const": "skill"
+    },
+    "schemaVersion": {
+      "const": "v1"
+    },
+    "schema": {
+      "const": "skill_card_v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input": {
+      "type": "object"
+    },
+    "frames": {
+      "type": "object"
+    },
+    "effect": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

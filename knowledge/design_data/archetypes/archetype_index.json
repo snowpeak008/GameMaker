@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "archetypes": [
+    {
+      "archetype_id": "tower_defense",
+      "file": "tower_defense.json",
+      "parent_archetypes": ["strategy"]
+    },
+    {
+      "archetype_id": "narrative_puzzle",
+      "file": "narrative_puzzle.json",
+      "parent_archetypes": ["narrative", "management"]
+    }
+  ]
+}

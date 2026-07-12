@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "ui_contract_id": "adm-rust-v2-ui-contract-v1:style_confirmation_dialog",
+  "surface": "style_confirmation_dialog",
+  "state": "resume_after_reload",
+  "contract_surface": "manual style confirmation",
+  "web_tauri_target": "adm-new-web::modals::style_confirmation",
+  "required_state": "resume after reload",
+  "screenshot_required": true,
+  "reference_evidence": {
+    "kind": "independent_ui_contract",
+    "review_note": "Review layout, density, state semantics, accessibility, and command behavior against this versioned UI contract."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "gates/ui-step07.png",
+      "width": 1280,
+      "height": 820,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "gates/ui-step07-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open style_confirmation_dialog",
+      "command_contract": "confirm_style",
+      "expected_result": "renders resume after reload without overlap or layout shift"
+    }
+  ],
+  "contract_notes": {
+    "rendering_constraints": [
+      "Platform rendering details may vary; required layout, density, state semantics, accessibility, and command behavior must remain stable."
+    ],
+    "open_blocking_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Platform control rendering may vary while preserving the independent UI contract."
+      }
+    ]
+  },
+  "command_contract": "confirm_style",
+  "record_path": "testdata/ui_baselines/style_confirmation_dialog/resume_after_reload.json"
+}

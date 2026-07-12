@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "integration_validation_report.schema.json",
+  "title": "Integration Validation Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "status",
+    "blocking_issues",
+    "environment_issues",
+    "validation_levels",
+    "checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": ["integer", "string"]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "blocked", "environment_blocked"]
+    },
+    "blocking_issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "environment_issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "validation_levels": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["level", "name", "status", "checks"],
+        "properties": {
+          "level": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "passed"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

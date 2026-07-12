@@ -1,0 +1,47 @@
+{
+  "skill_id": "skill_write_file_v1",
+  "name": "write_file",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for write_file.",
+  "capabilities": [
+    "file",
+    "write"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow"
+    ],
+    "required_inputs": [
+      "file_path",
+      "content"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "file_path": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "file_path",
+      "content"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

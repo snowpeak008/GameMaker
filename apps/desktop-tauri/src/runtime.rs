@@ -16,6 +16,7 @@ use adm_new_application::{
     AiConfigApplicationService, AiInterviewApplicationService, DesignWorkbenchService,
     PackagingApplicationService, PatchApplicationService, PipelineApplicationService,
     RunLogService, SaveApplicationService, SdkKnowledgeApplicationService,
+    SkillOverlayApplicationService,
 };
 use adm_new_contracts::ai::{ModelResultStatus, ModelTask};
 use adm_new_contracts::log::{LogEntry, LogLevel};
@@ -35,7 +36,7 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::design_specs::load_design_specs;
+use crate::design_specs::{load_design_specs, load_design_specs_from_portable_root};
 
 pub const DESKTOP_SESSION_ID: &str = "desktop_current";
 const DESKTOP_SESSION_PREFIX: &str = "desktop_";
@@ -236,6 +237,7 @@ pub struct RuntimeState {
     pub packaging: PackagingApplicationService,
     pub patch: PatchApplicationService,
     pub sdk: SdkKnowledgeApplicationService,
+    pub skills: SkillOverlayApplicationService,
     pub logs: RunLogService,
     pub last_package_result: Option<adm_new_tauri_commands::package::PackageRunResultView>,
 }
@@ -250,24 +252,50 @@ impl AppRuntime {
     pub fn new(data_root: impl AsRef<Path>) -> AdmResult<Self> {
         let language_value = std::env::var(UI_LANGUAGE_ENV).ok();
         let ui_language = normalize_ui_language(language_value.as_deref());
-        Self::new_with_ui_language(data_root, ui_language)
+        Self::new_with_ui_language_and_resource_root(data_root, ui_language, None)
     }
 
+    #[cfg(test)]
     pub(crate) fn new_with_ui_language(
         data_root: impl AsRef<Path>,
         ui_language: UiLanguage,
+    ) -> AdmResult<Self> {
+        Self::new_with_ui_language_and_resource_root(data_root, ui_language, None)
+    }
+
+    pub(crate) fn new_with_portable_root(
+        data_root: impl AsRef<Path>,
+        portable_root: impl AsRef<Path>,
+    ) -> AdmResult<Self> {
+        let language_value = std::env::var(UI_LANGUAGE_ENV).ok();
+        let ui_language = normalize_ui_language(language_value.as_deref());
+        Self::new_with_ui_language_and_resource_root(
+            data_root,
+            ui_language,
+            Some(portable_root.as_ref().to_path_buf()),
+        )
+    }
+
+    fn new_with_ui_language_and_resource_root(
+        data_root: impl AsRef<Path>,
+        ui_language: UiLanguage,
+        portable_root: Option<PathBuf>,
     ) -> AdmResult<Self> {
         let data_root = data_root.as_ref().to_path_buf();
         fs::create_dir_all(&data_root)?;
         let session_lease = DesktopSessionLease::acquire(&data_root)?;
         let session_id = session_lease.session_id.clone();
-        let loaded_specs = load_design_specs();
+        let loaded_specs = portable_root
+            .as_deref()
+            .map(load_design_specs_from_portable_root)
+            .unwrap_or_else(load_design_specs)?;
+        let resource_root = loaded_specs.resource_root.clone();
+        let sdk = SdkKnowledgeApplicationService::open(&resource_root, &data_root)?;
+        let sdk_migration = sdk.legacy_migration().clone();
+        let skills = SkillOverlayApplicationService::open(&resource_root, &data_root)?;
+        let skill_count = skills.list()?.len();
         let template_runtime_root = data_root.join("drafts").join(&session_id);
-        let template_loader = loaded_specs
-            .source_root
-            .as_ref()
-            .map(DesignDataLoader::new)
-            .unwrap_or_else(|| DesignDataLoader::new(&data_root))
+        let template_loader = DesignDataLoader::new(&loaded_specs.resource_root)
             .with_runtime_root(template_runtime_root);
         let design = DesignWorkbenchService::new(loaded_specs.specs.clone())
             .with_template_loader(template_loader);
@@ -278,21 +306,18 @@ impl AppRuntime {
         let restored = restore_project_state(&save, &design, &data_root, &session_id)?;
         let project_state = restored.state;
         let runtime_config = RuntimeApplicationService::new(&data_root, &session_id)?;
-        let pipeline_executor = match loaded_specs.source_root.as_ref() {
-            Some(source_root) => ProductPipelineExecutor::with_design_data_dir(
-                &data_root,
-                &session_id,
-                source_root.join("knowledge/design_data"),
-            )?,
-            None => ProductPipelineExecutor::new(&data_root, &session_id)?,
-        }
+        let pipeline_executor = ProductPipelineExecutor::with_design_data_dir(
+            &data_root,
+            &session_id,
+            loaded_specs.resource_root.join("knowledge/design_data"),
+        )?
         .require_protocol_gate();
         let pipeline = PipelineApplicationService::new(default_development_registry())?;
         let pipeline_restore = load_pipeline_state(&runtime_config)?;
         let pipeline_state = pipeline_restore.state;
         let mut state = RuntimeState {
             data_root: data_root.clone(),
-            source_root: loaded_specs.source_root,
+            source_root: Some(resource_root),
             ui_language,
             project_state,
             design,
@@ -305,14 +330,34 @@ impl AppRuntime {
             pipeline_state,
             packaging: PackagingApplicationService::new(),
             patch: PatchApplicationService::new(),
-            sdk: SdkKnowledgeApplicationService::new(),
+            sdk,
+            skills,
             logs: RunLogService::new(),
             last_package_result: None,
         };
         state.reload_package_result();
         state.reload_patch_records();
-        state.reload_sdk_specs();
         state.load_logs();
+        if sdk_migration.migrated {
+            state.write_log(
+                LogLevel::Info,
+                "sdk.migration",
+                &format!(
+                    "migrated {} legacy SDK specs into the shared overlay; archive={}",
+                    sdk_migration.migrated_ids.len(),
+                    sdk_migration
+                        .archive_path
+                        .as_deref()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_default()
+                ),
+            );
+        }
+        state.write_log(
+            LogLevel::Info,
+            "skills.startup",
+            &format!("validated {skill_count} merged Skill descriptors"),
+        );
         if pipeline_restore.needs_rewrite
             && let Err(error) = state.persist_pipeline_state()
         {
@@ -327,9 +372,6 @@ impl AppRuntime {
         }
         for warning in restored.warnings {
             state.write_log(LogLevel::Warning, "save.recovery", &warning);
-        }
-        for warning in loaded_specs.warnings {
-            state.write_log(LogLevel::Warning, "startup", &warning);
         }
         state.write_log(LogLevel::Info, "startup", "desktop runtime initialized");
         Ok(Self {
@@ -566,18 +608,12 @@ impl RuntimeState {
             .replace_records(serde_json::from_value(records).unwrap_or_else(|_| Vec::new()));
     }
 
-    pub fn persist_sdk_specs(&self) -> AdmResult<()> {
-        let value = serde_json::to_value(self.sdk.list_specs())
-            .map_err(|error| AdmError::new(format!("failed to serialize SDK specs: {error}")))?;
-        adm_new_foundation::io::write_json(&self.sdk_store_file(), &value)?;
-        Ok(())
+    pub fn persist_sdk_specs(&mut self) -> AdmResult<()> {
+        self.sdk.persist()
     }
 
-    pub fn reload_sdk_specs(&mut self) {
-        let specs =
-            adm_new_foundation::io::read_json(&self.sdk_store_file(), serde_json::json!([]));
-        self.sdk
-            .replace_specs(serde_json::from_value(specs).unwrap_or_else(|_| Vec::new()));
+    pub fn reload_sdk_specs(&mut self) -> AdmResult<()> {
+        self.sdk.reload()
     }
 
     fn patch_store_file(&self) -> PathBuf {
@@ -585,13 +621,6 @@ impl RuntimeState {
             .paths()
             .patches_dir
             .join("desktop_patch_records.json")
-    }
-
-    fn sdk_store_file(&self) -> PathBuf {
-        self.runtime_config
-            .paths()
-            .sdk_knowledge_dir
-            .join("desktop_sdk_specs.json")
     }
 
     pub fn pipeline_state_file(&self) -> PathBuf {
@@ -2088,7 +2117,7 @@ mod tests {
                     "description": "Executable project-specific design entity"
                 }));
             }
-            let selected_option = load_design_specs().specs.iter().find_map(|node| {
+            let selected_option = load_design_specs().unwrap().specs.iter().find_map(|node| {
                 node.checklist.iter().find_map(|item| {
                     item.option_groups.iter().find_map(|group| {
                         group.options.first().map(|option| {

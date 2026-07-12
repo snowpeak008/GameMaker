@@ -4,10 +4,15 @@
 contains the design workbench, save management, AI configuration/interview surfaces,
 the Step00-14 pipeline, safe execution summaries, logs, patches, packaging, and SDK views.
 
+This directory is an independent source repository. All product data, Schema,
+protocol resources, test baselines, and release tooling live below this root; no
+parent AutoDesignMaker or Python project is required. See
+`docs/independence/README.md` for the enforced boundary.
+
 ## Requirements
 
 - Windows 10/11 x64 with Microsoft Edge WebView2 Runtime.
-- Node.js and npm (the Web build script itself uses only Node.js; Playwright checks
+- Node.js 22-24 and npm 10-11 (the Web build script itself uses only Node.js; Playwright checks
   require the declared development dependency).
 - Rust 1.96 or newer with the `x86_64-pc-windows-msvc` toolchain.
 - Visual Studio C++ Build Tools for the MSVC linker.
@@ -21,9 +26,9 @@ Run commands from `NEWrust/`:
 npm --prefix web run build
 
 # Check and test the Rust workspace.
-cargo fmt --check
-cargo check --workspace
-cargo test --workspace
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo test --workspace --locked
 
 # Build or run the desktop application.
 cargo build --locked -p desktop-tauri --release
@@ -33,6 +38,8 @@ cargo run -p desktop-tauri
 The desktop application normally stores runtime data in its Tauri application-data
 directory. Set `ADM_NEWRUST_DATA_DIR` to use an explicit data directory and
 `ADM_NEWRUST_SOURCE_ROOT` to override where `knowledge/design_data` is loaded from.
+The override is for development/testing and must point to a valid standalone source
+root. Release builds do not search parent directories or use the compiler's source path.
 
 ## Language Modes
 
@@ -144,23 +151,79 @@ dist/AutoDesignMaker-NEWrust/
 |-- Start-AutoDesignMaker.cmd
 |-- README.txt
 |-- build-manifest.json
-|-- knowledge/design_data/
+|-- portable-resource-manifest.json
+|-- knowledge/{design_data,schemas,market_data,sdks,skills}/
+|-- pipeline/artifact_layer/
 `-- user_data/
 ```
 
-Use `Start-AutoDesignMaker.cmd` for a portable trial: it pins both the source-resource
-root and runtime data directory to the staged folder. `AutoDesignMaker.exe` can also be
-started directly, but then saves and logs use the normal Tauri application-data path.
-Keep `knowledge/design_data` beside the executable; moving only the `.exe` causes the
-application to fall back to its embedded minimal taxonomy.
+Use `Start-AutoDesignMaker.cmd` for a portable trial: it pins the runtime data directory
+to the staged `user_data` folder. Release resource discovery accepts only the complete
+manifest-verified directory beside the executable; it does not honor a source override,
+search the current directory, or fall back to an embedded taxonomy. Moving only the
+`.exe`, changing a tracked resource, or changing either manifest makes startup/smoke
+fail closed.
 
-`build-manifest.json` records the executable SHA-256 hash, staged design-data
-count/size, and preserved/clean user-data mode and digest so a trial build can be
-identified exactly. A staged release can be checked without opening the GUI:
+`build-manifest.json` binds the executable, launcher, artifact registry, resource
+manifest, Git commit, lockfiles, toolchain, target architecture, CRT result, and
+preserved/clean user-data digest. `portable-resource-manifest.json` binds every shipped
+resource tree. A staged release can be checked without opening the GUI:
 
 ```powershell
 .\dist\AutoDesignMaker-NEWrust-release\AutoDesignMaker.exe --smoke `
   --smoke-report "$env:TEMP\adm-newrust-smoke.json"
+```
+
+An update that replaces an existing local portable keeps its recovery backup until
+`tools/Finalize-PortableSwap.ps1` validates the transaction, live smoke result, locks,
+and user-data digests. The finalizer defaults to dry-run; only its explicit `-Execute`
+path may remove that backup.
+
+## Standalone release verification and cleanup
+
+Formal release evidence comes from a `--no-local` clone under a same-volume root path
+that is outside both the source and legacy project trees and contains Chinese characters
+and spaces. The verifier has no development/skip mode. It runs the complete Web/Rust
+checks, builds the clean portable at `dist/AutoDesignMaker-NEWrust-release`, verifies
+its manifests/hash/current HEAD/x64 static-CRT evidence, then closes the leased clone
+through dry-run, delete, and receipt retirement:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\verify-standalone.ps1
+
+cargo run --locked -p adm-new-cli -- release-gate
+```
+
+`gates/standalone-release-evidence.json` is fixed-path, UTF-8 without BOM, expires
+after 24 hours, and records structured command/exit/duration/output-hash evidence for
+all required checks. `tools/security-scan-allowlist.json` is fail-closed: every reviewed
+path exception is pinned to its complete file SHA-256. The release evidence is a
+same-user guard against stale or accidental claims, not cryptographic attestation.
+
+The verifier atomically replaces any previous claim with a new schema-v2 `running`
+record before the first check. Only the final write can set `status=passed`; an
+interrupted run therefore leaves either `running`, `blocked`, expired, or missing
+evidence, all of which the Rust release gate rejects. The portable evidence also pins
+the finalized swap-receipt path and SHA-256, transaction ID, output root, build
+manifest, and current Git HEAD. Any unresolved receipt, stage, backup, failed
+candidate, retirement tombstone, or active/stale operation lock blocks release; the
+resolved persistent lock file is retained for the next exclusive operation.
+
+The `generated_cleanup` check covers both the leased clone and source-owned Cargo/Web/
+gate outputs. It must observe guarded dry-run and execute results, preserve the formal
+portable plus finalized swap receipt, and only then write the final evidence file.
+
+Generated Cargo/Web/gate output is cleaned with a guarded dry-run followed by an
+explicit execution. Always pass every protected local data path:
+
+```powershell
+powershell -File .\tools\clean-generated.ps1 `
+  -ProtectedUserData .\dist\AutoDesignMaker-NEWrust\user_data
+
+powershell -File .\tools\clean-generated.ps1 `
+  -ProtectedUserData .\dist\AutoDesignMaker-NEWrust\user_data `
+  -Execute
 ```
 
 ## Trial Workflow

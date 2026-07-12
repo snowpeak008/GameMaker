@@ -30,13 +30,14 @@ mod tests {
     use std::path::Path;
 
     use adm_new_contracts::schema::{load_structured_file, validate_contract};
+    use adm_new_foundation::paths::SourceProjectRoot;
     use serde_json::json;
 
     use super::*;
 
     fn assert_schema_valid(contract: &serde_json::Value, schema_path: &str) {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let schema = load_structured_file(&root.join(schema_path)).unwrap();
+        let root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let schema = load_structured_file(&root.join(schema_path).unwrap()).unwrap();
         let errors = validate_contract(contract, &schema);
         assert!(errors.is_empty(), "{schema_path}: {errors:?}");
     }
@@ -73,6 +74,73 @@ mod tests {
             build_customization_score_report("00", Some(&identity), "passed", &[], &[], None);
         assert_eq!(report["status"], json!("passed"));
         assert_eq!(report["project_specificity_score"], json!(1.0));
+    }
+
+    #[test]
+    fn project_identity_is_relocation_stable_and_never_persists_absolute_roots() {
+        let old_root = Path::new(r"C:\old-machine\workspace\game");
+        let new_root = Path::new(r"D:\迁移 后\game");
+        let parsed_old = json!({
+            "source": old_root.join("source_artifacts/concept.md").to_string_lossy(),
+            "source_package": old_root.join("source_artifacts/package_a").to_string_lossy(),
+            "source_sha256": "same-content",
+            "source_input_type": "Concept",
+            "selections": [{"id": "SEL-001", "label": "Stable choice"}],
+        });
+        let parsed_new = json!({
+            "source": new_root.join("source_artifacts/concept.md").to_string_lossy(),
+            "source_package": new_root.join("source_artifacts/package_a").to_string_lossy(),
+            "source_sha256": "same-content",
+            "source_input_type": "Concept",
+            "selections": [{"id": "SEL-001", "label": "Stable choice"}],
+        });
+        let profile = json!({"project_id": "portable", "project_name": "Portable Game"});
+
+        let before = build_project_identity(
+            &parsed_old,
+            &old_root.join("drafts/session_a/outputs/artifacts/stage_00"),
+            Some(&profile),
+            None,
+        );
+        let after = build_project_identity(
+            &parsed_new,
+            &new_root.join("drafts/session_a/outputs/artifacts/stage_00"),
+            Some(&profile),
+            None,
+        );
+
+        assert_eq!(before["schema_version"], "2.0");
+        assert_eq!(before["project_signature"], after["project_signature"]);
+        assert_eq!(before["draft_ref"], "drafts/session_a");
+        assert_eq!(before["artifact_root_ref"], "outputs/artifacts");
+        assert!(before.get("output_base_dir").is_none());
+        assert!(before.get("source_artifacts_path").is_none());
+        let serialized = serde_json::to_string(&before).unwrap();
+        assert!(!serialized.contains("old-machine"));
+        assert!(!serialized.contains("C:\\\\"));
+    }
+
+    #[test]
+    fn project_dna_seed_still_reads_legacy_identity_contracts() {
+        let legacy_identity = json!({
+            "schema_version": "1.0",
+            "draft_session_id": "legacy_session",
+            "output_base_dir": r"C:\legacy\drafts\legacy_session",
+            "project_id": "legacy-project",
+            "project_name": "Legacy Project",
+            "project_signature": "legacy-signature",
+            "source_refs": [r"C:\legacy\source_artifacts\concept.md"],
+        });
+        let seed = build_project_dna_seed(
+            &legacy_identity,
+            &json!({"genre": "action"}),
+            &json!({"source_sha256": "abc", "selections": []}),
+            &json!({}),
+            None,
+        );
+
+        assert_eq!(seed["draft_session_id"], "legacy_session");
+        assert_eq!(seed["project_signature"], "legacy-signature");
     }
 
     #[test]

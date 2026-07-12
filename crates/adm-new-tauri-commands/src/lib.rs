@@ -148,15 +148,18 @@ mod tests {
     fn success_response_serializes_stable_shape() {
         let response = command_success_with(
             "ready".to_string(),
-            vec![EvidenceRef::new("plan/NEWrust/README.md", "plan")],
+            vec![EvidenceRef::new(
+                "docs/independence/README.md",
+                "ui_contract",
+            )],
             vec![Diagnostic::info("command adapter mapped service result")],
         );
 
         let value = serde_json::to_value(&response).unwrap();
         assert_eq!(value["ok"], true);
         assert_eq!(value["data"], "ready");
-        assert_eq!(value["evidence"][0]["path"], "plan/NEWrust/README.md");
-        assert_eq!(value["evidence"][0]["kind"], "plan");
+        assert_eq!(value["evidence"][0]["path"], "docs/independence/README.md");
+        assert_eq!(value["evidence"][0]["kind"], "ui_contract");
         assert_eq!(value["diagnostics"][0]["level"], "INFO");
         assert!(value["error"].is_null());
     }

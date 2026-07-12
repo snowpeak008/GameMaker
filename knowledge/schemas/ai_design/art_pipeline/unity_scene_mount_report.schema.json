@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity Scene Mount Report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "scene_path", "visible_content_verified", "source_refs", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "scene_path": {"type": "string"},
+    "visible_content_verified": {"type": "boolean"},
+    "mount_item_count": {"type": "integer"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

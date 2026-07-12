@@ -1,0 +1,461 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "launch_readiness_design",
+    "name": "上线准备设计",
+    "description": "确认上线版本、节奏、活动、反馈、玩家支持、上线后承接和准入复核。"
+  },
+  "nodes": [
+    {
+      "id": "launch_version_decision",
+      "name": "上线版本决策",
+      "description": "确认首发体验、内容、商业化、留存路径和风险清单。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "launch_rhythm_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "shou_fa_ti_yan_bi_huan",
+          "label": "首发体验闭环",
+          "description": "明确首发体验闭环在上线版本中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouFaTiYanBiHuan",
+          "legacyIds": [
+            "launch_version_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_nei_rong_wan_zheng_du",
+          "label": "首发内容完整度",
+          "description": "明确首发内容完整度在上线版本中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouFaNeiRongWanZhengDu",
+          "legacyIds": [
+            "launch_version_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_shang_ye_hua_wan_zheng_du",
+          "label": "首发商业化完整度",
+          "description": "明确首发商业化完整度在上线版本中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouFaShangYeHuaWanZhengDu",
+          "legacyIds": [
+            "launch_version_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_liu_cun_lu_jing",
+          "label": "首发留存路径",
+          "description": "描述首发留存路径从入口到结果的关键步骤、分支和中断点。",
+          "outputKey": "shouFaLiuCunLuJing",
+          "legacyIds": [
+            "launch_version_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_feng_xian_qing_dan",
+          "label": "首发风险清单",
+          "description": "明确首发风险清单在上线版本中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouFaFengXianQingDan",
+          "legacyIds": [
+            "launch_version_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_rhythm_decision",
+      "name": "上线节奏决策",
+      "description": "确认预热、开服、首日、首周和首月节奏。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_version_decision"
+      ],
+      "unlocks": [
+        "launch_activity_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "yu_re_jie_duan",
+          "label": "预热阶段",
+          "description": "定义预热阶段的起止条件、核心任务和玩家预期。",
+          "outputKey": "yuReJieDuan",
+          "legacyIds": [
+            "launch_rhythm_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "kai_fu_jie_duan",
+          "label": "开服阶段",
+          "description": "定义开服阶段的起止条件、核心任务和玩家预期。",
+          "outputKey": "kaiFuJieDuan",
+          "legacyIds": [
+            "launch_rhythm_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_ri_jie_duan",
+          "label": "首日阶段",
+          "description": "定义首日阶段的起止条件、核心任务和玩家预期。",
+          "outputKey": "shouRiJieDuan",
+          "legacyIds": [
+            "launch_rhythm_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_zhou_jie_duan",
+          "label": "首周阶段",
+          "description": "定义首周阶段的起止条件、核心任务和玩家预期。",
+          "outputKey": "shouZhouJieDuan",
+          "legacyIds": [
+            "launch_rhythm_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_yue_jie_duan",
+          "label": "首月阶段",
+          "description": "定义首月阶段的起止条件、核心任务和玩家预期。",
+          "outputKey": "shouYueJieDuan",
+          "legacyIds": [
+            "launch_rhythm_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_activity_decision",
+      "name": "上线活动决策",
+      "description": "确认登录、新手、成长、付费和社交活动。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_rhythm_decision"
+      ],
+      "unlocks": [
+        "launch_feedback_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "deng_lu_huo_dong",
+          "label": "登录活动",
+          "description": "说明登录活动的参与目标、奖励承接和结束处理。",
+          "outputKey": "dengLuHuoDong",
+          "legacyIds": [
+            "launch_activity_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "xin_shou_huo_dong",
+          "label": "新手活动",
+          "description": "说明新手活动的参与目标、奖励承接和结束处理。",
+          "outputKey": "xinShouHuoDong",
+          "legacyIds": [
+            "launch_activity_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "cheng_zhang_huo_dong",
+          "label": "成长活动",
+          "description": "说明成长活动的参与目标、奖励承接和结束处理。",
+          "outputKey": "chengZhangHuoDong",
+          "legacyIds": [
+            "launch_activity_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_huo_dong",
+          "label": "付费活动",
+          "description": "说明付费活动的参与目标、奖励承接和结束处理。",
+          "outputKey": "fuFeiHuoDong",
+          "legacyIds": [
+            "launch_activity_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "she_jiao_huo_dong",
+          "label": "社交活动",
+          "description": "说明社交活动的参与目标、奖励承接和结束处理。",
+          "outputKey": "sheJiaoHuoDong",
+          "legacyIds": [
+            "launch_activity_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_feedback_decision",
+      "name": "上线反馈决策",
+      "description": "确认问题分级、反馈入口、补偿规则、公告口径和快速调整边界。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_rhythm_decision"
+      ],
+      "unlocks": [
+        "launch_player_support_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "wen_ti_fen_ji",
+          "label": "问题分级",
+          "description": "明确问题分级在上线反馈中的具体含义、适用范围和验收判断。",
+          "outputKey": "wenTiFenJi",
+          "legacyIds": [
+            "launch_feedback_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "wan_jia_fan_kui_ru_kou",
+          "label": "玩家反馈入口",
+          "description": "明确玩家反馈入口出现的位置、触发方式和进入成本。",
+          "outputKey": "wanJiaFanKuiRuKou",
+          "legacyIds": [
+            "launch_feedback_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "bu_chang_gui_ze",
+          "label": "补偿规则",
+          "description": "定义补偿规则的触发条件、限制条件和处理结果。",
+          "outputKey": "buChangGuiZe",
+          "legacyIds": [
+            "launch_feedback_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "gong_gao_kou_jing",
+          "label": "公告口径",
+          "description": "统一公告口径在设计、运营和对外沟通中的说法。",
+          "outputKey": "gongGaoKouJing",
+          "legacyIds": [
+            "launch_feedback_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "kuai_su_tiao_zheng_bian_jie",
+          "label": "快速调整边界",
+          "description": "划定快速调整边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "kuaiSuTiaoZhengBianJie",
+          "legacyIds": [
+            "launch_feedback_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_player_support_decision",
+      "name": "玩家支持体验决策",
+      "description": "确认 FAQ、客服入口、处理预期、补偿申诉和负反馈安抚口径。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_feedback_decision"
+      ],
+      "unlocks": [
+        "launch_post_launch_followup_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "chang_jian_wen_ti_jie_gou",
+          "label": "常见问题结构",
+          "description": "说明常见问题结构由哪些部分组成，以及它们之间的层级关系。",
+          "outputKey": "changJianWenTiJieGou",
+          "legacyIds": [
+            "launch_player_support_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "ke_fu_ru_kou_biao_da",
+          "label": "客服入口表达",
+          "description": "确定客服入口表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "keFuRuKouBiaoDa",
+          "legacyIds": [
+            "launch_player_support_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "wen_ti_chu_li_yu_qi",
+          "label": "问题处理预期",
+          "description": "明确问题处理预期在玩家支持体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "wenTiChuLiYuQi",
+          "legacyIds": [
+            "launch_player_support_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "bu_chang_yu_shen_su_bian_jie",
+          "label": "补偿与申诉边界",
+          "description": "划定补偿与申诉边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "buChangYuShenSuBianJie",
+          "legacyIds": [
+            "launch_player_support_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "fu_fan_kui_an_fu_kou_jing",
+          "label": "负反馈安抚口径",
+          "description": "统一负反馈安抚口径在设计、运营和对外沟通中的说法。",
+          "outputKey": "fuFanKuiAnFuKouJing",
+          "legacyIds": [
+            "launch_player_support_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_post_launch_followup_decision",
+      "name": "上线后承接决策",
+      "description": "确认第一版本、第一活动、第一赛季、首批平衡调整和长期内容预告。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_feedback_decision"
+      ],
+      "unlocks": [
+        "launch_readiness_review_decision"
+      ],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "di_yi_ban_ben_cheng_jie",
+          "label": "第一版本承接",
+          "description": "明确第一版本承接在上线后承接中的具体含义、适用范围和验收判断。",
+          "outputKey": "diYiBanBenChengJie",
+          "legacyIds": [
+            "launch_post_launch_followup_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "di_yi_huo_dong_cheng_jie",
+          "label": "第一活动承接",
+          "description": "明确第一活动承接在上线后承接中的具体含义、适用范围和验收判断。",
+          "outputKey": "diYiHuoDongChengJie",
+          "legacyIds": [
+            "launch_post_launch_followup_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "di_yi_sai_ji_cheng_jie",
+          "label": "第一赛季承接",
+          "description": "明确第一赛季承接在上线后承接中的具体含义、适用范围和验收判断。",
+          "outputKey": "diYiSaiJiChengJie",
+          "legacyIds": [
+            "launch_post_launch_followup_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shou_pi_ping_heng_tiao_zheng",
+          "label": "首批平衡调整",
+          "description": "明确首批平衡调整在上线后承接中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouPiPingHengTiaoZheng",
+          "legacyIds": [
+            "launch_post_launch_followup_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "chang_qi_nei_rong_yu_gao",
+          "label": "长期内容预告",
+          "description": "明确长期内容预告在上线后承接中的具体含义、适用范围和验收判断。",
+          "outputKey": "changQiNeiRongYuGao",
+          "legacyIds": [
+            "launch_post_launch_followup_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "launch_readiness_review_decision",
+      "name": "上线准入复核决策",
+      "description": "汇总所有领域覆盖率、未完成项、条件不适用项和上线风险。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "launch_version_decision"
+      ],
+      "unlocks": [],
+      "domain": "launch_readiness_design",
+      "checklist": [
+        {
+          "id": "quan_ling_yu_fu_gai_fu_he",
+          "label": "全领域覆盖复核",
+          "description": "检查全领域覆盖复核是否满足上线、协作或风险控制要求。",
+          "outputKey": "quanLingYuFuGaiFuHe",
+          "legacyIds": [
+            "launch_readiness_review_decision_item_1"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "wei_wan_cheng_xiang_fu_he",
+          "label": "未完成项复核",
+          "description": "检查未完成项复核是否满足上线、协作或风险控制要求。",
+          "outputKey": "weiWanChengXiangFuHe",
+          "legacyIds": [
+            "launch_readiness_review_decision_item_2"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "bu_shi_yong_yuan_yin_fu_he",
+          "label": "不适用原因复核",
+          "description": "检查不适用原因复核是否满足上线、协作或风险控制要求。",
+          "outputKey": "buShiYongYuanYinFuHe",
+          "legacyIds": [
+            "launch_readiness_review_decision_item_3"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "gao_feng_xian_jie_dian_fu_he",
+          "label": "高风险节点复核",
+          "description": "检查高风险节点复核是否满足上线、协作或风险控制要求。",
+          "outputKey": "gaoFengXianJieDianFuHe",
+          "legacyIds": [
+            "launch_readiness_review_decision_item_4"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        },
+        {
+          "id": "shang_xian_zhun_ru_jie_lun",
+          "label": "上线准入结论",
+          "description": "明确上线准入结论在上线准入复核中的具体含义、适用范围和验收判断。",
+          "outputKey": "shangXianZhunRuJieLun",
+          "legacyIds": [
+            "launch_readiness_review_decision_item_5"
+          ],
+          "templateRef": "shared_launch_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

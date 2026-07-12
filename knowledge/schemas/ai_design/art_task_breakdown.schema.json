@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "art_task_breakdown.schema.json",
+  "title": "Art Task Breakdown",
+  "type": "object",
+  "required": ["tasks"],
+  "properties": {
+    "schema_version": {"type": ["string", "integer"]},
+    "project_signature": {"type": "string"},
+    "source_contracts": {"type": "array", "items": {"type": "string"}},
+    "tasks": {"type": "array", "items": {"type": "object"}},
+    "asset_groups": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

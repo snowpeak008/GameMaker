@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Art Production Task Contract",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "tasks"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "asset_id", "unity_target_path", "dimensions", "consumer_system", "mount_point", "acceptance"],
+        "properties": {
+          "task_id": {"type": "string"},
+          "asset_id": {"type": "string"},
+          "unity_target_path": {"type": "string"},
+          "dimensions": {"type": "object"},
+          "consumer_system": {"type": "string"},
+          "mount_point": {"type": "string"},
+          "acceptance": {"type": "string"},
+          "generation_prompt": {"type": "string"},
+          "negative_prompt": {"type": "string"},
+          "semantic_policy": {"type": "object"},
+          "slice_spec_ref": {"type": "string"},
+          "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+          "rework_policy": {"type": "object"},
+          "source_semantics": {"type": "array", "items": {"type": "string"}},
+          "design_requirement_refs": {"type": "array", "items": {"type": "string"}},
+          "consumer_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"},
+    "project_signature": {"type": "string"},
+    "source_project_dna": {"type": "string"},
+    "detected_archetype": {"type": "string"},
+    "semantic_coverage_refs": {"type": "array", "items": {"type": "string"}},
+    "customization_targets": {"type": "array", "items": {"type": "object"}}
+  }
+}

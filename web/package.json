@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22 <25",
+    "npm": ">=10 <12"
+  },
   "scripts": {
     "build": "node scripts/generate-design-content.mjs --check && node scripts/build.mjs",
     "design-content": "node scripts/generate-design-content.mjs",

@@ -9,6 +9,7 @@ license.workspace = true
 adm-new-foundation = { path = "../adm-new-foundation" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.9"
 
 [lib]
 path = "src/lib.rs"

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "archetype_detection_report.schema.json",
+  "title": "Archetype Detection Report",
+  "type": "object",
+  "required": ["schema_version", "detected_archetype", "confidence", "signals"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "detected_archetype": {"type": "string"},
+    "parent_archetypes": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "number"},
+    "signals": {"type": "array", "items": {"type": "object"}},
+    "fallback_used": {"type": "boolean"},
+    "warnings": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

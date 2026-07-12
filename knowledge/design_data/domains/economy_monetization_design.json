@@ -1,0 +1,527 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "economy_monetization_design",
+    "name": "经济与商业化设计",
+    "description": "确认经济循环、货币、奖励、付费点、商品、价格、公平性和经济安全。"
+  },
+  "nodes": [
+    {
+      "id": "economy_loop_decision",
+      "name": "经济循环决策",
+      "description": "确认资源产出、消耗、储备、转换和通胀控制。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "currency_system_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "zi_yuan_chan_chu",
+          "label": "资源产出",
+          "description": "明确资源产出在经济循环中的具体含义、适用范围和验收判断。",
+          "outputKey": "ziYuanChanChu",
+          "legacyIds": [
+            "economy_loop_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "zi_yuan_xiao_hao",
+          "label": "资源消耗",
+          "description": "明确资源消耗在经济循环中的具体含义、适用范围和验收判断。",
+          "outputKey": "ziYuanXiaoHao",
+          "legacyIds": [
+            "economy_loop_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "zi_yuan_chu_bei",
+          "label": "资源储备",
+          "description": "明确资源储备在经济循环中的具体含义、适用范围和验收判断。",
+          "outputKey": "ziYuanChuBei",
+          "legacyIds": [
+            "economy_loop_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "zi_yuan_zhuan_huan",
+          "label": "资源转换",
+          "description": "明确资源转换在经济循环中的具体含义、适用范围和验收判断。",
+          "outputKey": "ziYuanZhuanHuan",
+          "legacyIds": [
+            "economy_loop_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "zi_yuan_tong_zhang_kong_zhi",
+          "label": "资源通胀控制",
+          "description": "明确资源通胀控制需要限制的对象、阈值和调整手段。",
+          "outputKey": "ziYuanTongZhangKongZhi",
+          "legacyIds": [
+            "economy_loop_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "currency_system_decision",
+      "name": "货币体系决策",
+      "description": "确认基础、稀有、付费、限时货币及兑换关系。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "economy_loop_decision"
+      ],
+      "unlocks": [
+        "reward_distribution_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "ji_chu_huo_bi",
+          "label": "基础货币",
+          "description": "定义基础货币的产出、消耗、兑换和玩家感知价值。",
+          "outputKey": "jiChuHuoBi",
+          "legacyIds": [
+            "currency_system_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xi_you_huo_bi",
+          "label": "稀有货币",
+          "description": "定义稀有货币的产出、消耗、兑换和玩家感知价值。",
+          "outputKey": "xiYouHuoBi",
+          "legacyIds": [
+            "currency_system_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_huo_bi",
+          "label": "付费货币",
+          "description": "定义付费货币的产出、消耗、兑换和玩家感知价值。",
+          "outputKey": "fuFeiHuoBi",
+          "legacyIds": [
+            "currency_system_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xian_shi_huo_bi",
+          "label": "限时货币",
+          "description": "定义限时货币的产出、消耗、兑换和玩家感知价值。",
+          "outputKey": "xianShiHuoBi",
+          "legacyIds": [
+            "currency_system_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "huo_bi_dui_huan_guan_xi",
+          "label": "货币兑换关系",
+          "description": "明确货币兑换关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "huoBiDuiHuanGuanXi",
+          "legacyIds": [
+            "currency_system_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "reward_distribution_decision",
+      "name": "奖励投放决策",
+      "description": "确认日常、阶段、成就、活动和补偿奖励投放。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "currency_system_decision"
+      ],
+      "unlocks": [
+        "payment_point_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "ri_chang_jiang_li",
+          "label": "日常奖励",
+          "description": "定义日常奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "riChangJiangLi",
+          "legacyIds": [
+            "reward_distribution_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "jie_duan_jiang_li",
+          "label": "阶段奖励",
+          "description": "定义阶段奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "jieDuanJiangLi",
+          "legacyIds": [
+            "reward_distribution_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "cheng_jiu_jiang_li",
+          "label": "成就奖励",
+          "description": "定义成就奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "chengJiuJiangLi",
+          "legacyIds": [
+            "reward_distribution_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_jiang_li",
+          "label": "活动奖励",
+          "description": "定义活动奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "huoDongJiangLi",
+          "legacyIds": [
+            "reward_distribution_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "bu_chang_jiang_li",
+          "label": "补偿奖励",
+          "description": "定义补偿奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "buChangJiangLi",
+          "legacyIds": [
+            "reward_distribution_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "payment_point_decision",
+      "name": "付费点决策",
+      "description": "确认便利、外观、内容、成长和订阅付费是否进入设计。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "economy_loop_decision"
+      ],
+      "unlocks": [
+        "product_structure_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "bian_li_xing_fu_fei",
+          "label": "便利性付费",
+          "description": "明确便利性付费的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "bianLiXingFuFei",
+          "legacyIds": [
+            "payment_point_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "wai_guan_fu_fei",
+          "label": "外观付费",
+          "description": "明确外观付费的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "waiGuanFuFei",
+          "legacyIds": [
+            "payment_point_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_fu_fei",
+          "label": "内容付费",
+          "description": "明确内容付费的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "neiRongFuFei",
+          "legacyIds": [
+            "payment_point_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "cheng_zhang_fu_fei",
+          "label": "成长付费",
+          "description": "明确成长付费的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "chengZhangFuFei",
+          "legacyIds": [
+            "payment_point_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "ding_yue_fu_fei",
+          "label": "订阅付费",
+          "description": "明确订阅付费的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "dingYueFuFei",
+          "legacyIds": [
+            "payment_point_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "product_structure_decision",
+      "name": "商品结构决策",
+      "description": "确认单品、礼包、限时、分层和新手商品结构。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "payment_point_decision"
+      ],
+      "unlocks": [
+        "pricing_value_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "dan_pin_shang_pin",
+          "label": "单品商品",
+          "description": "说明单品商品的售卖对象、价值构成和展示方式。",
+          "outputKey": "danPinShangPin",
+          "legacyIds": [
+            "product_structure_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "li_bao_shang_pin",
+          "label": "礼包商品",
+          "description": "说明礼包商品的售卖对象、价值构成和展示方式。",
+          "outputKey": "liBaoShangPin",
+          "legacyIds": [
+            "product_structure_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xian_shi_shang_pin",
+          "label": "限时商品",
+          "description": "说明限时商品的售卖对象、价值构成和展示方式。",
+          "outputKey": "xianShiShangPin",
+          "legacyIds": [
+            "product_structure_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "fen_ceng_shang_pin",
+          "label": "分层商品",
+          "description": "说明分层商品的售卖对象、价值构成和展示方式。",
+          "outputKey": "fenCengShangPin",
+          "legacyIds": [
+            "product_structure_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xin_shou_shang_pin",
+          "label": "新手商品",
+          "description": "说明新手商品的售卖对象、价值构成和展示方式。",
+          "outputKey": "xinShouShangPin",
+          "legacyIds": [
+            "product_structure_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "pricing_value_decision",
+      "name": "价格与价值决策",
+      "description": "确认价格梯度、价值锚点、折扣、性价比和付费预期。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "product_structure_decision"
+      ],
+      "unlocks": [
+        "payment_fairness_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "jia_ge_ti_du",
+          "label": "价格梯度",
+          "description": "明确价格梯度在价格与价值中的具体含义、适用范围和验收判断。",
+          "outputKey": "jiaGeTiDu",
+          "legacyIds": [
+            "pricing_value_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "jia_zhi_mao_dian",
+          "label": "价值锚点",
+          "description": "明确价值锚点在价格与价值中的具体含义、适用范围和验收判断。",
+          "outputKey": "jiaZhiMaoDian",
+          "legacyIds": [
+            "pricing_value_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "zhe_kou_gui_ze",
+          "label": "折扣规则",
+          "description": "定义折扣规则的触发条件、限制条件和处理结果。",
+          "outputKey": "zheKouGuiZe",
+          "legacyIds": [
+            "pricing_value_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xing_jia_bi_ceng_ji",
+          "label": "性价比层级",
+          "description": "定义性价比层级的上下级关系、展示顺序和访问成本。",
+          "outputKey": "xingJiaBiCengJi",
+          "legacyIds": [
+            "pricing_value_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_yu_qi_guan_li",
+          "label": "付费预期管理",
+          "description": "明确付费预期管理的记录、审批、同步和回滚方式。",
+          "outputKey": "fuFeiYuQiGuanLi",
+          "legacyIds": [
+            "pricing_value_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "payment_fairness_decision",
+      "name": "付费公平性决策",
+      "description": "确认免费可达性、付费优势、竞争公平、未成年人保护和诱导控制。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "pricing_value_decision"
+      ],
+      "unlocks": [
+        "economy_security_dispute_decision"
+      ],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "fei_fu_fei_ke_da_xing",
+          "label": "非付费可达性",
+          "description": "明确非付费可达性的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "feiFuFeiKeDaXing",
+          "legacyIds": [
+            "payment_fairness_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_you_shi_bian_jie",
+          "label": "付费优势边界",
+          "description": "划定付费优势边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "fuFeiYouShiBianJie",
+          "legacyIds": [
+            "payment_fairness_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "jing_zheng_gong_ping_bian_jie",
+          "label": "竞争公平边界",
+          "description": "划定竞争公平边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "jingZhengGongPingBianJie",
+          "legacyIds": [
+            "payment_fairness_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "wei_cheng_nian_ren_bao_hu_bian_jie",
+          "label": "未成年人保护边界",
+          "description": "划定未成年人保护边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "weiChengNianRenBaoHuBianJie",
+          "legacyIds": [
+            "payment_fairness_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "you_dao_xing_kong_zhi",
+          "label": "诱导性控制",
+          "description": "明确诱导性控制需要限制的对象、阈值和调整手段。",
+          "outputKey": "youDaoXingKongZhi",
+          "legacyIds": [
+            "payment_fairness_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "economy_security_dispute_decision",
+      "name": "经济安全与争议控制决策",
+      "description": "确认奖励滥用、交易争议、退款补偿、稀有价值争议和异常处理口径。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "economy_loop_decision",
+        "payment_fairness_decision"
+      ],
+      "unlocks": [],
+      "domain": "economy_monetization_design",
+      "checklist": [
+        {
+          "id": "jiang_li_lan_yong_feng_xian",
+          "label": "奖励滥用风险",
+          "description": "识别奖励滥用风险可能引发的问题、影响范围和预防措施。",
+          "outputKey": "jiangLiLanYongFengXian",
+          "legacyIds": [
+            "economy_security_dispute_decision_item_1"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "jiao_yi_zheng_yi_feng_xian",
+          "label": "交易争议风险",
+          "description": "识别交易争议风险可能引发的问题、影响范围和预防措施。",
+          "outputKey": "jiaoYiZhengYiFengXian",
+          "legacyIds": [
+            "economy_security_dispute_decision_item_2"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "tui_kuan_yu_bu_chang_bian_jie",
+          "label": "退款与补偿边界",
+          "description": "划定退款与补偿边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "tuiKuanYuBuChangBianJie",
+          "legacyIds": [
+            "economy_security_dispute_decision_item_3"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "xi_you_jia_zhi_zheng_yi",
+          "label": "稀有价值争议",
+          "description": "预判稀有价值争议可能导致的玩家分歧、证据口径和处理方式。",
+          "outputKey": "xiYouJiaZhiZhengYi",
+          "legacyIds": [
+            "economy_security_dispute_decision_item_4"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        },
+        {
+          "id": "jing_ji_yi_chang_chu_li_kou_jing",
+          "label": "经济异常处理口径",
+          "description": "统一经济异常处理口径在设计、运营和对外沟通中的说法。",
+          "outputKey": "jingJiYiChangChuLiKouJing",
+          "legacyIds": [
+            "economy_security_dispute_decision_item_5"
+          ],
+          "templateRef": "shared_economy_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

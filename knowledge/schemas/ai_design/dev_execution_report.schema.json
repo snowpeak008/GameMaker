@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dev_execution_report.schema.json",
+  "title": "Development Execution Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "execution_records",
+    "verified_execution_objects",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "execution_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "execution_object_id", "state", "source_refs"],
+        "properties": {
+          "task_id": {
+            "type": ["string", "null"]
+          },
+          "execution_object_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "verified_execution_objects": {
+      "type": "array",
+      "items": {
+        "type": ["string", "null"]
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

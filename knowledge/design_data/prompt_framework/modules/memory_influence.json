@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "memory_influence",
+  "moduleVersion": "1",
+  "title": "记忆影响",
+  "order": 9,
+  "dependencies": [
+    "questioning",
+    "confidence"
+  ],
+  "rules": [
+    {
+      "id": "hidden_memory",
+      "text": "记忆影响必须完全隐式，不得向用户说明正在验证历史记忆、暂存信号或提示词框架版本。"
+    },
+    {
+      "id": "staged_signal_low_weight",
+      "text": "暂存信号只能低权重影响澄清问题或保守映射，不能直接决定选项、提高置信度或替用户回答。"
+    }
+  ],
+  "validationConstraints": {
+    "forbidDesignOptionChanges": true,
+    "forbidBackendParameterChanges": true,
+    "maxDirectDependencies": 2,
+    "maxDependencyDepth": 2
+  }
+}

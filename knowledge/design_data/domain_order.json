@@ -1,0 +1,20 @@
+{
+  "domainOrder": [
+    "product_positioning_design",
+    "core_experience_design",
+    "gameplay_system_design",
+    "content_design",
+    "economy_monetization_design",
+    "ux_interface_design",
+    "presentation_feel_design",
+    "balance_design",
+    "social_community_design",
+    "retention_lifecycle_design",
+    "liveops_version_design",
+    "data_validation_design",
+    "compliance_risk_design",
+    "documentation_collaboration_design",
+    "release_growth_design",
+    "launch_readiness_design"
+  ]
+}

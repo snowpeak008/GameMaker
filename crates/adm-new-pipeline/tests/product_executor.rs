@@ -1,16 +1,15 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use adm_new_contracts::project::ProjectState;
-use adm_new_foundation::new_stable_id;
+use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
 use adm_new_pipeline::ProductPipelineExecutor;
 
 #[test]
 fn explicit_design_data_dir_works_with_a_separate_persistent_root() {
     let root = temp_root("product_pipeline_explicit_data");
-    let design_data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .join("knowledge/design_data");
+    let source_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let design_data_dir = source_root.join("knowledge/design_data").unwrap();
     assert!(design_data_dir.join("domains").is_dir());
 
     let executor =

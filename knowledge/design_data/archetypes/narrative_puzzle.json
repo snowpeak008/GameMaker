@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "archetype_id": "narrative_puzzle",
+  "parent_archetypes": ["narrative", "management"],
+  "keywords": [
+    "papers please",
+    "papers, please",
+    "document inspection",
+    "passport",
+    "checkpoint",
+    "rule escalation",
+    "moral pressure",
+    "family economy",
+    "daily audit",
+    "证件",
+    "文书",
+    "审核",
+    "检查站",
+    "规则递增",
+    "道德压力",
+    "家庭经济"
+  ],
+  "detection_rules": [
+    {"signal": "keyword", "text": "document inspection", "min_count": 1, "weight": 2},
+    {"signal": "keyword", "text": "passport", "min_count": 1, "weight": 1},
+    {"signal": "keyword", "text": "证件", "min_count": 1, "weight": 1},
+    {"signal": "keyword", "text": "规则递增", "min_count": 1, "weight": 1},
+    {"signal": "gameplay_system", "key": "input_control", "min_weight": 0.1, "weight": 0.5},
+    {"signal": "gameplay_system", "key": "resource_economy", "min_weight": 0.1, "weight": 0.5}
+  ],
+  "requirement_nodes": {
+    "p0": [
+      "core_loop_decision",
+      "input_control_decision",
+      "objective_system_decision",
+      "ux_flow_decision",
+      "hud_feedback_decision",
+      "data_test_design_decision"
+    ],
+    "p1": [
+      "narrative_content_decision",
+      "retention_mid_long_goal_decision",
+      "art_direction_decision"
+    ]
+  },
+  "required_systems": [
+    {"system_id": "document_inspection_system", "description": "玩家检查多项文本/图像字段并做出准入判断。"},
+    {"system_id": "rulebook_system", "description": "每日或阶段规则递增，驱动检查标准变化。"},
+    {"system_id": "case_resolution_system", "description": "对每个对象给出批准、拒绝或特殊处理。"},
+    {"system_id": "consequence_system", "description": "错误、道德选择和资源压力反馈到后续状态。"}
+  ],
+  "required_entities": [
+    {"entity_id": "applicant", "role": "case_subject"},
+    {"entity_id": "document", "role": "inspectable_evidence"},
+    {"entity_id": "rule", "role": "validation_constraint"},
+    {"entity_id": "case_result", "role": "player_decision_outcome"}
+  ],
+  "required_player_actions": [
+    {"action_id": "inspect_document", "state_change": "focused_evidence_changes"},
+    {"action_id": "compare_fields", "state_change": "detected_discrepancies_changes"},
+    {"action_id": "approve_or_deny", "state_change": "case_result_changes"}
+  ],
+  "required_resources": [
+    {"resource_id": "time_remaining", "example": "workday time"},
+    {"resource_id": "family_budget", "example": "daily income and expenses"}
+  ],
+  "required_objectives": [
+    {"objective_id": "process_cases", "completion_condition": "workday_ends", "failure_condition": "critical_budget_or_rule_failure"}
+  ],
+  "minimum_playable_assets": [
+    {"asset_role": "document_panel", "consumer": "document_inspection_system"},
+    {"asset_role": "stamp_or_decision_button", "consumer": "case_resolution_system"},
+    {"asset_role": "applicant_portrait", "consumer": "case_subject_display"},
+    {"asset_role": "rulebook_panel", "consumer": "rulebook_system"}
+  ],
+  "style_compatibility": {
+    "required_readability": ["document_text_legibility", "field_comparison_clarity", "decision_feedback_visibility"]
+  },
+  "open_questions": [
+    {"question_id": "first_day_rule_count", "prompt": "第一版每天需要多少条检查规则？"},
+    {"question_id": "consequence_scope", "prompt": "错误判定只影响分数，还是影响剧情/资源？"}
+  ],
+  "program_task_templates": [
+    {"task_id": "DocumentInspectionController", "capability": "document focus and field comparison"},
+    {"task_id": "RulebookManager", "capability": "daily rule activation"},
+    {"task_id": "CaseResolutionController", "capability": "approve/deny flow and consequence recording"}
+  ],
+  "acceptance_scenarios": [
+    {"scenario_id": "inspect_and_resolve_case", "expected": "player can compare a document to active rules and submit a decision with visible consequence"}
+  ]
+}

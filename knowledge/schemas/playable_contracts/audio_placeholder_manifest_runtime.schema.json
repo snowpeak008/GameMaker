@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audio_placeholder_manifest_runtime.schema.json",
+  "title": "Audio Placeholder Runtime Manifest",
+  "type": "object",
+  "required": ["schema_version", "placeholder_files"],
+  "properties": {
+    "schema_version": {"type": "integer"},
+    "placeholder_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "status", "source_refs", "target_path", "produced_file"]
+      }
+    }
+  }
+}

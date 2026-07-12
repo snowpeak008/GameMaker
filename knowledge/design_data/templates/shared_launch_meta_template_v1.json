@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_launch_meta_template_v1",
+  "name": "Shared launch readiness meta template v1",
+  "description": "Shared launch meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "launch_experience",
+      "label": "上线体验",
+      "description": "上线准备先保障首批玩家能顺利进入、理解和反馈。这一层把“首发体验闭环”推进到体验目标。",
+      "outputKey": "launchExperience",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "launch_plan_to_player_experience",
+      "designQuestion": "这个上线项要保护首批玩家的哪种体验？",
+      "options": [
+        {
+          "id": "launch_loop_closed",
+          "label": "首发闭环",
+          "description": "首发版本能完整兑现核心循环。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "launchLoopClosed"
+        },
+        {
+          "id": "server_stable",
+          "label": "开服稳定",
+          "description": "玩家能稳定进入和游玩。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "serverStable"
+        },
+        {
+          "id": "onboarding_smooth",
+          "label": "新手顺畅",
+          "description": "新玩家能完成早期路径。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "onboardingSmooth"
+        },
+        {
+          "id": "feedback_reachable",
+          "label": "反馈可达",
+          "description": "玩家遇到问题能找到反馈入口。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "feedbackReachable"
+        },
+        {
+          "id": "followup_clear",
+          "label": "承接明确",
+          "description": "玩家知道上线后还有什么内容和活动。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "followupClear"
+        }
+      ]
+    },
+    {
+      "id": "launch_first_cohort_dynamic",
+      "label": "首批动态",
+      "description": "把上线体验转成进入首局、新手完成、活动参与和反馈动态。这一层把“首发体验闭环”推进到玩家动态。",
+      "outputKey": "launchFirstCohortDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "launch_experience_to_first_cohort",
+      "designQuestion": "首批玩家上线后会怎样行动？",
+      "options": [
+        {
+          "id": "enter_first_session",
+          "label": "进入首局",
+          "description": "玩家能从下载进入首个核心体验。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "enterFirstSession"
+        },
+        {
+          "id": "finish_onboarding",
+          "label": "完成新手",
+          "description": "玩家能通过新手期并理解核心目标。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "finishOnboarding"
+        },
+        {
+          "id": "join_activity",
+          "label": "参与活动",
+          "description": "玩家能接触并理解首发活动。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "joinActivity"
+        },
+        {
+          "id": "submit_feedback",
+          "label": "提交反馈",
+          "description": "遇到问题时能提交反馈或工单。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "submitFeedback"
+        },
+        {
+          "id": "next_day_return",
+          "label": "次日回访",
+          "description": "首批玩家有次日回来的理由。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "nextDayReturn"
+        }
+      ]
+    },
+    {
+      "id": "launch_followup_mechanic",
+      "label": "承接机制",
+      "description": "把首批动态落到版本清单、开服活动、客服、补偿和修正机制。这一层把“首发体验闭环”推进到机制抓手。",
+      "outputKey": "launchFollowupMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "first_cohort_to_followup",
+      "designQuestion": "用什么机制承接首批玩家？",
+      "options": [
+        {
+          "id": "version_checklist",
+          "label": "版本清单",
+          "description": "确认首发内容、商业化和风险项完整。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "versionChecklist"
+        },
+        {
+          "id": "launch_activity",
+          "label": "开服活动",
+          "description": "用登录、新手、成长或社交活动承接。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "launchActivity"
+        },
+        {
+          "id": "support_entry",
+          "label": "客服入口",
+          "description": "提供问题、申诉和帮助入口。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "supportEntry"
+        },
+        {
+          "id": "compensation_rule",
+          "label": "补偿规则",
+          "description": "定义异常、维护和争议补偿。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "compensationRule"
+        },
+        {
+          "id": "hotfix_rule",
+          "label": "快速修正",
+          "description": "定义快速调整、热更或临时关闭机制。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "hotfixRule"
+        }
+      ]
+    },
+    {
+      "id": "launch_emergency_boundary",
+      "label": "应急边界",
+      "description": "上线必须明确阻断问题、数据异常、付费争议和回滚条件。这一层把“首发体验闭环”推进到边界约束。",
+      "outputKey": "launchEmergencyBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "followup_to_emergency_boundary",
+      "designQuestion": "哪些问题会阻断上线或触发应急？",
+      "options": [
+        {
+          "id": "blocking_bug",
+          "label": "阻断问题",
+          "description": "核心流程无法完成或严重崩溃。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "blockingBug"
+        },
+        {
+          "id": "data_anomaly",
+          "label": "数据异常",
+          "description": "留存、付费、资源或崩溃指标异常。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "dataAnomaly"
+        },
+        {
+          "id": "payment_dispute",
+          "label": "付费争议",
+          "description": "付费权益、价格或退款出现争议。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "paymentDispute"
+        },
+        {
+          "id": "sentiment_escalation",
+          "label": "舆情升级",
+          "description": "负面反馈扩散并影响信任。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "sentimentEscalation"
+        },
+        {
+          "id": "rollback_condition",
+          "label": "回滚条件",
+          "description": "达到必须撤回、关闭或降级的条件。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "rollbackCondition"
+        }
+      ]
+    },
+    {
+      "id": "launch_signal",
+      "label": "上线信号",
+      "description": "用稳定性、新手、工单、活动和准入复核验证上线准备。这一层把“首发体验闭环”推进到验收信号。",
+      "outputKey": "launchSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "emergency_boundary_to_launch_signal",
+      "designQuestion": "怎样判断这个上线项通过准入？",
+      "options": [
+        {
+          "id": "crash_rate",
+          "label": "崩溃率",
+          "description": "崩溃和阻断问题处于准入范围。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "crashRate"
+        },
+        {
+          "id": "first_day_completion",
+          "label": "首日完成率",
+          "description": "新手和首日核心路径完成率健康。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "firstDayCompletion"
+        },
+        {
+          "id": "ticket_volume",
+          "label": "工单量",
+          "description": "客服、反馈和申诉数量可承接。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "ticketVolume"
+        },
+        {
+          "id": "activity_participation",
+          "label": "活动参与",
+          "description": "首发活动被理解并参与。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "activityParticipation"
+        },
+        {
+          "id": "gate_review",
+          "label": "准入复核",
+          "description": "高风险项和未完成项经过复核。用于推进“首发体验闭环”的具体判断。",
+          "outputKey": "gateReview"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_launch_experience_launch_loop_closed_vs_followup_clear",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "launch_experience",
+        "optionId": "launch_loop_closed"
+      },
+      "targets": [
+        {
+          "groupId": "launch_experience",
+          "optionId": "followup_clear"
+        }
+      ],
+      "reason": "首发闭环强调当前完成度，后续承接强调未来计划，需要避免首发承诺被未来内容稀释。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_launch_experience_server_stable_vs_launch_loop_closed",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "launch_experience",
+        "optionId": "server_stable"
+      },
+      "targets": [
+        {
+          "groupId": "launch_experience",
+          "optionId": "launch_loop_closed"
+        }
+      ],
+      "reason": "稳定性和体验完整度同时有风险时，上线准入需要先保护稳定性。",
+      "severity": "warning"
+    }
+  ]
+}

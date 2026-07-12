@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "archetype_requirements.schema.json",
+  "title": "Archetype Requirements",
+  "type": "object",
+  "required": ["schema_version", "detected_archetype", "required_contracts"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "detected_archetype": {"type": "string"},
+    "detection_confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "fallback"]
+    },
+    "detection_source": {"type": "array", "items": {"type": "string"}},
+    "required_contracts": {"type": "array", "items": {"type": "string"}},
+    "optional_contracts": {"type": "array", "items": {"type": "string"}},
+    "archetype_p0_nodes": {"type": "array", "items": {"type": "string"}},
+    "archetype_p1_nodes": {"type": "array", "items": {"type": "string"}},
+    "not_applicable_rules": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "required_systems": {"type": "array", "items": {"type": "object"}},
+    "required_entities": {"type": "array", "items": {"type": "object"}},
+    "required_player_actions": {"type": "array", "items": {"type": "object"}},
+    "required_assets": {"type": "array", "items": {"type": "object"}},
+    "required_ui_surfaces": {"type": "array", "items": {"type": "object"}},
+    "required_acceptance_scenarios": {"type": "array", "items": {"type": "object"}},
+    "missing_required_items": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

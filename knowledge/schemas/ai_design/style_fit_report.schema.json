@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "style_fit_report.schema.json",
+  "title": "Style Fit Report",
+  "type": "object",
+  "required": ["schema_version", "status", "style_id", "fit_checks"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "status": {"type": "string"},
+    "style_id": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "fit_checks": {"type": "array", "items": {"type": "object"}},
+    "risks": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

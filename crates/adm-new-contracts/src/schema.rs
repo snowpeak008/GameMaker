@@ -571,7 +571,7 @@ fn normalize_path(path: impl AsRef<Path>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use adm_new_foundation::new_stable_id;
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
     use serde_json::json;
 
     #[test]
@@ -833,10 +833,9 @@ mod tests {
 
     #[test]
     fn schema_registry_discovers_all_project_schema_files() {
-        let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .unwrap();
+        let project_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let registry = discover_schema_registry(&project_root).unwrap();
 
         assert_eq!(registry.len(), EXPECTED_SCHEMA_FILE_COUNT);
@@ -853,10 +852,9 @@ mod tests {
 
     #[test]
     fn seed_contracts_validate_against_shared_schemas() {
-        let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .unwrap();
+        let project_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let project_dna_schema = load_structured_file(
             &project_root.join("knowledge/schemas/ai_design/project_dna_contract.schema.json"),
         )

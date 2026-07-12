@@ -1,0 +1,46 @@
+{
+  "skill_id": "skill_diff_compare_v1",
+  "name": "diff_compare",
+  "type": "atomic",
+  "level": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "domain": "general",
+  "description": "Bootstrap skill for diff_compare.",
+  "capabilities": [
+    "diff"
+  ],
+  "dependencies": [],
+  "trigger_rule": {
+    "required_context_tags": [
+      "devflow"
+    ],
+    "required_inputs": [
+      "left",
+      "right"
+    ],
+    "confidence_threshold": 0.7
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "left": {
+        "type": "string"
+      },
+      "right": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "left",
+      "right"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "anti_patterns": [],
+  "episode_refs": []
+}

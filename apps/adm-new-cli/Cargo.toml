@@ -12,7 +12,6 @@ adm-new-artifact = { path = "../../crates/adm-new-artifact" }
 adm-new-contracts = { path = "../../crates/adm-new-contracts" }
 adm-new-foundation = { path = "../../crates/adm-new-foundation" }
 adm-new-governance = { path = "../../crates/adm-new-governance" }
-adm-new-knowledge = { path = "../../crates/adm-new-knowledge" }
 adm-new-patch = { path = "../../crates/adm-new-patch" }
 adm-new-packaging = { path = "../../crates/adm-new-packaging" }
 adm-new-sdk = { path = "../../crates/adm-new-sdk" }

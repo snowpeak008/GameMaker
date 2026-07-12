@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "demo_flow_contract.schema.json",
+  "title": "Demo Flow Contract",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "demo_flow_id",
+    "start_scene",
+    "entry_condition",
+    "steps",
+    "completion_condition",
+    "playmode_acceptance"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "demo_flow_id": {"type": "string", "minLength": 1},
+    "start_scene": {"type": "string", "minLength": 1},
+    "entry_condition": {"type": "string", "minLength": 1},
+    "steps": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": [
+          "step_id",
+          "player_instruction",
+          "required_input",
+          "expected_state_change",
+          "expected_ui_feedback",
+          "required_scene_objects"
+        ]
+      }
+    },
+    "completion_condition": {"type": "string", "minLength": 1},
+    "playmode_acceptance": {"type": "array", "minItems": 1}
+  }
+}

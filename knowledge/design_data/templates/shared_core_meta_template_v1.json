@@ -1,0 +1,320 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_core_meta_template_v1",
+  "name": "Shared core experience meta template v1",
+  "description": "Shared core meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "core_feeling_target",
+      "label": "核心感受",
+      "description": "先锁定玩家真正要获得的体验感受。这一层把“主要乐趣来源”推进到体验目标。",
+      "outputKey": "coreFeelingTarget",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "promise_to_feeling",
+      "designQuestion": "这个体验项服务哪种核心感受？",
+      "options": [
+        {
+          "id": "tense_choice",
+          "label": "紧张抉择",
+          "description": "让玩家在压力下做有代价的选择。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "tenseChoice"
+        },
+        {
+          "id": "flow_release",
+          "label": "爽快释放",
+          "description": "让玩家获得快速、清晰、强反馈的释放感。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "flowRelease"
+        },
+        {
+          "id": "mastery_growth",
+          "label": "精通成长",
+          "description": "让玩家感到技巧和理解持续提升。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "masteryGrowth"
+        },
+        {
+          "id": "curiosity_discovery",
+          "label": "探索发现",
+          "description": "让玩家持续期待未知和新信息。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "curiosityDiscovery"
+        },
+        {
+          "id": "belonging_expression",
+          "label": "认同表达",
+          "description": "让玩家建立身份、表达或关系认同。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "belongingExpression"
+        }
+      ]
+    },
+    {
+      "id": "core_loop_dynamic",
+      "label": "循环动态",
+      "description": "把感受转成可观察的反复行为和循环动力。这一层把“主要乐趣来源”推进到玩家动态。",
+      "outputKey": "coreLoopDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "feeling_to_loop",
+      "designQuestion": "玩家会围绕这个体验项反复做什么？",
+      "options": [
+        {
+          "id": "try_fail_retry",
+          "label": "尝试-失败-重试",
+          "description": "失败后仍能看到改进空间。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "tryFailRetry"
+        },
+        {
+          "id": "choose_payoff_return",
+          "label": "选择-回报-再投入",
+          "description": "每次选择都带来可理解的结果。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "choosePayoffReturn"
+        },
+        {
+          "id": "learn_apply_master",
+          "label": "学习-应用-精通",
+          "description": "玩家通过练习掌握更深层策略。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "learnApplyMaster"
+        },
+        {
+          "id": "collect_upgrade_unlock",
+          "label": "收集-强化-解锁",
+          "description": "长期目标通过积累逐渐打开。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "collectUpgradeUnlock"
+        },
+        {
+          "id": "interact_compare_share",
+          "label": "互动-比较-分享",
+          "description": "社交反馈成为持续参与的动力。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "interactCompareShare"
+        }
+      ]
+    },
+    {
+      "id": "core_behavior_mechanic",
+      "label": "行为机制",
+      "description": "把玩家动态落到规则、反馈、奖励和节奏设计上。这一层把“主要乐趣来源”推进到机制抓手。",
+      "outputKey": "coreBehaviorMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "loop_to_mechanic",
+      "designQuestion": "系统用什么机制制造这种动态？",
+      "options": [
+        {
+          "id": "input_response",
+          "label": "操作响应",
+          "description": "通过输入、响应和手感支撑核心行为。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "inputResponse"
+        },
+        {
+          "id": "choice_cost",
+          "label": "选择代价",
+          "description": "用成本、风险或机会损失制造选择重量。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "choiceCost"
+        },
+        {
+          "id": "feedback_reward",
+          "label": "反馈奖励",
+          "description": "用即时和延迟反馈形成行为闭环。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "feedbackReward"
+        },
+        {
+          "id": "pressure_timing",
+          "label": "压力节奏",
+          "description": "通过时间、资源或空间压力驱动行动。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "pressureTiming"
+        },
+        {
+          "id": "progress_structure",
+          "label": "进度结构",
+          "description": "通过成长、解锁和目标层级推动长期投入。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "progressStructure"
+        }
+      ]
+    },
+    {
+      "id": "core_rhythm_boundary",
+      "label": "节奏边界",
+      "description": "明确不可越过的节奏、压力、随机和反馈边界。这一层把“主要乐趣来源”推进到边界约束。",
+      "outputKey": "coreRhythmBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "mechanic_to_boundary",
+      "designQuestion": "什么会破坏这个体验项？",
+      "options": [
+        {
+          "id": "unclear_feedback",
+          "label": "反馈不清",
+          "description": "结果原因不清会让体验失去可理解性。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "unclearFeedback"
+        },
+        {
+          "id": "dragging_pace",
+          "label": "节奏拖沓",
+          "description": "等待或重复过长会削弱核心循环。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "draggingPace"
+        },
+        {
+          "id": "unfair_randomness",
+          "label": "随机不公",
+          "description": "玩家无法接受或解释随机结果。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "unfairRandomness"
+        },
+        {
+          "id": "over_pressure",
+          "label": "压力过载",
+          "description": "压力超过目标玩家承载能力。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "overPressure"
+        },
+        {
+          "id": "weak_reentry",
+          "label": "再投入理由弱",
+          "description": "结算后没有足够理由开启下一轮。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "weakReentry"
+        }
+      ]
+    },
+    {
+      "id": "core_playtest_signal",
+      "label": "试玩信号",
+      "description": "用试玩和行为信号验证玩家是否感到了预期体验。这一层把“主要乐趣来源”推进到验收信号。",
+      "outputKey": "corePlaytestSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "boundary_to_playtest_signal",
+      "designQuestion": "怎样证明这个体验项真的成立？",
+      "options": [
+        {
+          "id": "promise_recalled",
+          "label": "能复述乐趣",
+          "description": "玩家能用自己的话说出核心乐趣。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "promiseRecalled"
+        },
+        {
+          "id": "retry_willingness",
+          "label": "失败后重试",
+          "description": "失败后仍有继续尝试的意愿。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "retryWillingness"
+        },
+        {
+          "id": "choice_explained",
+          "label": "能解释选择",
+          "description": "玩家能解释为什么做出某个选择。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "choiceExplained"
+        },
+        {
+          "id": "session_completed",
+          "label": "会话能完成",
+          "description": "目标玩家能完成预期时长的会话。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "sessionCompleted"
+        },
+        {
+          "id": "reentry_intent",
+          "label": "有再进入意愿",
+          "description": "结束后仍愿意回到下一轮或下一天。用于推进“主要乐趣来源”的具体判断。",
+          "outputKey": "reentryIntent"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_core_feeling_target_tense_choice_vs_flow_release",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "core_feeling_target",
+        "optionId": "tense_choice"
+      },
+      "targets": [
+        {
+          "groupId": "core_feeling_target",
+          "optionId": "flow_release"
+        }
+      ],
+      "reason": "紧张抉择会增加思考压力，爽快释放要求低阻力反馈，需要定义节奏取舍。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_core_feeling_target_flow_release_vs_curiosity_discovery",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "core_feeling_target",
+        "optionId": "flow_release"
+      },
+      "targets": [
+        {
+          "groupId": "core_feeling_target",
+          "optionId": "curiosity_discovery"
+        }
+      ],
+      "reason": "爽快释放强调快速兑现，探索发现强调未知和延迟，需要避免互相稀释。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_core_feeling_target_mastery_growth_vs_belonging_expression",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "core_feeling_target",
+        "optionId": "mastery_growth"
+      },
+      "targets": [
+        {
+          "groupId": "core_feeling_target",
+          "optionId": "belonging_expression"
+        }
+      ],
+      "reason": "精通成长偏个人能力证明，认同表达偏身份和关系，需要明确核心评价标准。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_core_behavior_mechanic_input_response_vs_choice_cost",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "core_behavior_mechanic",
+        "optionId": "input_response"
+      },
+      "targets": [
+        {
+          "groupId": "core_behavior_mechanic",
+          "optionId": "choice_cost"
+        }
+      ],
+      "reason": "操作响应要求即时流畅，选择代价会增加停顿和权衡，需要明确哪一个支撑主体验。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_core_behavior_mechanic_pressure_timing_vs_progress_structure",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "core_behavior_mechanic",
+        "optionId": "pressure_timing"
+      },
+      "targets": [
+        {
+          "groupId": "core_behavior_mechanic",
+          "optionId": "progress_structure"
+        }
+      ],
+      "reason": "高压节奏和长期进度结构都做强时，容易同时制造疲劳和焦虑。",
+      "severity": "warning"
+    }
+  ]
+}

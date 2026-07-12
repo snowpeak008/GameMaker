@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "customization_score_report.schema.json",
+  "title": "Customization Score Report",
+  "type": "object",
+  "required": ["schema_version", "stage_id", "status", "scores"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "stage_id": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "status": {"type": "string"},
+    "scores": {"type": "object"},
+    "generic_content_ratio": {"type": "number"},
+    "project_specificity_score": {"type": "number"},
+    "template_leakage_count": {"type": "integer"},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

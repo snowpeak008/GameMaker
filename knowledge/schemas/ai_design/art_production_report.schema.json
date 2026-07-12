@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "art_production_report.schema.json",
+  "title": "Art Production Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "produced_assets",
+    "missing_assets",
+    "blockers",
+    "source_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "produced_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "path", "mount_point", "source_refs", "status"],
+        "properties": {
+          "asset_id": {
+            "type": ["string", "null"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "mount_point": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "missing_assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "reason", "fallback_policy"],
+        "properties": {
+          "asset_id": {
+            "type": ["string", "null"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "fallback_policy": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

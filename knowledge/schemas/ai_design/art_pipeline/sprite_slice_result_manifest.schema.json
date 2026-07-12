@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sprite Slice Result Manifest",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "slices", "policy"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "slices": {"type": "array", "items": {"type": "object"}},
+    "policy": {"type": "string"}
+  },
+  "additionalProperties": true
+}

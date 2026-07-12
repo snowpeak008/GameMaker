@@ -33,6 +33,7 @@ const TRANSACTION_SCHEMA_VERSION: u32 = 1;
 const CLEANUP_RETRY_LIMIT: usize = 3;
 const TRANSACTION_LOCK_RETRY_LIMIT: usize = 20;
 const TRANSACTION_LOCK_RETRY_DELAY_MS: u64 = 25;
+const PORTABLE_PATH_MIGRATION_DIR: &str = "drafts/.transactions/.portable-path-schema-v2";
 const SNAPSHOT_KEEP_PER_SAVE: usize = 5;
 const ARCHIVED_DRAFT_RELATIVE_PATHS: &[&str] = &[
     "autosave_state.json",
@@ -294,7 +295,8 @@ impl SaveService {
         let session_id = sanitize_identifier(session_id)?;
         let project_root = ProjectRoot::new(root)?;
         recover_pending_transactions(&project_root)?;
-        Ok(Self {
+        migrate_portable_draft_metadata(&project_root)?;
+        let service = Self {
             project_root,
             session_id,
             pid,
@@ -303,7 +305,8 @@ impl SaveService {
                 Mutex::new(SaveOperationGateState::default()),
                 Condvar::new(),
             )),
-        })
+        };
+        Ok(service)
     }
 
     pub fn project_root(&self) -> &ProjectRoot {
@@ -319,6 +322,9 @@ impl SaveService {
                 meta.updated_at = timestamp();
                 meta.session_id = self.session_id.clone();
                 meta.pid = self.pid;
+                meta.schema_version = SAVE_SCHEMA_VERSION;
+                meta.project_root = ".".to_string();
+                meta.draft_root = format!("drafts/{}", self.session_id);
                 meta
             }
             None => self.new_draft_meta(None, WorkspaceState::Unsaved, None)?,
@@ -2089,8 +2095,8 @@ impl SaveService {
             schema_version: SAVE_SCHEMA_VERSION,
             session_id: self.session_id.clone(),
             pid: self.pid,
-            project_root: self.project_root.path().display().to_string(),
-            draft_root: draft_root.display().to_string(),
+            project_root: ".".to_string(),
+            draft_root: relative_to_root(self.project_root.path(), &draft_root),
             updated_at: timestamp(),
             linked_save_id,
             linked_archive_path: linked_archive_path.unwrap_or_default(),
@@ -2440,7 +2446,9 @@ impl SaveService {
             }
             if context.is_object() {
                 if let Some(snapshot) = json_string(&context, "settings_snapshot") {
-                    if !PathBuf::from(&snapshot).is_file() {
+                    let snapshot_path =
+                        resolve_persisted_project_owned_path(self.project_root.path(), &snapshot);
+                    if !snapshot_path.as_ref().is_some_and(|path| path.is_file()) {
                         push_issue(
                             self.project_root.path(),
                             issues,
@@ -2457,8 +2465,11 @@ impl SaveService {
                 }
                 if let Some(source_root) = json_string(&context, "source_artifacts_root") {
                     let expected = draft.join("source_artifacts");
-                    let matches_expected =
-                        normalize_path(&PathBuf::from(&source_root)) == normalize_path(&expected);
+                    let matches_expected = resolve_persisted_project_owned_path(
+                        self.project_root.path(),
+                        &source_root,
+                    )
+                    .is_some_and(|path| normalize_path(&path) == normalize_path(&expected));
                     if !matches_expected {
                         push_issue(
                             self.project_root.path(),
@@ -2743,6 +2754,355 @@ fn write_json_value(path: &Path, value: &Value) -> AdmResult<()> {
     adm_new_foundation::write_text_atomic(path, &(text + "\n"))
 }
 
+fn collect_portable_json_change<F>(
+    path: &Path,
+    changes: &mut Vec<(PathBuf, Value)>,
+    migrate: F,
+) -> AdmResult<()>
+where
+    F: FnOnce(Value) -> AdmResult<Value>,
+{
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(AdmError::new(format!(
+            "portable path migration refuses a non-regular JSON file: {}",
+            path.display()
+        )));
+    }
+    let value = read_json_value(path)?.ok_or_else(|| {
+        AdmError::new(format!(
+            "portable path migration found an empty JSON file: {}",
+            path.display()
+        ))
+    })?;
+    let normalized = migrate(value.clone())?;
+    if normalized != value {
+        changes.push((path.to_path_buf(), normalized));
+    }
+    Ok(())
+}
+
+fn migrate_run_context_value(mut value: Value, session_id: &str) -> AdmResult<Value> {
+    let object = value.as_object_mut().ok_or_else(|| {
+        AdmError::new("portable path migration requires run_context.json to be an object")
+    })?;
+    let recognized = [
+        "schema_version",
+        "run_id",
+        "draft_session_id",
+        "save_id",
+        "project_root",
+        "draft_root",
+        "source_artifacts_root",
+        "settings_snapshot",
+        "execution_object_store",
+        "artifact_root",
+        "log_root",
+    ]
+    .iter()
+    .any(|field| object.contains_key(*field));
+    if !recognized {
+        return Ok(value);
+    }
+    let save_id = object
+        .get("save_id")
+        .and_then(Value::as_str)
+        .map(sanitize_identifier)
+        .transpose()?;
+    let draft_root = format!("drafts/{session_id}");
+    object.insert(
+        "schema_version".to_string(),
+        Value::String("2.0".to_string()),
+    );
+    object.insert(
+        "draft_session_id".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    object.insert("project_root".to_string(), Value::String(".".to_string()));
+    for (field, relative) in [
+        ("draft_root", draft_root.clone()),
+        (
+            "source_artifacts_root",
+            format!("{draft_root}/source_artifacts"),
+        ),
+        (
+            "settings_snapshot",
+            format!("{draft_root}/runtime/project_settings.snapshot.json"),
+        ),
+        ("artifact_root", format!("{draft_root}/outputs/artifacts")),
+        ("log_root", format!("{draft_root}/outputs/run_logs")),
+    ] {
+        object.insert(field.to_string(), Value::String(relative));
+    }
+    if let Some(save_id) = save_id {
+        object.insert(
+            "execution_object_store".to_string(),
+            Value::String(format!(
+                "saves/{save_id}/workspace/outputs/execution_objects/execution_objects.json"
+            )),
+        );
+    } else if object.contains_key("execution_object_store") {
+        return Err(AdmError::new(
+            "portable run_context.json cannot migrate execution_object_store without save_id",
+        ));
+    }
+    Ok(value)
+}
+
+fn migrate_run_state_value(mut value: Value, session_id: &str) -> AdmResult<Value> {
+    let object = value.as_object_mut().ok_or_else(|| {
+        AdmError::new("portable path migration requires run_state.json to be an object")
+    })?;
+    if object.contains_key("run_context_path") {
+        object.insert(
+            "run_context_path".to_string(),
+            Value::String(format!("drafts/{session_id}/runtime/run_context.json")),
+        );
+    }
+    Ok(value)
+}
+
+fn migrate_settings_snapshot_value(mut value: Value, session_id: &str) -> AdmResult<Value> {
+    let object = value.as_object_mut().ok_or_else(|| {
+        AdmError::new(
+            "portable path migration requires project_settings.snapshot.json to be an object",
+        )
+    })?;
+    if object.contains_key("source_settings_path") {
+        object.insert(
+            "source_settings_path".to_string(),
+            Value::String(format!("drafts/{session_id}/project_config.json")),
+        );
+    }
+    Ok(value)
+}
+
+fn migrate_portable_draft_metadata(project_root: &ProjectRoot) -> AdmResult<()> {
+    let lock_path = global_transaction_lock_path(project_root)?;
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let Some(lock) = try_acquire_recovery_lock(&lock_path)? else {
+        return Ok(());
+    };
+
+    let transaction_root = project_root.resolve_relative(PORTABLE_PATH_MIGRATION_DIR)?;
+    match fs::symlink_metadata(&transaction_root) {
+        Ok(transaction_metadata) => {
+            if transaction_metadata.file_type().is_symlink() || !transaction_metadata.is_dir() {
+                return Err(AdmError::new(format!(
+                    "portable path migration recovery refuses a non-directory transaction: {}",
+                    transaction_root.display()
+                )));
+            }
+            restore_portable_path_before_images(project_root, &transaction_root)?;
+            fs::remove_dir_all(&transaction_root)?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+
+    let mut changes = Vec::<(PathBuf, Value)>::new();
+    let drafts_root = project_root.drafts_dir();
+    if drafts_root.is_dir() {
+        for entry in fs::read_dir(&drafts_root)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if file_type.is_symlink() {
+                return Err(AdmError::new(format!(
+                    "portable path migration refuses a linked draft directory: {}",
+                    entry.path().display()
+                )));
+            }
+            if !file_type.is_dir() {
+                continue;
+            }
+            let session_id = entry.file_name().to_string_lossy().to_string();
+            let Ok(session_id) = sanitize_identifier(&session_id) else {
+                continue;
+            };
+            let draft_dir = entry.path();
+            let meta_path = draft_dir.join("draft_meta.json");
+            collect_portable_json_change(&meta_path, &mut changes, |value| {
+                let mut meta: DraftMeta = serde_json::from_value(value).map_err(|error| {
+                    AdmError::new(format!(
+                        "invalid draft metadata during portable path migration {}: {error}",
+                        meta_path.display()
+                    ))
+                })?;
+                meta.schema_version = SAVE_SCHEMA_VERSION;
+                meta.session_id = session_id.clone();
+                meta.project_root = ".".to_string();
+                meta.draft_root = format!("drafts/{session_id}");
+                meta.linked_archive_path = meta
+                    .linked_save_id
+                    .as_deref()
+                    .and_then(|save_id| sanitize_identifier(save_id).ok())
+                    .map(|save_id| format!("saves/{save_id}"))
+                    .unwrap_or_default();
+                serde_json::to_value(meta).map_err(|error| {
+                    AdmError::new(format!(
+                        "failed to serialize migrated draft metadata: {error}"
+                    ))
+                })
+            })?;
+            collect_portable_json_change(
+                &draft_dir.join("runtime/run_context.json"),
+                &mut changes,
+                |value| migrate_run_context_value(value, &session_id),
+            )?;
+            collect_portable_json_change(
+                &draft_dir.join("outputs/runtime_control/run_state.json"),
+                &mut changes,
+                |value| migrate_run_state_value(value, &session_id),
+            )?;
+            collect_portable_json_change(
+                &draft_dir.join("runtime/project_settings.snapshot.json"),
+                &mut changes,
+                |value| migrate_settings_snapshot_value(value, &session_id),
+            )?;
+        }
+    }
+
+    if changes.is_empty() {
+        FileExt::unlock(&lock)?;
+        return Ok(());
+    }
+
+    let before_root = transaction_root.join("before");
+    let staged_root = transaction_root.join("staged");
+    fs::create_dir_all(&before_root)?;
+    fs::create_dir_all(&staged_root)?;
+    let mut targets = Vec::new();
+    for (target, normalized) in &changes {
+        let relative = target.strip_prefix(project_root.path()).map_err(|_| {
+            AdmError::new(format!(
+                "portable path migration target escaped data root: {}",
+                target.display()
+            ))
+        })?;
+        let relative_text = relative.to_str().ok_or_else(|| {
+            AdmError::new(format!(
+                "portable path migration target is not valid Unicode: {}",
+                target.display()
+            ))
+        })?;
+        ensure_relative_path(project_root.path(), relative_text)?;
+        let before = before_root.join(relative);
+        let staged = staged_root.join(relative);
+        if let Some(parent) = before.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(target, &before)?;
+        write_json_value(&staged, normalized)?;
+        targets.push(relative.to_string_lossy().replace('\\', "/"));
+    }
+    write_json_value(
+        &transaction_root.join("transaction.json"),
+        &serde_json::json!({
+            "schema_version": 1,
+            "migration": "portable-path-schema-v2",
+            "state": "prepared",
+            "targets": targets,
+        }),
+    )?;
+
+    let commit_result = (|| -> AdmResult<()> {
+        for (target, _) in &changes {
+            let relative = target.strip_prefix(project_root.path()).map_err(|_| {
+                AdmError::new(format!(
+                    "portable path migration target escaped data root during commit: {}",
+                    target.display()
+                ))
+            })?;
+            let staged = staged_root.join(relative);
+            let bytes = fs::read(&staged)?;
+            adm_new_foundation::write_bytes_atomic(target, &bytes)?;
+        }
+        for (target, expected) in &changes {
+            if read_json_value(target)?.as_ref() != Some(expected) {
+                return Err(AdmError::new(format!(
+                    "portable path migration verification failed: {}",
+                    target.display()
+                )));
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = commit_result {
+        let rollback = restore_portable_path_before_images(project_root, &transaction_root);
+        return match rollback {
+            Ok(()) => Err(error),
+            Err(rollback_error) => Err(AdmError::new(format!(
+                "portable path migration failed ({error}); rollback also failed ({rollback_error}); before-images remain at {}",
+                transaction_root.display()
+            ))),
+        };
+    }
+    fs::remove_dir_all(&transaction_root)?;
+    FileExt::unlock(&lock)?;
+    Ok(())
+}
+
+fn restore_portable_path_before_images(
+    project_root: &ProjectRoot,
+    transaction_root: &Path,
+) -> AdmResult<()> {
+    let before_root = transaction_root.join("before");
+    match fs::symlink_metadata(&before_root) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+        Ok(_) => {
+            return Err(AdmError::new(format!(
+                "portable path migration refuses a non-directory before-image root: {}",
+                before_root.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    }
+    let mut files = Vec::new();
+    collect_portable_path_before_images(&before_root, &before_root, &mut files)?;
+    for (source, relative) in files {
+        let target = project_root.resolve_relative(&relative)?;
+        let bytes = fs::read(source)?;
+        adm_new_foundation::write_bytes_atomic(&target, &bytes)?;
+    }
+    Ok(())
+}
+
+fn collect_portable_path_before_images(
+    root: &Path,
+    current: &Path,
+    files: &mut Vec<(PathBuf, String)>,
+) -> AdmResult<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            return Err(AdmError::new(format!(
+                "portable path migration refuses a linked before-image: {}",
+                entry.path().display()
+            )));
+        }
+        if file_type.is_dir() {
+            collect_portable_path_before_images(root, &entry.path(), files)?;
+        } else if file_type.is_file() {
+            let entry_path = entry.path();
+            let relative = entry_path.strip_prefix(root).map_err(|_| {
+                AdmError::new("portable path migration before-image escaped its transaction")
+            })?;
+            let relative = relative.to_string_lossy().replace('\\', "/");
+            ensure_relative_path(root, &relative)?;
+            files.push((entry_path, relative));
+        }
+    }
+    Ok(())
+}
+
 fn append_jsonl_value(path: &Path, value: &Value) -> AdmResult<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -2984,6 +3344,18 @@ fn normalize_path(path: &Path) -> String {
         .to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase()
+}
+
+fn resolve_persisted_project_owned_path(root: &Path, value: &str) -> Option<PathBuf> {
+    let persisted = value.trim();
+    let value = Path::new(persisted);
+    if value.as_os_str().is_empty() || value.is_absolute() {
+        return None;
+    }
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let joined = ensure_relative_path(&root, persisted).ok()?;
+    let candidate = joined.canonicalize().unwrap_or(joined);
+    (candidate == root || candidate.starts_with(&root)).then_some(candidate)
 }
 
 fn push_issue(
@@ -4359,6 +4731,263 @@ mod tests {
     }
 
     #[test]
+    fn save_service_atomically_migrates_stale_portable_draft_paths_before_loading() {
+        let old_root = temp_root("portable_path_old_a");
+        let root = temp_root("portable_path_新根 空格_b");
+        let service = SaveService::with_pid(&root, "session_a", 100).unwrap();
+        service
+            .write_autosave(&sample_state("Portable", true))
+            .unwrap();
+        let meta_path = root.join("drafts/session_a/draft_meta.json");
+        let mut meta: DraftMeta =
+            serde_json::from_str(&fs::read_to_string(&meta_path).unwrap()).unwrap();
+        meta.project_root = old_root.display().to_string();
+        meta.draft_root = old_root.join("drafts/session_a").display().to_string();
+        write_json_value(&meta_path, &serde_json::to_value(meta).unwrap()).unwrap();
+        let draft = root.join("drafts/session_a");
+        let runtime = draft.join("runtime");
+        let control = draft.join("outputs/runtime_control");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::create_dir_all(&control).unwrap();
+        let development_path = r"D:\External Unity Project";
+        let editor_path = r"C:\Unity\Editor\Unity.exe";
+        write_json_value(
+            &runtime.join("run_context.json"),
+            &serde_json::json!({
+                "schema_version": "1.0",
+                "run_id": "run_a",
+                "draft_session_id": "stale_session",
+                "save_id": "save_a",
+                "project_root": old_root.display().to_string(),
+                "draft_root": old_root.join("drafts/session_a").display().to_string(),
+                "source_artifacts_root": old_root.join("drafts/session_a/source_artifacts").display().to_string(),
+                "settings_snapshot": old_root.join("drafts/session_a/runtime/project_settings.snapshot.json").display().to_string(),
+                "development_path": development_path,
+                "editor_path": editor_path,
+                "project_engine": "unity",
+                "pipeline_adapter": "none",
+                "execution_object_store": old_root.join("saves/save_a/workspace/outputs/execution_objects/execution_objects.json").display().to_string(),
+                "artifact_root": old_root.join("drafts/session_a/outputs/artifacts").display().to_string(),
+                "log_root": old_root.join("drafts/session_a/outputs/run_logs").display().to_string(),
+                "owner_pid": 100,
+                "created_at": "2026-07-11T00:00:00Z",
+                "isolation_policy": {}
+            }),
+        )
+        .unwrap();
+        write_json_value(
+            &control.join("run_state.json"),
+            &serde_json::json!({
+                "status": "stopped",
+                "run_context_path": old_root.join("drafts/session_a/runtime/run_context.json").display().to_string()
+            }),
+        )
+        .unwrap();
+        write_json_value(
+            &runtime.join("project_settings.snapshot.json"),
+            &serde_json::json!({
+                "source_settings_path": old_root.join("drafts/session_a/project_config.json").display().to_string(),
+                "development_path": development_path,
+                "editor_path": editor_path
+            }),
+        )
+        .unwrap();
+        fs::create_dir_all(old_root.join("drafts/session_a/source_artifacts")).unwrap();
+        fs::write(
+            old_root.join("drafts/session_a/source_artifacts/old-root-sentinel.txt"),
+            "must never be loaded",
+        )
+        .unwrap();
+        drop(service);
+
+        let restarted = SaveService::with_pid(&root, "session_a", 101).unwrap();
+        let refreshed: DraftMeta =
+            serde_json::from_str(&fs::read_to_string(&meta_path).unwrap()).unwrap();
+
+        assert_eq!(refreshed.schema_version, SAVE_SCHEMA_VERSION);
+        assert_eq!(refreshed.project_root, ".");
+        assert_eq!(refreshed.draft_root, "drafts/session_a");
+        let context: Value =
+            serde_json::from_str(&fs::read_to_string(runtime.join("run_context.json")).unwrap())
+                .unwrap();
+        assert_eq!(context["schema_version"], "2.0");
+        assert_eq!(context["project_root"], ".");
+        assert_eq!(context["draft_root"], "drafts/session_a");
+        assert_eq!(
+            context["source_artifacts_root"],
+            "drafts/session_a/source_artifacts"
+        );
+        assert_eq!(context["development_path"], development_path);
+        assert_eq!(context["editor_path"], editor_path);
+        let run_state: Value =
+            serde_json::from_str(&fs::read_to_string(control.join("run_state.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            run_state["run_context_path"],
+            "drafts/session_a/runtime/run_context.json"
+        );
+        let snapshot: Value = serde_json::from_str(
+            &fs::read_to_string(runtime.join("project_settings.snapshot.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            snapshot["source_settings_path"],
+            "drafts/session_a/project_config.json"
+        );
+        assert_eq!(snapshot["development_path"], development_path);
+        assert_eq!(snapshot["editor_path"], editor_path);
+        let migrated_paths = [
+            meta_path.clone(),
+            runtime.join("run_context.json"),
+            control.join("run_state.json"),
+            runtime.join("project_settings.snapshot.json"),
+        ];
+        for path in &migrated_paths {
+            assert!(
+                !fs::read_to_string(path)
+                    .unwrap()
+                    .contains(&old_root.display().to_string())
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(
+                old_root.join("drafts/session_a/source_artifacts/old-root-sentinel.txt")
+            )
+            .unwrap(),
+            "must never be loaded"
+        );
+        assert!(!root.join(PORTABLE_PATH_MIGRATION_DIR).exists());
+        let first_migration = migrated_paths
+            .iter()
+            .map(|path| fs::read(path).unwrap())
+            .collect::<Vec<_>>();
+        drop(restarted);
+        let second_restart = SaveService::with_pid(&root, "session_a", 102).unwrap();
+        let second_migration = migrated_paths
+            .iter()
+            .map(|path| fs::read(path).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(second_migration, first_migration);
+        assert!(!root.join(PORTABLE_PATH_MIGRATION_DIR).exists());
+        drop(second_restart);
+        cleanup(old_root);
+        cleanup(root);
+    }
+
+    #[test]
+    fn portable_path_migration_recovers_before_image_and_migrates_every_draft() {
+        let root = temp_root("portable_path_recovery");
+        for session in ["session_a", "session_b"] {
+            let service = SaveService::with_pid(&root, session, 100).unwrap();
+            service
+                .write_autosave(&sample_state(session, true))
+                .unwrap();
+            drop(service);
+            let meta_path = root.join(format!("drafts/{session}/draft_meta.json"));
+            let mut meta: DraftMeta =
+                serde_json::from_str(&fs::read_to_string(&meta_path).unwrap()).unwrap();
+            meta.schema_version = 1;
+            meta.project_root = r"C:\old-data-root".to_string();
+            meta.draft_root = format!(r"C:\old-data-root\drafts\{session}");
+            write_json_value(&meta_path, &serde_json::to_value(meta).unwrap()).unwrap();
+            let draft = root.join(format!("drafts/{session}"));
+            fs::create_dir_all(draft.join("runtime")).unwrap();
+            fs::create_dir_all(draft.join("outputs/runtime_control")).unwrap();
+            write_json_value(
+                &draft.join("runtime/run_context.json"),
+                &serde_json::json!({
+                    "schema_version": "1.0", "run_id": format!("run_{session}"),
+                    "draft_session_id": session, "save_id": "save_a",
+                    "project_root": r"C:\old-data-root",
+                    "draft_root": format!(r"C:\old-data-root\drafts\{session}"),
+                    "source_artifacts_root": format!(r"C:\old-data-root\drafts\{session}\source_artifacts"),
+                    "settings_snapshot": format!(r"C:\old-data-root\drafts\{session}\runtime\project_settings.snapshot.json"),
+                    "development_path": r"D:\machine-project", "editor_path": r"C:\Editor.exe",
+                    "project_engine": "unity", "pipeline_adapter": "none",
+                    "execution_object_store": r"C:\old-data-root\saves\save_a\workspace\outputs\execution_objects\execution_objects.json",
+                    "artifact_root": format!(r"C:\old-data-root\drafts\{session}\outputs\artifacts"),
+                    "log_root": format!(r"C:\old-data-root\drafts\{session}\outputs\run_logs"),
+                    "owner_pid": 100, "created_at": "old", "isolation_policy": {}
+                }),
+            )
+            .unwrap();
+            write_json_value(
+                &draft.join("outputs/runtime_control/run_state.json"),
+                &serde_json::json!({"run_context_path": r"C:\old-data-root\runtime\run_context.json"}),
+            )
+            .unwrap();
+            write_json_value(
+                &draft.join("runtime/project_settings.snapshot.json"),
+                &serde_json::json!({
+                    "source_settings_path": r"C:\old-data-root\settings.json",
+                    "development_path": r"D:\machine-project"
+                }),
+            )
+            .unwrap();
+        }
+
+        let transaction = root.join(PORTABLE_PATH_MIGRATION_DIR);
+        let before = transaction.join("before/drafts/session_a/draft_meta.json");
+        fs::create_dir_all(before.parent().unwrap()).unwrap();
+        fs::copy(root.join("drafts/session_a/draft_meta.json"), &before).unwrap();
+        for relative in [
+            "runtime/run_context.json",
+            "outputs/runtime_control/run_state.json",
+            "runtime/project_settings.snapshot.json",
+        ] {
+            let source = root.join("drafts/session_a").join(relative);
+            let backup = transaction.join("before/drafts/session_a").join(relative);
+            fs::create_dir_all(backup.parent().unwrap()).unwrap();
+            fs::copy(source, backup).unwrap();
+        }
+        write_json_value(
+            &root.join("drafts/session_a/draft_meta.json"),
+            &serde_json::json!({"schema_version": 999, "session_id": "broken"}),
+        )
+        .unwrap();
+        write_json_value(
+            &root.join("drafts/session_a/runtime/run_context.json"),
+            &serde_json::json!({"corrupt": true}),
+        )
+        .unwrap();
+
+        let restarted = SaveService::with_pid(&root, "session_c", 101).unwrap();
+        drop(restarted);
+        for session in ["session_a", "session_b"] {
+            let meta: DraftMeta = serde_json::from_str(
+                &fs::read_to_string(root.join(format!("drafts/{session}/draft_meta.json")))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(meta.schema_version, SAVE_SCHEMA_VERSION);
+            assert_eq!(meta.project_root, ".");
+            assert_eq!(meta.draft_root, format!("drafts/{session}"));
+            let draft = root.join(format!("drafts/{session}"));
+            let context: Value = serde_json::from_str(
+                &fs::read_to_string(draft.join("runtime/run_context.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(context["schema_version"], "2.0");
+            assert_eq!(context["project_root"], ".");
+            assert_eq!(
+                context["source_artifacts_root"],
+                format!("drafts/{session}/source_artifacts")
+            );
+            assert_eq!(context["development_path"], r"D:\machine-project");
+            let run_state: Value = serde_json::from_str(
+                &fs::read_to_string(draft.join("outputs/runtime_control/run_state.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                run_state["run_context_path"],
+                format!("drafts/{session}/runtime/run_context.json")
+            );
+        }
+        assert!(!transaction.exists());
+        cleanup(root);
+    }
+
+    #[test]
     fn save_service_autosaves_and_creates_formal_archive_snapshot() {
         let root = temp_root("create");
         let service = SaveService::with_pid(&root, "session_a", 100).unwrap();
@@ -4899,8 +5528,8 @@ mod tests {
             &serde_json::json!({
                 "save_id": created.manifest.save_id,
                 "run_id": "run_1",
-                "settings_snapshot": settings_snapshot.display().to_string(),
-                "source_artifacts_root": source_root.display().to_string(),
+                "settings_snapshot": "drafts/session_a/runtime/project_settings.snapshot.json",
+                "source_artifacts_root": "drafts/session_a/source_artifacts",
             }),
         )
         .unwrap();
@@ -4921,6 +5550,10 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == "DRAFT_LINKED_SAVE_MISMATCH")
         );
+        assert!(!audit.issues.iter().any(|issue| matches!(
+            issue.code.as_str(),
+            "RUN_SETTINGS_SNAPSHOT_MISSING" | "SOURCE_ARTIFACT_ROOT_MISMATCH"
+        )));
 
         let dry = service.repair_parallel_save_contamination(false).unwrap();
         assert_eq!(dry.action_count, 1);

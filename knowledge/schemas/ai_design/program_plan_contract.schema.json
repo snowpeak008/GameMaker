@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_plan_contract.schema.json",
+  "title": "Program Plan Contract",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "tasks", "source_contracts"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "plan_id": {"type": "string"},
+    "source_contracts": {"type": "array", "items": {"type": "string"}},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "title", "phase", "source_refs", "required_outputs"],
+        "properties": {
+          "task_id": {"type": "string"},
+          "title": {"type": "string"},
+          "phase": {"type": "string"},
+          "source_refs": {"type": "array", "items": {"type": "string"}},
+          "required_outputs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "planning_blockers": {"type": "array", "items": {"type": "object"}},
+    "project_signature": {"type": "string"},
+    "source_project_dna": {"type": "string"},
+    "detected_archetype": {"type": "string"},
+    "semantic_coverage_refs": {"type": "array", "items": {"type": "string"}},
+    "customization_targets": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

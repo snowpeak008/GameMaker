@@ -1,0 +1,304 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_social_meta_template_v1",
+  "name": "Shared social meta template v1",
+  "description": "Shared social meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "social_relation_experience",
+      "label": "关系体验",
+      "description": "社交设计先明确关系体验，而不是先堆聊天和好友功能。这一层把“好友关系”推进到体验目标。",
+      "outputKey": "socialRelationExperience",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_relation",
+      "designQuestion": "这个社交项要产生哪种关系价值？",
+      "options": [
+        {
+          "id": "companionship",
+          "label": "陪伴感",
+          "description": "让玩家感到有人同在或回应。用于推进“好友关系”的具体判断。",
+          "outputKey": "companionship"
+        },
+        {
+          "id": "cooperative_achievement",
+          "label": "协作成就",
+          "description": "让玩家因共同完成目标而获得成就。用于推进“好友关系”的具体判断。",
+          "outputKey": "cooperativeAchievement"
+        },
+        {
+          "id": "competitive_honor",
+          "label": "竞争荣誉",
+          "description": "让玩家通过比较和排名获得荣誉。用于推进“好友关系”的具体判断。",
+          "outputKey": "competitiveHonor"
+        },
+        {
+          "id": "identity_display",
+          "label": "身份展示",
+          "description": "让玩家展示成就、外观或立场。用于推进“好友关系”的具体判断。",
+          "outputKey": "identityDisplay"
+        },
+        {
+          "id": "community_belonging",
+          "label": "社区归属",
+          "description": "让玩家愿意长期参与社群。用于推进“好友关系”的具体判断。",
+          "outputKey": "communityBelonging"
+        }
+      ]
+    },
+    {
+      "id": "social_interaction_dynamic",
+      "label": "互动动态",
+      "description": "把关系价值转成互助、组队、竞争、传播和反馈动态。这一层把“好友关系”推进到玩家动态。",
+      "outputKey": "socialInteractionDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "relation_to_interaction",
+      "designQuestion": "玩家之间会怎样互动和反馈？",
+      "options": [
+        {
+          "id": "friend_help",
+          "label": "好友互助",
+          "description": "玩家通过好友关系提供帮助。用于推进“好友关系”的具体判断。",
+          "outputKey": "friendHelp"
+        },
+        {
+          "id": "temporary_team",
+          "label": "临时组队",
+          "description": "玩家围绕短期目标形成协作。用于推进“好友关系”的具体判断。",
+          "outputKey": "temporaryTeam"
+        },
+        {
+          "id": "ranking_competition",
+          "label": "排名竞争",
+          "description": "玩家通过排名、段位或榜单比较。用于推进“好友关系”的具体判断。",
+          "outputKey": "rankingCompetition"
+        },
+        {
+          "id": "ugc_spread",
+          "label": "UGC 传播",
+          "description": "玩家创造、分享或扩散内容。用于推进“好友关系”的具体判断。",
+          "outputKey": "ugcSpread"
+        },
+        {
+          "id": "positive_negative_feedback",
+          "label": "正负反馈",
+          "description": "玩家通过赞赏、举报或评论反馈行为。用于推进“好友关系”的具体判断。",
+          "outputKey": "positiveNegativeFeedback"
+        }
+      ]
+    },
+    {
+      "id": "social_mechanic",
+      "label": "社交机制",
+      "description": "把互动动态落到关系、匹配、展示、奖励和治理机制。这一层把“好友关系”推进到机制抓手。",
+      "outputKey": "socialMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "interaction_to_social_mechanic",
+      "designQuestion": "用什么机制承载这种互动？",
+      "options": [
+        {
+          "id": "friendship_rule",
+          "label": "好友关系",
+          "description": "定义添加、互动和维护好友关系的规则。用于推进“好友关系”的具体判断。",
+          "outputKey": "friendshipRule"
+        },
+        {
+          "id": "team_objective",
+          "label": "团队目标",
+          "description": "用共同目标和分工组织协作。用于推进“好友关系”的具体判断。",
+          "outputKey": "teamObjective"
+        },
+        {
+          "id": "matchmaking_rule",
+          "label": "匹配规则",
+          "description": "用匹配、段位和赛制组织竞争。用于推进“好友关系”的具体判断。",
+          "outputKey": "matchmakingRule"
+        },
+        {
+          "id": "showcase_system",
+          "label": "展示系统",
+          "description": "提供外观、成就和资料展示。用于推进“好友关系”的具体判断。",
+          "outputKey": "showcaseSystem"
+        },
+        {
+          "id": "report_punishment",
+          "label": "举报处罚",
+          "description": "提供举报、申诉和处罚机制。用于推进“好友关系”的具体判断。",
+          "outputKey": "reportPunishment"
+        }
+      ]
+    },
+    {
+      "id": "social_abuse_boundary",
+      "label": "滥用边界",
+      "description": "社交系统必须限制骚扰、作弊、焦虑和社交绑架。这一层把“好友关系”推进到边界约束。",
+      "outputKey": "socialAbuseBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "social_mechanic_to_abuse_boundary",
+      "designQuestion": "什么社交结果会破坏体验或公平？",
+      "options": [
+        {
+          "id": "harassment_risk",
+          "label": "骚扰风险",
+          "description": "互动可能造成攻击、骚扰或歧视。用于推进“好友关系”的具体判断。",
+          "outputKey": "harassmentRisk"
+        },
+        {
+          "id": "collusive_cheating",
+          "label": "协作作弊",
+          "description": "玩家通过协作破坏公平。用于推进“好友关系”的具体判断。",
+          "outputKey": "collusiveCheating"
+        },
+        {
+          "id": "ranking_anxiety",
+          "label": "排名焦虑",
+          "description": "竞争压力超过目标玩家承载。用于推进“好友关系”的具体判断。",
+          "outputKey": "rankingAnxiety"
+        },
+        {
+          "id": "social_coercion",
+          "label": "社交绑架",
+          "description": "奖励或门槛强迫玩家社交。用于推进“好友关系”的具体判断。",
+          "outputKey": "socialCoercion"
+        },
+        {
+          "id": "community_conflict",
+          "label": "社区对立",
+          "description": "社群话题演变为长期对立。用于推进“好友关系”的具体判断。",
+          "outputKey": "communityConflict"
+        }
+      ]
+    },
+    {
+      "id": "social_community_signal",
+      "label": "社群信号",
+      "description": "用互动、组队、举报、内容产出和留存验证社交健康。这一层把“好友关系”推进到验收信号。",
+      "outputKey": "socialCommunitySignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "abuse_boundary_to_community_signal",
+      "designQuestion": "怎样判断这个社交项是正向的？",
+      "options": [
+        {
+          "id": "interaction_rate",
+          "label": "互动率",
+          "description": "玩家实际发生互动。用于推进“好友关系”的具体判断。",
+          "outputKey": "interactionRate"
+        },
+        {
+          "id": "team_completion",
+          "label": "组队完成",
+          "description": "协作目标能被稳定完成。用于推进“好友关系”的具体判断。",
+          "outputKey": "teamCompletion"
+        },
+        {
+          "id": "report_volume",
+          "label": "举报量",
+          "description": "举报和处罚保持可控。用于推进“好友关系”的具体判断。",
+          "outputKey": "reportVolume"
+        },
+        {
+          "id": "positive_content",
+          "label": "正向内容产出",
+          "description": "玩家产出正向讨论、攻略或 UGC。用于推进“好友关系”的具体判断。",
+          "outputKey": "positiveContent"
+        },
+        {
+          "id": "retention_lift",
+          "label": "留存提升",
+          "description": "社交关系对回访和留存有正贡献。用于推进“好友关系”的具体判断。",
+          "outputKey": "retentionLift"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_social_relation_experience_companionship_vs_competitive_honor",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "social_relation_experience",
+        "optionId": "companionship"
+      },
+      "targets": [
+        {
+          "groupId": "social_relation_experience",
+          "optionId": "competitive_honor"
+        }
+      ],
+      "reason": "陪伴感强调低压力关系，竞争荣誉强调比较和压力，需要避免社交关系变形。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_social_relation_experience_cooperative_achievement_vs_competitive_honor",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "social_relation_experience",
+        "optionId": "cooperative_achievement"
+      },
+      "targets": [
+        {
+          "groupId": "social_relation_experience",
+          "optionId": "competitive_honor"
+        }
+      ],
+      "reason": "协作成就和竞争荣誉同时做强时，需要明确队友是伙伴还是对手。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_social_interaction_dynamic_friend_help_vs_ranking_competition",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "social_interaction_dynamic",
+        "optionId": "friend_help"
+      },
+      "targets": [
+        {
+          "groupId": "social_interaction_dynamic",
+          "optionId": "ranking_competition"
+        }
+      ],
+      "reason": "好友互助和排名竞争同时增强时，容易产生互刷、代打或公平争议。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_social_interaction_dynamic_temporary_team_vs_ranking_competition",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "social_interaction_dynamic",
+        "optionId": "temporary_team"
+      },
+      "targets": [
+        {
+          "groupId": "social_interaction_dynamic",
+          "optionId": "ranking_competition"
+        }
+      ],
+      "reason": "临时组队和排名竞争并存时，需要控制匹配公平和责任归因。",
+      "severity": "warning"
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoDesignMaker Design Domains",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "domain_count",
+    "domains",
+    "coverage"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "stage_id": {
+      "type": "string"
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "domain_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "node_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "checklist_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "option_group_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "option_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "nodeCount",
+          "checklistCount",
+          "optionGroupCount",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "activation": {
+            "type": "string"
+          },
+          "nodeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "checklistCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "optionGroupCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "optionCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "partial",
+              "not_started"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

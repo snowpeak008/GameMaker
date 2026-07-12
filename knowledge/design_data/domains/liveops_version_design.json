@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "liveops_version_design",
+    "name": "活动与版本设计",
+    "description": "确认首发内容、活动结构、版本节奏、赛季和更新沟通。"
+  },
+  "nodes": [
+    {
+      "id": "liveops_launch_content_decision",
+      "name": "首发内容决策",
+      "description": "确认首发核心、成长、社交、付费和活动内容。",
+      "roleClass": "content_concrete",
+      "requires": [],
+      "unlocks": [
+        "liveops_activity_structure_decision"
+      ],
+      "domain": "liveops_version_design",
+      "checklist": [
+        {
+          "id": "shou_fa_he_xin_nei_rong",
+          "label": "首发核心内容",
+          "description": "明确首发核心内容包含的对象、消耗方式和质量要求。",
+          "outputKey": "shouFaHeXinNeiRong",
+          "legacyIds": [
+            "liveops_launch_content_decision_item_1"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_cheng_zhang_nei_rong",
+          "label": "首发成长内容",
+          "description": "明确首发成长内容包含的对象、消耗方式和质量要求。",
+          "outputKey": "shouFaChengZhangNeiRong",
+          "legacyIds": [
+            "liveops_launch_content_decision_item_2"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_she_jiao_nei_rong",
+          "label": "首发社交内容",
+          "description": "明确首发社交内容包含的对象、消耗方式和质量要求。",
+          "outputKey": "shouFaSheJiaoNeiRong",
+          "legacyIds": [
+            "liveops_launch_content_decision_item_3"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_fu_fei_nei_rong",
+          "label": "首发付费内容",
+          "description": "明确首发付费内容包含的对象、消耗方式和质量要求。",
+          "outputKey": "shouFaFuFeiNeiRong",
+          "legacyIds": [
+            "liveops_launch_content_decision_item_4"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "shou_fa_huo_dong_nei_rong",
+          "label": "首发活动内容",
+          "description": "明确首发活动内容包含的对象、消耗方式和质量要求。",
+          "outputKey": "shouFaHuoDongNeiRong",
+          "legacyIds": [
+            "liveops_launch_content_decision_item_5"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "liveops_activity_structure_decision",
+      "name": "活动结构决策",
+      "description": "确认活动主题、目标、任务、奖励和结束回收。",
+      "roleClass": "content_concrete",
+      "requires": [
+        "liveops_launch_content_decision"
+      ],
+      "unlocks": [
+        "liveops_version_rhythm_decision"
+      ],
+      "domain": "liveops_version_design",
+      "checklist": [
+        {
+          "id": "huo_dong_zhu_ti",
+          "label": "活动主题",
+          "description": "明确活动主题在活动结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "huoDongZhuTi",
+          "legacyIds": [
+            "liveops_activity_structure_decision_item_1"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_mu_biao",
+          "label": "活动目标",
+          "description": "明确活动目标要达成的结果、对象和优先级。",
+          "outputKey": "huoDongMuBiao",
+          "legacyIds": [
+            "liveops_activity_structure_decision_item_2"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_ren_wu",
+          "label": "活动任务",
+          "description": "明确活动任务在活动结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "huoDongRenWu",
+          "legacyIds": [
+            "liveops_activity_structure_decision_item_3"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_jiang_li",
+          "label": "活动奖励",
+          "description": "定义活动奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "huoDongJiangLi",
+          "legacyIds": [
+            "liveops_activity_structure_decision_item_4"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "huo_dong_jie_shu_hui_shou",
+          "label": "活动结束回收",
+          "description": "明确活动结束回收在活动结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "huoDongJieShuHuiShou",
+          "legacyIds": [
+            "liveops_activity_structure_decision_item_5"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "liveops_version_rhythm_decision",
+      "name": "版本节奏决策",
+      "description": "确认版本主题、内容量、消耗周期、目标分层和承接关系。",
+      "roleClass": "content_concrete",
+      "requires": [
+        "liveops_launch_content_decision"
+      ],
+      "unlocks": [
+        "liveops_season_decision"
+      ],
+      "domain": "liveops_version_design",
+      "checklist": [
+        {
+          "id": "ban_ben_zhu_ti",
+          "label": "版本主题",
+          "description": "明确版本主题在版本节奏中的具体含义、适用范围和验收判断。",
+          "outputKey": "banBenZhuTi",
+          "legacyIds": [
+            "liveops_version_rhythm_decision_item_1"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_nei_rong_liang",
+          "label": "版本内容量",
+          "description": "明确版本内容量在版本节奏中的具体含义、适用范围和验收判断。",
+          "outputKey": "banBenNeiRongLiang",
+          "legacyIds": [
+            "liveops_version_rhythm_decision_item_2"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_xiao_hao_zhou_qi",
+          "label": "版本消耗周期",
+          "description": "明确版本消耗周期在版本节奏中的具体含义、适用范围和验收判断。",
+          "outputKey": "banBenXiaoHaoZhouQi",
+          "legacyIds": [
+            "liveops_version_rhythm_decision_item_3"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_mu_biao_fen_ceng",
+          "label": "版本目标分层",
+          "description": "明确版本目标分层在版本节奏中的具体含义、适用范围和验收判断。",
+          "outputKey": "banBenMuBiaoFenCeng",
+          "legacyIds": [
+            "liveops_version_rhythm_decision_item_4"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_cheng_jie_guan_xi",
+          "label": "版本承接关系",
+          "description": "明确版本承接关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "banBenChengJieGuanXi",
+          "legacyIds": [
+            "liveops_version_rhythm_decision_item_5"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "liveops_season_decision",
+      "name": "赛季决策",
+      "description": "确认赛季目标、成长、奖励、重置和荣誉。",
+      "roleClass": "content_concrete",
+      "requires": [
+        "liveops_version_rhythm_decision"
+      ],
+      "unlocks": [
+        "liveops_update_communication_decision"
+      ],
+      "domain": "liveops_version_design",
+      "checklist": [
+        {
+          "id": "sai_ji_mu_biao",
+          "label": "赛季目标",
+          "description": "明确赛季目标要达成的结果、对象和优先级。",
+          "outputKey": "saiJiMuBiao",
+          "legacyIds": [
+            "liveops_season_decision_item_1"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "sai_ji_cheng_zhang",
+          "label": "赛季成长",
+          "description": "明确赛季成长在赛季中的具体含义、适用范围和验收判断。",
+          "outputKey": "saiJiChengZhang",
+          "legacyIds": [
+            "liveops_season_decision_item_2"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "sai_ji_jiang_li",
+          "label": "赛季奖励",
+          "description": "定义赛季奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "saiJiJiangLi",
+          "legacyIds": [
+            "liveops_season_decision_item_3"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "sai_ji_zhong_zhi",
+          "label": "赛季重置",
+          "description": "明确赛季重置在赛季中的具体含义、适用范围和验收判断。",
+          "outputKey": "saiJiZhongZhi",
+          "legacyIds": [
+            "liveops_season_decision_item_4"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "sai_ji_rong_yu",
+          "label": "赛季荣誉",
+          "description": "明确赛季荣誉在赛季中的具体含义、适用范围和验收判断。",
+          "outputKey": "saiJiRongYu",
+          "legacyIds": [
+            "liveops_season_decision_item_5"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "liveops_update_communication_decision",
+      "name": "更新沟通决策",
+      "description": "确认更新重点、补偿、改动解释、预告节奏和反馈回收。",
+      "roleClass": "content_concrete",
+      "requires": [
+        "liveops_version_rhythm_decision"
+      ],
+      "unlocks": [],
+      "domain": "liveops_version_design",
+      "checklist": [
+        {
+          "id": "geng_xin_zhong_dian",
+          "label": "更新重点",
+          "description": "明确更新重点在更新沟通中的具体含义、适用范围和验收判断。",
+          "outputKey": "gengXinZhongDian",
+          "legacyIds": [
+            "liveops_update_communication_decision_item_1"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "wan_jia_bu_chang",
+          "label": "玩家补偿",
+          "description": "说明玩家补偿对目标玩家的判断、限制和验证依据。",
+          "outputKey": "wanJiaBuChang",
+          "legacyIds": [
+            "liveops_update_communication_decision_item_2"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "gai_dong_jie_shi",
+          "label": "改动解释",
+          "description": "明确改动解释在更新沟通中的具体含义、适用范围和验收判断。",
+          "outputKey": "gaiDongJieShi",
+          "legacyIds": [
+            "liveops_update_communication_decision_item_3"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "yu_gao_jie_zou",
+          "label": "预告节奏",
+          "description": "明确预告节奏的频率、强弱变化和玩家感知控制。",
+          "outputKey": "yuGaoJieZou",
+          "legacyIds": [
+            "liveops_update_communication_decision_item_4"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        },
+        {
+          "id": "hui_shou_fan_kui",
+          "label": "回收反馈",
+          "description": "定义回收反馈向玩家传达的信息、时机和表现方式。",
+          "outputKey": "huiShouFanKui",
+          "legacyIds": [
+            "liveops_update_communication_decision_item_5"
+          ],
+          "templateRef": "shared_liveops_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

@@ -1709,8 +1709,6 @@ fn unity_request_fingerprint(
     parsed: &ParsedDesignSource,
     out_dir: &Path,
     locale: ArtifactLocale,
-    unity_project_path: &str,
-    unity_editor_path: &str,
 ) -> AdmResult<String> {
     let contracts = playable_contracts(out_dir);
     let stage08 = SCENE_ASSEMBLY_REQUIRED_STAGE8_ARTIFACTS
@@ -1718,17 +1716,15 @@ fn unity_request_fingerprint(
         .map(|name| ((*name).to_string(), read_stage_json(out_dir, 8, name)))
         .collect::<BTreeMap<_, _>>();
     let material = json!({
-        "protocol": "unity_scene_assembly_request_v1",
+        "protocol": "unity_scene_assembly_request_v2",
         "source": {
             "sha256": parsed.source_sha256,
-            "path": parsed.source_path,
-            "package": parsed.source_package,
             "input_type": parsed.source_input_type,
         },
         "artifact_locale": locale.as_str(),
-        "unity_context": {
-            "project_path": request_path_identity(unity_project_path),
-            "editor_path": request_path_identity(unity_editor_path),
+        "unity_project_contract": {
+            "scene_path": "Assets/Scenes/DemoScene.unity",
+            "stage_output_ref": "outputs/artifacts/stage_13",
         },
         "stage_02": contracts,
         "stage_08": stage08,
@@ -1749,6 +1745,30 @@ fn unity_request_fingerprint(
     let bytes = serde_json::to_vec(&material)
         .map_err(|error| AdmError::new(format!("serialize Unity request fingerprint: {error}")))?;
     Ok(sha256_hex(&bytes))
+}
+
+fn unity_machine_binding_id(unity_project_path: &str, unity_editor_path: &str) -> String {
+    if unity_project_path.trim().is_empty() || unity_editor_path.trim().is_empty() {
+        return String::new();
+    }
+    let material = format!(
+        "unity-machine-binding-v1\n{}\n{}",
+        request_path_identity(unity_project_path),
+        request_path_identity(unity_editor_path),
+    );
+    sha256_hex(material.as_bytes())
+}
+
+fn unity_machine_binding(unity_project_path: &str, unity_editor_path: &str) -> Value {
+    let binding_id = unity_machine_binding_id(unity_project_path, unity_editor_path);
+    json!({
+        "schema_version": 1,
+        "status": if binding_id.is_empty() { "unbound" } else { "bound" },
+        "binding_id": binding_id,
+        "binding_scope": "machine",
+        "requires_runtime_resolution": true,
+        "requires_rebind_on_machine_change": true,
+    })
 }
 
 fn request_path_identity(value: &str) -> String {
@@ -1939,6 +1959,7 @@ fn scene_execution_evidence_verified(
     build_settings: &Value,
     changed_manifest: &Value,
     scene_manifest: &Value,
+    runtime_unity_project_path: &str,
 ) -> bool {
     let scene_path = string_field(scene, "scene_path");
     if scene_path.is_empty()
@@ -1960,10 +1981,11 @@ fn scene_execution_evidence_verified(
     }
 
     let materialized_files = string_array(scene.get("materialized_files"));
-    let project_path = string_field(scene, "project_path");
-    let project_files_exist = !project_path.is_empty()
-        && Path::new(&project_path).join(&scene_path).is_file()
-        && Path::new(&project_path)
+    let project_files_exist = !runtime_unity_project_path.is_empty()
+        && Path::new(runtime_unity_project_path)
+            .join(&scene_path)
+            .is_file()
+        && Path::new(runtime_unity_project_path)
             .join("ProjectSettings/EditorBuildSettings.asset")
             .is_file();
     let required_scene_exists = scene
@@ -2033,26 +2055,43 @@ fn scene_execution_context_matches(
     unity_project_path: &str,
     unity_editor_path: &str,
 ) -> bool {
-    protocol_paths_match(&string_field(scene, "project_path"), unity_project_path)
-        && protocol_paths_match(&string_field(scene, "unity_editor_path"), unity_editor_path)
+    let expected = unity_machine_binding_id(unity_project_path, unity_editor_path);
+    let actual = scene
+        .get("machine_binding")
+        .and_then(|binding| binding.get("binding_id"))
+        .and_then(Value::as_str)
+        .or_else(|| scene.get("machine_binding_id").and_then(Value::as_str))
+        .unwrap_or_default();
+    !expected.is_empty() && actual == expected
 }
 
-fn protocol_paths_match(actual: &str, expected: &str) -> bool {
-    if actual.trim().is_empty() || expected.trim().is_empty() {
-        return false;
-    }
-    if let (Ok(actual), Ok(expected)) = (
-        std::fs::canonicalize(Path::new(actual)),
-        std::fs::canonicalize(Path::new(expected)),
-    ) {
-        return actual == expected;
-    }
-    let actual = normalize_path(actual);
-    let expected = normalize_path(expected);
-    if cfg!(windows) {
-        actual.eq_ignore_ascii_case(&expected)
+fn machine_binding_mismatch_issue(
+    document: &Value,
+    locale: ArtifactLocale,
+    stage_prefix: &str,
+) -> Value {
+    let has_legacy_paths = !string_field(document, "project_path").is_empty()
+        || !string_field(document, "unity_editor_path").is_empty();
+    if has_legacy_paths {
+        json!({
+            "code": format!("{stage_prefix}_LEGACY_MACHINE_BINDING_REBIND_REQUIRED"),
+            "message": localized_text(
+                locale,
+                "现有 Unity 执行证据仍使用旧版绝对路径绑定，不能在迁移后复用；请在当前电脑重新绑定并执行。",
+                "Existing Unity execution evidence uses legacy absolute-path binding and cannot be reused after relocation; rebind and execute it on this machine."
+            ),
+            "return_target": "environment_configuration",
+        })
     } else {
-        actual == expected
+        json!({
+            "code": format!("{stage_prefix}_MACHINE_BINDING_MISMATCH"),
+            "message": localized_text(
+                locale,
+                "Unity 执行证据不属于当前电脑绑定；请重新绑定 Unity 项目与编辑器后再次执行。",
+                "The Unity execution evidence does not belong to the current machine binding; rebind the Unity project and editor, then execute again."
+            ),
+            "return_target": "environment_configuration",
+        })
     }
 }
 
@@ -2064,13 +2103,8 @@ fn stage13_outputs(
     let locale = artifact_locale_from_inputs(structured_inputs);
     let unity_project_path = string_field(structured_inputs, "unity_project_path");
     let unity_editor_path = string_field(structured_inputs, "unity_editor_path");
-    let request_fingerprint = unity_request_fingerprint(
-        parsed,
-        out_dir,
-        locale,
-        &unity_project_path,
-        &unity_editor_path,
-    )?;
+    let machine_binding = unity_machine_binding(&unity_project_path, &unity_editor_path);
+    let request_fingerprint = unity_request_fingerprint(parsed, out_dir, locale)?;
     // Step13 only prepares a Unity request. A later Unity runner may materialize the
     // scene and write these files; a rerun can then consume that corroborated evidence.
     // In particular, never infer execution success merely from ready upstream inputs.
@@ -2170,6 +2204,7 @@ fn stage13_outputs(
         &previous_build_settings,
         &previous_changed_manifest,
         &previous_scene_manifest,
+        &unity_project_path,
     );
     let evidence_context_matches =
         scene_execution_context_matches(&previous_scene, &unity_project_path, &unity_editor_path);
@@ -2205,15 +2240,11 @@ fn stage13_outputs(
         && scene_fingerprint_issue.is_none()
         && execution_object_issues.is_empty();
     if request_ready_for_execute && evidence_contract_verified && !evidence_context_matches {
-        blockers.push(json!({
-            "code": "STEP13_UNITY_EXECUTION_EVIDENCE_CONTEXT_MISMATCH",
-            "message": localized_text(
-                locale,
-                "已有 Unity 执行证据来自另一组项目或编辑器路径，不能复用为本次场景组装成功证据。",
-                "Existing Unity execution evidence belongs to a different project or editor path and cannot verify this scene-assembly request."
-            ),
-            "return_target": "stage_13",
-        }));
+        blockers.push(machine_binding_mismatch_issue(
+            &previous_scene,
+            locale,
+            "STEP13",
+        ));
     } else if request_ready_for_execute && !evidence_contract_verified {
         blockers.push(json!({
             "code": "STEP13_UNITY_EXECUTION_EVIDENCE_MISSING",
@@ -2258,11 +2289,12 @@ fn stage13_outputs(
         "produced_asset_count": value_array(art.get("produced_assets")).len(),
     });
     let config = json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": now_iso(),
-        "stage_output_path": out_dir.to_string_lossy(),
-        "project_path": unity_project_path,
-        "unity_editor_path": unity_editor_path,
+        "stage_output_ref": "outputs/artifacts/stage_13",
+        "project_path": "",
+        "unity_editor_path": "",
+        "machine_binding": machine_binding,
         "request_fingerprint": request_fingerprint,
         "scene_path": "Assets/Scenes/DemoScene.unity",
         "contract_summary": summary,
@@ -2271,10 +2303,12 @@ fn stage13_outputs(
     write_json(
         &out_dir.join("unity_editor_request.json"),
         &json!({
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "generated_at": now_iso(),
-            "project_path": unity_project_path,
-            "unity_editor_path": unity_editor_path,
+            "project_path": "",
+            "unity_editor_path": "",
+            "machine_binding": machine_binding,
+            "runtime_binding_resolution": "required",
             "request_fingerprint": request_fingerprint,
             "scene_path": "Assets/Scenes/DemoScene.unity",
             "requires_compile_before_execute_method": true,
@@ -2326,7 +2360,7 @@ fn stage13_outputs(
         json!({"id": "scene_assembly_unity_execute", "status": "not_executed", "errors": []})
     };
     let report = json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": now_iso(),
         "status": status,
         "request_generated": true,
@@ -2335,8 +2369,9 @@ fn stage13_outputs(
         "unity_result": unity_result,
         "execution_evidence_verified": execution_evidence_verified,
         "scene_path": "Assets/Scenes/DemoScene.unity",
-        "project_path": unity_project_path,
-        "unity_editor_path": unity_editor_path,
+        "project_path": "",
+        "unity_editor_path": "",
+        "machine_binding": machine_binding,
         "request_fingerprint": request_fingerprint,
         "execution_object_id": if execution_evidence_verified { string_field(&previous_scene, "execution_object_id") } else { String::new() },
         "execution_object_state": if execution_evidence_verified { "verified" } else { "not_started" },
@@ -2437,19 +2472,14 @@ fn stage14_outputs(
         string_field(structured_inputs, "unity_editor_path"),
         &string_field(&unity_request, "unity_editor_path"),
     );
-    let request_fingerprint = unity_request_fingerprint(
-        parsed,
-        out_dir,
-        locale,
-        &unity_project_path,
-        &unity_editor_path,
-    )?;
+    let request_fingerprint = unity_request_fingerprint(parsed, out_dir, locale)?;
     let evidence_contract_verified = scene_execution_evidence_verified(
         &scene,
         &scene_smoke,
         &scene_build_settings,
         &scene_changed_manifest,
         &scene_manifest,
+        &unity_project_path,
     );
     let evidence_context_matches =
         scene_execution_context_matches(&scene, &unity_project_path, &unity_editor_path);
@@ -2529,15 +2559,7 @@ fn stage14_outputs(
             "return_target": "stage_13",
         }));
         if evidence_contract_verified && !evidence_context_matches {
-            blockers.push(json!({
-                "code": "STEP14_UNITY_EXECUTION_EVIDENCE_CONTEXT_MISMATCH",
-                "message": localized_text(
-                    locale,
-                    "步骤13的 Unity 场景报告与当前编辑器请求路径不一致。",
-                    "The Stage13 Unity scene report does not match the current Editor request paths."
-                ),
-                "return_target": "stage_13",
-            }));
+            blockers.push(machine_binding_mismatch_issue(&scene, locale, "STEP14"));
         }
         blockers.extend(fingerprint_issues);
         blockers.extend(execution_object_issues);
@@ -3794,7 +3816,7 @@ mod tests {
     use crate::work_units::{
         WorkUnitExecutionResult, WorkUnitJournalRecord, WorkUnitReconcileDecision,
     };
-    use adm_new_foundation::new_stable_id;
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -4094,14 +4116,10 @@ mod tests {
         let editor = root.join("UnityEditor/Unity.exe");
         let scene_path = "Assets/Scenes/DemoScene.unity";
         let unity_inputs = unity_context_inputs(root, ArtifactLocale::ZhCn);
-        let request_fingerprint = unity_request_fingerprint(
-            &sample_parsed(),
-            &stage13,
-            ArtifactLocale::ZhCn,
-            &project.to_string_lossy(),
-            &editor.to_string_lossy(),
-        )
-        .unwrap();
+        let machine_binding =
+            unity_machine_binding(&project.to_string_lossy(), &editor.to_string_lossy());
+        let request_fingerprint =
+            unity_request_fingerprint(&sample_parsed(), &stage13, ArtifactLocale::ZhCn).unwrap();
         fs::create_dir_all(project.join("Assets/Scenes")).unwrap();
         fs::create_dir_all(project.join("ProjectSettings")).unwrap();
         fs::create_dir_all(editor.parent().unwrap()).unwrap();
@@ -4119,8 +4137,9 @@ mod tests {
                 "generated_at": now_iso(),
                 "status": "success",
                 "scene_path": scene_path,
-                "project_path": project.to_string_lossy(),
-                "unity_editor_path": editor.to_string_lossy(),
+                "project_path": "",
+                "unity_editor_path": "",
+                "machine_binding": machine_binding,
                 "request_fingerprint": request_fingerprint,
                 "unity_attempted": true,
                 "unity_result": {"id": "scene_assembly_unity_execute", "status": "passed", "errors": []},
@@ -4221,8 +4240,7 @@ mod tests {
                     "state_history": [],
                     "metadata": {
                         "request_fingerprint": request_fingerprint,
-                        "project_path": project.to_string_lossy(),
-                        "unity_editor_path": editor.to_string_lossy()
+                        "machine_binding": machine_binding,
                     }
                 }],
                 "audit_cleanup_evidence": [],
@@ -4691,16 +4709,26 @@ Frozen / Traceable
         assert_eq!(result["status"], "blocked");
         assert_eq!(request["status"], "ready");
         assert_eq!(request["ready_for_execute"], true);
-        assert_eq!(request["project_path"], unity_inputs["unity_project_path"]);
-        assert_eq!(
-            request["unity_editor_path"],
-            unity_inputs["unity_editor_path"]
-        );
-        assert_eq!(report["project_path"], unity_inputs["unity_project_path"]);
-        assert_eq!(
-            report["unity_editor_path"],
-            unity_inputs["unity_editor_path"]
-        );
+        assert_eq!(request["project_path"], "");
+        assert_eq!(request["unity_editor_path"], "");
+        assert_eq!(report["project_path"], "");
+        assert_eq!(report["unity_editor_path"], "");
+        assert_eq!(request["machine_binding"], report["machine_binding"]);
+        assert_eq!(request["machine_binding"]["status"], "bound");
+        assert!(!string_field(&request["machine_binding"], "binding_id").is_empty());
+        let persisted = serde_json::to_string(&request).unwrap();
+        assert!(!persisted.contains(root.to_string_lossy().as_ref()));
+        for entry in fs::read_dir(root.join("stage_13")).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|extension| extension.to_str()) == Some("json") {
+                let text = fs::read_to_string(&path).unwrap();
+                assert!(
+                    !text.contains(root.to_string_lossy().as_ref()),
+                    "absolute machine root leaked into {}",
+                    path.display()
+                );
+            }
+        }
         assert_eq!(report["execution_evidence_verified"], false);
         assert_eq!(report["unity_attempted"], false);
         assert_eq!(report["static_structure"]["canvas_ui_root_exists"], false);
@@ -4831,8 +4859,8 @@ Frozen / Traceable
                 .unwrap()
                 .iter()
                 .any(|issue| {
-                    issue["code"] == "STEP13_UNITY_EXECUTION_EVIDENCE_CONTEXT_MISMATCH"
-                        && issue["return_target"] == "stage_13"
+                    issue["code"] == "STEP13_MACHINE_BINDING_MISMATCH"
+                        && issue["return_target"] == "environment_configuration"
                 })
         );
         assert!(
@@ -4842,6 +4870,70 @@ Frozen / Traceable
                 .iter()
                 .any(|issue| issue["code"] == "STEP13_UNITY_EXECUTION_EVIDENCE_MISSING")
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unity_request_fingerprint_is_relocation_stable_but_machine_binding_is_not() {
+        let old_root = temp_root("unity_request_old_location");
+        let new_root = temp_root("unity_request_new_location");
+        let old_stage = old_root.join("stage_13");
+        let new_stage = new_root.join("stage_13");
+        let old_project = old_root.join("UnityProject");
+        let old_editor = old_root.join("UnityEditor/Unity.exe");
+        let new_project = new_root.join("UnityProject");
+        let new_editor = new_root.join("UnityEditor/Unity.exe");
+
+        let old_fingerprint =
+            unity_request_fingerprint(&sample_parsed(), &old_stage, ArtifactLocale::ZhCn).unwrap();
+        let new_fingerprint =
+            unity_request_fingerprint(&sample_parsed(), &new_stage, ArtifactLocale::ZhCn).unwrap();
+
+        assert_eq!(old_fingerprint, new_fingerprint);
+        assert_ne!(
+            unity_machine_binding_id(
+                &old_project.to_string_lossy(),
+                &old_editor.to_string_lossy()
+            ),
+            unity_machine_binding_id(
+                &new_project.to_string_lossy(),
+                &new_editor.to_string_lossy()
+            )
+        );
+    }
+
+    #[test]
+    fn step13_reads_legacy_path_evidence_only_to_require_rebinding_and_scrubs_it() {
+        let root = temp_root("step13_legacy_path_binding");
+        write_ready_stage13_inputs(&root);
+        let unity_inputs = write_verified_unity_evidence(&root);
+        let scene_path = root.join("stage_13/scene_assembly_report.json");
+        let mut scene = read_json(&scene_path, json!({}));
+        scene.as_object_mut().unwrap().remove("machine_binding");
+        scene["project_path"] = unity_inputs["unity_project_path"].clone();
+        scene["unity_editor_path"] = unity_inputs["unity_editor_path"].clone();
+        write_json(&scene_path, &scene).unwrap();
+
+        let result = Step13OutputGenerator
+            .generate(13, &sample_parsed(), &root.join("stage_13"), &unity_inputs)
+            .unwrap();
+        let persisted = read_json(&scene_path, json!({}));
+
+        assert_eq!(result["status"], "blocked");
+        assert!(
+            result["blocking_issues"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|issue| {
+                    issue["code"] == "STEP13_LEGACY_MACHINE_BINDING_REBIND_REQUIRED"
+                        && issue["return_target"] == "environment_configuration"
+                })
+        );
+        assert_eq!(persisted["project_path"], "");
+        assert_eq!(persisted["unity_editor_path"], "");
+        let serialized = serde_json::to_string(&persisted).unwrap();
+        assert!(!serialized.contains(root.to_string_lossy().as_ref()));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -4870,7 +4962,7 @@ Frozen / Traceable
         let config = read_json(&root.join("stage_13/scene_assembly_config.json"), json!({}));
         let request = read_json(&root.join("stage_13/unity_editor_request.json"), json!({}));
         let stage14 = Step14OutputGenerator
-            .generate(14, &sample_parsed(), &root.join("stage_14"), &json!({}))
+            .generate(14, &sample_parsed(), &root.join("stage_14"), &unity_inputs)
             .unwrap();
 
         assert_eq!(stage13["status"], "success");
@@ -5016,7 +5108,7 @@ Frozen / Traceable
         write_json(&store_path, &store).unwrap();
 
         let stage14 = Step14OutputGenerator
-            .generate(14, &sample_parsed(), &root.join("stage_14"), &json!({}))
+            .generate(14, &sample_parsed(), &root.join("stage_14"), &unity_inputs)
             .unwrap();
 
         assert_eq!(stage14["status"], "blocked");
@@ -5354,7 +5446,9 @@ Frozen / Traceable
             .generate(14, &sample_parsed(), &root.join("stage_14"), &json!({}))
             .unwrap();
 
-        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let repository_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let registry = read_json(
             &repository_root.join("pipeline/artifact_layer/registry.json"),
             json!({}),

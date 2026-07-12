@@ -1,0 +1,320 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_economy_meta_template_v1",
+  "name": "Shared economy meta template v1",
+  "description": "Shared economy meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "economy_value_experience",
+      "label": "价值体验",
+      "description": "经济设计先服务价值感和公平感，再进入货币与商品。这一层把“资源产出”推进到体验目标。",
+      "outputKey": "economyValueExperience",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_value",
+      "designQuestion": "这个经济项要让玩家感到哪种价值？",
+      "options": [
+        {
+          "id": "fair_growth",
+          "label": "公平成长",
+          "description": "玩家相信成长主要来自投入和理解。用于推进“资源产出”的具体判断。",
+          "outputKey": "fairGrowth"
+        },
+        {
+          "id": "scarcity_chase",
+          "label": "稀缺追求",
+          "description": "玩家愿意追逐稀有资源或权益。用于推进“资源产出”的具体判断。",
+          "outputKey": "scarcityChase"
+        },
+        {
+          "id": "satisfying_gain",
+          "label": "爽快获得",
+          "description": "玩家获得资源时感到明确回报。用于推进“资源产出”的具体判断。",
+          "outputKey": "satisfyingGain"
+        },
+        {
+          "id": "long_accumulation",
+          "label": "长期积累",
+          "description": "资源和权益支持长期目标。用于推进“资源产出”的具体判断。",
+          "outputKey": "longAccumulation"
+        },
+        {
+          "id": "payment_trust",
+          "label": "付费安心",
+          "description": "玩家理解付费价值且不担心被坑。用于推进“资源产出”的具体判断。",
+          "outputKey": "paymentTrust"
+        }
+      ]
+    },
+    {
+      "id": "economy_resource_dynamic",
+      "label": "资源动态",
+      "description": "把价值体验转成产出、消耗、转换和通胀动态。这一层把“资源产出”推进到玩家动态。",
+      "outputKey": "economyResourceDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "value_to_resource_flow",
+      "designQuestion": "资源会怎样流动、沉淀和产生压力？",
+      "options": [
+        {
+          "id": "source_sink",
+          "label": "产出消耗",
+          "description": "资源需要稳定来源和出口。用于推进“资源产出”的具体判断。",
+          "outputKey": "sourceSink"
+        },
+        {
+          "id": "storage_deposit",
+          "label": "储备沉淀",
+          "description": "资源会形成库存、囤积或长期积累。用于推进“资源产出”的具体判断。",
+          "outputKey": "storageDeposit"
+        },
+        {
+          "id": "conversion_exchange",
+          "label": "兑换转换",
+          "description": "不同资源之间存在转换关系。用于推进“资源产出”的具体判断。",
+          "outputKey": "conversionExchange"
+        },
+        {
+          "id": "inflation_pressure",
+          "label": "通胀压力",
+          "description": "过量产出会削弱价值。用于推进“资源产出”的具体判断。",
+          "outputKey": "inflationPressure"
+        },
+        {
+          "id": "rare_value_preserve",
+          "label": "稀有价值维护",
+          "description": "稀有资源需要避免快速贬值。用于推进“资源产出”的具体判断。",
+          "outputKey": "rareValuePreserve"
+        }
+      ]
+    },
+    {
+      "id": "economy_mechanic",
+      "label": "经济机制",
+      "description": "把资源动态落到货币、奖励、商品、价格和限制。这一层把“资源产出”推进到机制抓手。",
+      "outputKey": "economyMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "resource_flow_to_mechanic",
+      "designQuestion": "用什么经济机制控制这种动态？",
+      "options": [
+        {
+          "id": "currency_system",
+          "label": "货币体系",
+          "description": "定义基础、稀有、付费和限时货币关系。用于推进“资源产出”的具体判断。",
+          "outputKey": "currencySystem"
+        },
+        {
+          "id": "reward_distribution",
+          "label": "奖励投放",
+          "description": "控制日常、阶段、活动和补偿奖励。用于推进“资源产出”的具体判断。",
+          "outputKey": "rewardDistribution"
+        },
+        {
+          "id": "product_structure",
+          "label": "商品结构",
+          "description": "组织单品、礼包、订阅和限时商品。用于推进“资源产出”的具体判断。",
+          "outputKey": "productStructure"
+        },
+        {
+          "id": "price_anchor",
+          "label": "定价锚点",
+          "description": "建立价格梯度、折扣和价值参照。用于推进“资源产出”的具体判断。",
+          "outputKey": "priceAnchor"
+        },
+        {
+          "id": "trade_limit",
+          "label": "交易限制",
+          "description": "限制交易、兑换、退款或滥用空间。用于推进“资源产出”的具体判断。",
+          "outputKey": "tradeLimit"
+        }
+      ]
+    },
+    {
+      "id": "economy_fairness_boundary",
+      "label": "公平边界",
+      "description": "经济必须限制付费压迫、强度售卖和价值贬损。这一层把“资源产出”推进到边界约束。",
+      "outputKey": "economyFairnessBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "economy_mechanic_to_fairness_boundary",
+      "designQuestion": "什么经济结果会破坏公平感或信任？",
+      "options": [
+        {
+          "id": "payment_pressure",
+          "label": "付费压迫",
+          "description": "不付费玩家感到被迫付费。用于推进“资源产出”的具体判断。",
+          "outputKey": "paymentPressure"
+        },
+        {
+          "id": "power_selling",
+          "label": "强度售卖",
+          "description": "付费直接破坏竞争或成长公平。用于推进“资源产出”的具体判断。",
+          "outputKey": "powerSelling"
+        },
+        {
+          "id": "free_gap",
+          "label": "免费断层",
+          "description": "免费路径进度被明显阻断。用于推进“资源产出”的具体判断。",
+          "outputKey": "freeGap"
+        },
+        {
+          "id": "minor_risk",
+          "label": "未成年人风险",
+          "description": "消费和概率对未成年人不安全。用于推进“资源产出”的具体判断。",
+          "outputKey": "minorRisk"
+        },
+        {
+          "id": "value_devaluation",
+          "label": "价值贬损",
+          "description": "已购价值被快速稀释或贬值。用于推进“资源产出”的具体判断。",
+          "outputKey": "valueDevaluation"
+        }
+      ]
+    },
+    {
+      "id": "economy_signal",
+      "label": "经济信号",
+      "description": "用资源、消耗、转化、价格接受和争议信号验证经济设计。这一层把“资源产出”推进到验收信号。",
+      "outputKey": "economySignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "fairness_boundary_to_economy_signal",
+      "designQuestion": "怎样判断这个经济项健康？",
+      "options": [
+        {
+          "id": "resource_stock",
+          "label": "资源存量",
+          "description": "玩家库存处于可控区间。用于推进“资源产出”的具体判断。",
+          "outputKey": "resourceStock"
+        },
+        {
+          "id": "sink_rate",
+          "label": "消耗率",
+          "description": "资源出口能消化主要产出。用于推进“资源产出”的具体判断。",
+          "outputKey": "sinkRate"
+        },
+        {
+          "id": "payment_conversion",
+          "label": "付费转化",
+          "description": "付费行为与预期价值匹配。用于推进“资源产出”的具体判断。",
+          "outputKey": "paymentConversion"
+        },
+        {
+          "id": "price_acceptance",
+          "label": "价格接受度",
+          "description": "玩家对价格和折扣争议可控。用于推进“资源产出”的具体判断。",
+          "outputKey": "priceAcceptance"
+        },
+        {
+          "id": "dispute_complaint",
+          "label": "争议投诉",
+          "description": "退款、补偿和公平投诉保持可控。用于推进“资源产出”的具体判断。",
+          "outputKey": "disputeComplaint"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_economy_value_experience_fair_growth_vs_scarcity_chase",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "economy_value_experience",
+        "optionId": "fair_growth"
+      },
+      "targets": [
+        {
+          "groupId": "economy_value_experience",
+          "optionId": "scarcity_chase"
+        }
+      ],
+      "reason": "公平成长强调稳定可达，稀缺追求强调差距和不确定，需要控制价值落差。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_economy_value_experience_satisfying_gain_vs_scarcity_chase",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "economy_value_experience",
+        "optionId": "satisfying_gain"
+      },
+      "targets": [
+        {
+          "groupId": "economy_value_experience",
+          "optionId": "scarcity_chase"
+        }
+      ],
+      "reason": "爽快获得会提高投放频率，稀缺追求需要维持稀有性。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_economy_value_experience_payment_trust_vs_scarcity_chase",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "economy_value_experience",
+        "optionId": "payment_trust"
+      },
+      "targets": [
+        {
+          "groupId": "economy_value_experience",
+          "optionId": "scarcity_chase"
+        }
+      ],
+      "reason": "稀缺追求若绑定付费，容易伤害付费信任。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_economy_resource_dynamic_source_sink_vs_storage_deposit",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "economy_resource_dynamic",
+        "optionId": "source_sink"
+      },
+      "targets": [
+        {
+          "groupId": "economy_resource_dynamic",
+          "optionId": "storage_deposit"
+        }
+      ],
+      "reason": "强产消循环和长期储备同时推进时，需要避免资源既短缺又囤积的矛盾体验。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_economy_resource_dynamic_inflation_pressure_vs_rare_value_preserve",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "economy_resource_dynamic",
+        "optionId": "inflation_pressure"
+      },
+      "targets": [
+        {
+          "groupId": "economy_resource_dynamic",
+          "optionId": "rare_value_preserve"
+        }
+      ],
+      "reason": "通胀压力会削弱稀有价值，需要提前定义保值机制。",
+      "severity": "warning"
+    }
+  ]
+}

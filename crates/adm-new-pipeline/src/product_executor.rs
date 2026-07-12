@@ -47,6 +47,7 @@ pub struct ProductPipelineExecutor {
     artifact_locale: ArtifactLocale,
     protocol_root: Option<PathBuf>,
     protocol_gate_required: bool,
+    allow_missing_design_data_for_tests: bool,
     unity_project_path: Option<PathBuf>,
     unity_editor_path: Option<PathBuf>,
 }
@@ -105,6 +106,7 @@ impl ProductPipelineExecutor {
             artifact_locale: ArtifactLocale::default(),
             protocol_root,
             protocol_gate_required: true,
+            allow_missing_design_data_for_tests: false,
             unity_project_path: None,
             unity_editor_path: None,
         })
@@ -146,6 +148,7 @@ impl ProductPipelineExecutor {
     #[cfg(test)]
     fn without_protocol_gate_for_tests(mut self) -> Self {
         self.protocol_gate_required = false;
+        self.allow_missing_design_data_for_tests = true;
         self
     }
 
@@ -321,19 +324,20 @@ impl ProductPipelineExecutor {
 
     fn load_design_engine(&self) -> AdmResult<DesignEngineService> {
         let local = self.root.join("knowledge/design_data");
-        let parent = self
-            .root
-            .parent()
-            .map(|value| value.join("knowledge/design_data"));
         let data_dir = self
             .design_data_dir
             .clone()
             .into_iter()
             .chain(std::iter::once(local))
-            .chain(parent)
             .find(|path| path.join("domains").is_dir());
         let Some(data_dir) = data_dir else {
-            return Ok(DesignEngineService::new(Vec::new()));
+            if self.allow_missing_design_data_for_tests {
+                return Ok(DesignEngineService::new(Vec::new()));
+            }
+            return Err(AdmError::new(format!(
+                "standalone design data is missing: expected an explicit resource root or {}",
+                self.root.join("knowledge/design_data/domains").display()
+            )));
         };
         let data =
             DesignDataLoader::from_design_data_dir(&self.root, data_dir).load_project_data()?;
@@ -885,8 +889,8 @@ impl ProductPipelineExecutor {
                 self.work_unit_journal_root.join("stage_07"),
                 self.work_unit_stop_token.clone(),
             ))),
-            8..=10 | 14 => step08_14::generator_for_step(step_number),
-            13 => Ok(Box::new(UnityContextStageOutputGenerator {
+            8..=10 => step08_14::generator_for_step(step_number),
+            13 | 14 => Ok(Box::new(UnityContextStageOutputGenerator {
                 inner: step08_14::generator_for_step(step_number)?,
                 unity_project_path: self.unity_project_path.clone(),
                 unity_editor_path: self.unity_editor_path.clone(),
@@ -1241,11 +1245,28 @@ mod tests {
     use adm_new_contracts::pipeline::{
         PipelineCheckpoint, PipelineRunState, PipelineUnitCheckpoint, PipelineUnitStatus,
     };
-    use adm_new_foundation::{new_stable_id, sha256_hex};
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot, sha256_hex};
     use std::collections::BTreeMap;
     use std::fs;
 
     use crate::work_units::{WorkUnitJournalPhase, WorkUnitKind, WorkUnitRequest};
+
+    #[test]
+    fn product_executor_never_reads_design_data_from_its_parent_directory() {
+        let parent = temp_root("parent_design_data_must_be_ignored");
+        let root = parent.join("renamed child");
+        fs::create_dir_all(parent.join("knowledge/design_data/domains")).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        let executor = ProductPipelineExecutor::new(&root, "session_a").unwrap();
+
+        let error = executor.load_design_engine().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("standalone design data is missing")
+        );
+        let _ = fs::remove_dir_all(parent);
+    }
 
     #[test]
     fn product_executor_writes_real_step00_through_step02_artifacts() {
@@ -1319,7 +1340,9 @@ mod tests {
     #[test]
     fn product_executor_preserves_en_us_through_step00_02_reports_and_indexes() {
         let root = temp_root("product_pipeline_en_us");
-        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let repository_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let executor = ProductPipelineExecutor::with_design_data_dir(
             &root,
             "session_a",
@@ -1700,7 +1723,9 @@ mod tests {
     #[test]
     fn product_executor_checks_registered_upstream_artifacts_not_only_validation_report() {
         let root = temp_root("product_pipeline_registered_upstream_locale");
-        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let repository_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let executor = ProductPipelineExecutor::with_design_data_dir(
             &root,
             "session_a",
@@ -1802,14 +1827,18 @@ mod tests {
         let request = read_json(&out_dir.join("unity_editor_request.json"), json!({}));
 
         assert_eq!(request["artifact_locale"], "en-US");
-        assert_eq!(
-            request["project_path"],
-            unity_project_path.to_string_lossy().as_ref()
+        assert_eq!(request["project_path"], "");
+        assert_eq!(request["unity_editor_path"], "");
+        assert_eq!(request["machine_binding"]["status"], "bound");
+        assert!(
+            !request["machine_binding"]["binding_id"]
+                .as_str()
+                .unwrap_or_default()
+                .is_empty()
         );
-        assert_eq!(
-            request["unity_editor_path"],
-            unity_editor_path.to_string_lossy().as_ref()
-        );
+        let persisted = serde_json::to_string(&request).unwrap();
+        assert!(!persisted.contains(unity_project_path.to_string_lossy().as_ref()));
+        assert!(!persisted.contains(unity_editor_path.to_string_lossy().as_ref()));
         assert!(
             !result["blocking_issues"]
                 .as_array()

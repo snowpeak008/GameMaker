@@ -2430,7 +2430,7 @@ impl Default for StyleOption {
 mod tests {
     use super::*;
     use adm_new_contracts::schema::{load_structured_file, validate_contract};
-    use adm_new_foundation::new_stable_id;
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn sample_parsed() -> ParsedDesignSource {
@@ -3300,11 +3300,8 @@ mod tests {
     }
 
     fn assert_registered_style_schema(value: &Value, schema_path: &str) {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("..");
-        let schema = load_structured_file(&root.join(schema_path)).unwrap();
+        let root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let schema = load_structured_file(&root.join(schema_path).unwrap()).unwrap();
         let errors = validate_contract(value, &schema);
         assert!(errors.is_empty(), "{schema_path}: {errors:?}");
     }

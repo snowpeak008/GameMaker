@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Program AI Review Report",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "review_status", "blockers", "warnings"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"type": "string"},
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"},
+    "coverage": {"type": "object"}
+  }
+}

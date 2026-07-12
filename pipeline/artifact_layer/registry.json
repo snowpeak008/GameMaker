@@ -1,0 +1,1251 @@
+{
+  "version": 1,
+  "description": "Artifact/task/reviewer/validator registry for the migrated 0-14 pipeline.",
+  "default_reviewers": [
+    "structure_reviewer",
+    "source_trace_reviewer",
+    "task_reviewer",
+    "dependency_reviewer"
+  ],
+  "default_validators": [
+    "validator_first_contract",
+    "stage_files_validator",
+    "review_report_validator",
+    "manifest_validator",
+    "knowledge_refs_validator",
+    "dependency_status_validator"
+  ],
+  "artifacts": [
+    {
+      "id": "stage_00.concept_bundle",
+      "stage": 0,
+      "kind": "design_import_bundle",
+      "depends_on": [],
+      "tasks": [
+        {
+          "id": "stage_00.import_concept",
+          "type": "import_or_design_doc",
+          "description": "Import concept artifacts when provided, otherwise use the current project design document."
+        },
+        {
+          "id": "stage_00.generate_design_machine_files",
+          "type": "deterministic_generation",
+          "description": "Generate design source manifest, extraction, option coverage, project selections, open questions, scope catalog, and phase map."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_00/intent_interpretation_contract.json",
+          "schema": "knowledge/schemas/ai_design/intent_interpretation_contract.schema.json",
+          "description": "Concrete interpretation of the initial project intent."
+        },
+        {
+          "path": "outputs/artifacts/stage_00/project_identity_contract.json",
+          "schema": "knowledge/schemas/ai_design/project_identity_contract.schema.json",
+          "description": "Current draft/session project identity and isolation signature."
+        },
+        {
+          "path": "outputs/artifacts/stage_00/project_dna_seed.json",
+          "schema": "knowledge/schemas/ai_design/project_dna_contract.schema.json",
+          "description": "Initial Project DNA seed. Step03+ must not consume this seed directly."
+        },
+        {
+          "path": "outputs/artifacts/stage_00/open_questions_contract.json",
+          "schema": "knowledge/schemas/ai_design/open_questions_contract.schema.json",
+          "description": "Initial normalized open questions contract."
+        },
+        {
+          "path": "outputs/artifacts/stage_00/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Initial project specificity and template leakage score report."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Frozen_Contracts.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_01.gameplay_framework_bundle",
+      "stage": 1,
+      "kind": "framework_graph_bundle",
+      "depends_on": [
+        "stage_00.concept_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_01.import_framework_history",
+          "type": "import_or_reference",
+          "description": "Import gameplay framework history when provided or reference validated stage 00 outputs."
+        },
+        {
+          "id": "stage_01.generate_framework_graphs",
+          "type": "deterministic_generation",
+          "description": "Generate gameplay framework, core loop, system boundary, full feature scope, implementation phase map, system relation graph, and resource flow graph."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_01/gameplay_concretization_contract.json",
+          "schema": "knowledge/schemas/ai_design/gameplay_concretization_contract.schema.json",
+          "description": "Concrete player actions, feedback loop, progression, scene, and runtime data requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_01/archetype_requirements.json",
+          "schema": "knowledge/schemas/ai_design/archetype_requirements.schema.json",
+          "description": "Detected archetype/subtype requirements for playable completeness."
+        },
+        {
+          "path": "outputs/artifacts/stage_01/open_questions_contract.json",
+          "schema": "knowledge/schemas/ai_design/open_questions_contract.schema.json",
+          "description": "Archetype-specific open questions after gameplay framework extraction."
+        },
+        {
+          "path": "outputs/artifacts/stage_01/archetype_detection_report.json",
+          "schema": "knowledge/schemas/ai_design/archetype_detection_report.schema.json",
+          "description": "Archetype detection signals and fallback status."
+        },
+        {
+          "path": "outputs/artifacts/stage_01/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Gameplay framework specificity and archetype confidence report."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Design_Decisions.md",
+        "knowledge/Frozen_Contracts.md"
+      ]
+    },
+    {
+      "id": "stage_02.design_freeze_bundle",
+      "stage": 2,
+      "kind": "design_freeze_bundle",
+      "depends_on": [
+        "stage_01.gameplay_framework_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_02.import_subsystems",
+          "type": "import",
+          "description": "Import subsystem designs."
+        },
+        {
+          "id": "stage_02.import_ai_design_script",
+          "type": "import",
+          "description": "Import AI design script."
+        },
+        {
+          "id": "stage_02.import_development_design",
+          "type": "import",
+          "description": "Import frozen design and development design artifacts."
+        },
+        {
+          "id": "stage_02.freeze_traced_scope",
+          "type": "deterministic_generation",
+          "description": "Generate frozen design summary, playable contracts, freeze contract, scope decisions, phase backlog, design review report, and repair patch record."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/core_playable_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/core_playable_contract.schema.json",
+          "description": "Core playable runtime contract."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/demo_flow_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/demo_flow_contract.schema.json",
+          "description": "First playable demo flow contract."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/runtime_data_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/runtime_data_contract.schema.json",
+          "description": "Runtime data tables required by the playable flow."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/ui_flow_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/ui_flow_contract.schema.json",
+          "description": "UI screens, controls, bindings, and checks required by the playable flow."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/scene_bootstrap_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/scene_bootstrap_contract.schema.json",
+          "description": "Scene bootstrap requirements for the first playable scene."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/asset_mount_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/asset_mount_contract.schema.json",
+          "description": "Required asset paths, consumers, mount points, and fallbacks."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/audio_requirements_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/audio_requirements_contract.schema.json",
+          "description": "Placeholder-only audio event requirements for later AI audio generation."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/playable_acceptance_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/playable_acceptance_contract.schema.json",
+          "description": "Playable demo acceptance checks."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/design_ai_review_report.json",
+          "schema": "knowledge/schemas/ai_design/design_ai_review_report.schema.json",
+          "description": "AI-assisted design completeness review report."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/project_dna_contract.json",
+          "schema": "knowledge/schemas/ai_design/project_dna_contract.schema.json",
+          "description": "Frozen Project DNA contract consumed by Step03+."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_scenario_contract.json",
+          "schema": "knowledge/schemas/ai_design/playable_scenario_contract.schema.json",
+          "description": "First playable scenario and acceptance flow derived from Project DNA."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/semantic_coverage_seed.json",
+          "schema": "knowledge/schemas/ai_design/semantic_coverage_matrix.schema.json",
+          "description": "Required semantic coverage seed before program/art coverage is evaluated."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Frozen design specificity score and blocking summary."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Design_Decisions.md",
+        "knowledge/Frozen_Contracts.md"
+      ]
+    },
+    {
+      "id": "stage_03.program_requirements_bundle",
+      "stage": 3,
+      "kind": "program_requirements_bundle",
+      "depends_on": [
+        "stage_02.design_freeze_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_03.import_program_requirements",
+          "type": "import_or_generate",
+          "description": "Import program requirements when provided or generate them from the frozen traced design."
+        },
+        {
+          "id": "stage_03.generate_traceability_matrix",
+          "type": "deterministic_generation",
+          "description": "Generate systems, entities, contracts, acceptance criteria, structure spec, program requirements contract, and traceability matrix."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_03/program_requirements_contract.json",
+          "schema": "knowledge/schemas/program_requirements_contract.schema.json",
+          "description": "Program requirements derived from frozen playable contracts for runtime, UI, scene, input, objective, data, and test systems."
+        },
+        {
+          "path": "outputs/artifacts/stage_03/program_requirement_trace_report.json",
+          "schema": "knowledge/schemas/ai_design/program_requirement_trace_report.schema.json",
+          "description": "Trace review for program requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_03/program_structure_spec.json",
+          "schema": "knowledge/schemas/ai_design/program_structure_spec.schema.json",
+          "description": "Allowed roots, system path map, and path binding contract for development planning."
+        },
+        {
+          "path": "outputs/artifacts/stage_03/program_capability_contract.json",
+          "schema": "knowledge/schemas/ai_design/program_capability_contract.schema.json",
+          "description": "Project DNA runtime semantics converted into implementable program capabilities."
+        },
+        {
+          "path": "outputs/artifacts/stage_03/program_semantic_coverage_report.json",
+          "schema": "knowledge/schemas/ai_design/program_semantic_coverage_report.schema.json",
+          "description": "Program semantic coverage report before program review."
+        },
+        {
+          "path": "outputs/artifacts/stage_03/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Program requirements specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Frozen_Contracts.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    },
+    {
+      "id": "stage_04.art_requirements_bundle",
+      "stage": 4,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_03.program_requirements_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_04.resolve_art_requirements",
+          "type": "import_or_declare_missing",
+          "description": "Import art requirements or record missing source artifact."
+        },
+        {
+          "id": "stage_04.generate_art_requirements",
+          "type": "deterministic_generation",
+          "description": "Generate source-traced art requirement documents, asset registry, structure spec, drift analysis, and art requirements contract."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_04/asset_spec_contract.json",
+          "schema": "knowledge/schemas/ai_design/asset_spec_contract.schema.json",
+          "description": "Consumable Unity asset specifications derived from art requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/art_requirements_contract.json",
+          "schema": "knowledge/schemas/art_requirements_contract.schema.json",
+          "description": "Art requirements and asset production contract derived from frozen playable contracts."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/asset_registry.json",
+          "schema": "knowledge/schemas/ai_design/asset_registry.schema.json",
+          "description": "Source-traced consumable asset registry."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/asset_requirements_resolved.json",
+          "schema": "knowledge/schemas/ai_design/asset_requirements_resolved.schema.json",
+          "description": "Resolved mapping from playable asset contracts to Unity asset targets."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/unity_asset_mount_plan.json",
+          "schema": "knowledge/schemas/ai_design/unity_asset_mount_plan.schema.json",
+          "description": "Unity mount points, import settings, fallback policies, and acceptance checks."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/audio_placeholder_plan.json",
+          "schema": "knowledge/schemas/ai_design/audio_placeholder_plan.schema.json",
+          "description": "Placeholder-only audio plan for later AI audio replacement."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/image_consumable_spec.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/image_consumable_spec.schema.json",
+          "description": "Consumable image asset contract with Unity target path and fallback policy."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/ui_slice_spec_contract.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/ui_slice_spec_contract.schema.json",
+          "description": "UI sprite slicing metadata contract. Python emits metadata; Unity performs slicing."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/unity_import_policy.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_import_policy.schema.json",
+          "description": "Unity import root, import settings, and optional Addressables policy."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/asset_usage_binding_seed.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/asset_usage_binding_seed.schema.json",
+          "description": "Initial asset-to-program binding seed generated from playable contracts."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/audio_placeholder_requirements.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/audio_placeholder_requirements.schema.json",
+          "description": "Empty audio placeholder requirements for future audio AI replacement."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/art_taxonomy_contract.json",
+          "schema": "knowledge/schemas/ai_design/art_taxonomy_contract.schema.json",
+          "description": "Project-specific art taxonomy derived from Project DNA and archetype requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/asset_strategy_matrix.json",
+          "schema": "knowledge/schemas/ai_design/asset_strategy_matrix.schema.json",
+          "description": "Asset strategy matrix binding core semantics to Unity asset targets."
+        },
+        {
+          "path": "outputs/artifacts/stage_04/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Art requirements specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_05.program_review_bundle",
+      "stage": 5,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_03.program_requirements_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_05.resolve_program_review",
+          "type": "import_or_declare_missing",
+          "description": "Import program review or record missing source artifact."
+        },
+        {
+          "id": "stage_05.generate_program_review",
+          "type": "deterministic_review",
+          "description": "Review generated program requirements for blockers, warnings, weak relations, missing items, and plan readiness."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_05/program_ai_review_report.json",
+          "schema": "knowledge/schemas/ai_design/program_ai_review_report.schema.json",
+          "description": "AI-assisted program requirements review report."
+        },
+        {
+          "path": "outputs/artifacts/stage_05/program_semantic_review_report.json",
+          "schema": "knowledge/schemas/ai_design/program_semantic_review_report.schema.json",
+          "description": "Semantic review for Project DNA consumption and program coverage."
+        },
+        {
+          "path": "outputs/artifacts/stage_05/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Program review specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    },
+    {
+      "id": "stage_06.art_review_bundle",
+      "stage": 6,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_04.art_requirements_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_06.resolve_art_review",
+          "type": "import_or_declare_missing",
+          "description": "Import art review or record missing source artifact."
+        },
+        {
+          "id": "stage_06.generate_art_review",
+          "type": "deterministic_review",
+          "description": "Review generated art requirements and asset registry for blockers and traceability."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_06/art_ai_review_report.json",
+          "schema": "knowledge/schemas/ai_design/art_ai_review_report.schema.json",
+          "description": "AI-assisted art requirements review report."
+        },
+        {
+          "path": "outputs/artifacts/stage_06/art_semantic_review_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_semantic_review_report.schema.json",
+          "description": "Semantic art review report covering asset roles, mount readiness, UI consumption, and rework needs."
+        },
+        {
+          "path": "outputs/artifacts/stage_06/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Art review specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_07.art_style_generation_confirmation_bundle",
+      "stage": 7,
+      "kind": "manual_gate",
+      "depends_on": [
+        "stage_06.art_review_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_07.resolve_art_review_context",
+          "type": "reference_upstream",
+          "description": "Reference art review outputs and asset requirements as style context."
+        },
+        {
+          "id": "stage_07.generate_style_options",
+          "type": "deterministic_generation",
+          "description": "Generate art style options, image previews, and generation logs."
+        },
+        {
+          "id": "stage_07.score_style_options",
+          "type": "deterministic_scoring",
+          "description": "Score style options and mark the recommended default option."
+        },
+        {
+          "id": "stage_07.check_manual_style_gate",
+          "type": "manual_gate",
+          "description": "Check whether the art style gate is enabled, skipped, or awaiting operator approval."
+        },
+        {
+          "id": "stage_07.write_style_confirmation",
+          "type": "human_confirmation",
+          "description": "Persist the selected style option and operator notes in the same stage."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_07/style_application_contract.json",
+          "schema": "knowledge/schemas/ai_design/style_application_contract.schema.json",
+          "description": "Concrete style constraints for production asset generation."
+        },
+        {
+          "path": "outputs/artifacts/stage_07/style_fit_report.json",
+          "schema": "knowledge/schemas/ai_design/style_fit_report.schema.json",
+          "description": "Style compatibility report against archetype readability requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_07/style_risk_acknowledgement.json",
+          "schema": "knowledge/schemas/ai_design/style_risk_acknowledgement.schema.json",
+          "description": "Human style risk acknowledgement and override record."
+        },
+        {
+          "path": "outputs/artifacts/stage_07/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Style generation specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_08.program_plan_bundle",
+      "stage": 8,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_02.design_freeze_bundle",
+        "stage_03.program_requirements_bundle",
+        "stage_05.program_review_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_08.resolve_program_plan",
+          "type": "import_or_declare_missing",
+          "description": "Import program plans or record missing source artifact."
+        },
+        {
+          "id": "stage_08.generate_program_plan",
+          "type": "deterministic_generation",
+          "description": "Generate program task breakdown, typed playable contract tasks, phase task map, build config, config schema, and plan files."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_08/program_plan_contract.json",
+          "schema": "knowledge/schemas/ai_design/program_plan_contract.schema.json",
+          "description": "Program development plan contract with task outputs and source contracts."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/playable_contract_plan_summary.json",
+          "schema": "knowledge/schemas/playable_contracts/playable_contract_plan_summary.schema.json",
+          "description": "Summary of typed development tasks generated from playable contracts."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/ai_task_synthesis_report.json",
+          "schema": "knowledge/schemas/ai_design/ai_task_synthesis_report.schema.json",
+          "description": "Task traceability and contract completeness review report."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/scene_assembly_task_requirements.json",
+          "schema": "knowledge/schemas/ai_design/scene_assembly_task_requirements.schema.json",
+          "description": "Scene roots, camera, UI roots, input roots, and visible object requirements for Step13."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/ui_runtime_task_requirements.json",
+          "schema": "knowledge/schemas/ai_design/ui_runtime_task_requirements.schema.json",
+          "description": "UI screens and runtime binding tasks for Step11 and Step13."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/input_runtime_task_requirements.json",
+          "schema": "knowledge/schemas/ai_design/input_runtime_task_requirements.schema.json",
+          "description": "Input actions and InputRouter runtime task requirements."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/objective_runtime_task_requirements.json",
+          "schema": "knowledge/schemas/ai_design/objective_runtime_task_requirements.schema.json",
+          "description": "Objective tracking and completion requirements for playable flow."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/program_task_breakdown.json",
+          "schema": "knowledge/schemas/ai_design/program_task_breakdown.schema.json",
+          "description": "Executable program task breakdown with semantic references."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/program_semantic_coverage_matrix.json",
+          "schema": "knowledge/schemas/ai_design/program_semantic_coverage_matrix.schema.json",
+          "description": "Program task coverage matrix for required capabilities."
+        },
+        {
+          "path": "outputs/artifacts/stage_08/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Program plan specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    },
+    {
+      "id": "stage_09.art_plan_bundle",
+      "stage": 9,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_04.art_requirements_bundle",
+        "stage_07.art_style_generation_confirmation_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_09.resolve_art_plan",
+          "type": "import_or_declare_missing",
+          "description": "Import art plans or record missing source artifact."
+        },
+        {
+          "id": "stage_09.generate_art_plan",
+          "type": "deterministic_generation",
+          "description": "Generate art plan index, art task breakdown, and art structure spec using confirmed style."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_09/art_production_task_contract.json",
+          "schema": "knowledge/schemas/ai_design/art_production_task_contract.schema.json",
+          "description": "Art production tasks bound to consumable asset specs."
+        },
+        {
+          "path": "outputs/artifacts/stage_09/art_task_breakdown.json",
+          "schema": "knowledge/schemas/ai_design/art_task_breakdown.schema.json",
+          "description": "Art task breakdown with source semantic roles."
+        },
+        {
+          "path": "outputs/artifacts/stage_09/art_semantic_coverage_matrix.json",
+          "schema": "knowledge/schemas/ai_design/art_semantic_coverage_matrix.schema.json",
+          "description": "Art task coverage matrix for required asset strategy roles."
+        },
+        {
+          "path": "outputs/artifacts/stage_09/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Art plan specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_10.asset_alignment_bundle",
+      "stage": 10,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_08.program_plan_bundle",
+        "stage_09.art_plan_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_10.resolve_asset_alignment",
+          "type": "import_or_declare_missing",
+          "description": "Import asset alignment or record missing source artifact."
+        },
+        {
+          "id": "stage_10.generate_asset_alignment",
+          "type": "deterministic_generation",
+          "description": "Generate asset alignment protocol, program/art asset lists, dependency graph, gap analysis, and alignment matrix."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_10/asset_alignment_report.json",
+          "schema": "knowledge/schemas/ai_design/asset_alignment_report.schema.json",
+          "description": "Program-to-art asset alignment report consumed by development execution and scene assembly."
+        },
+        {
+          "path": "outputs/artifacts/stage_10/mount_readiness_summary.json",
+          "schema": "knowledge/schemas/ai_design/mount_readiness_summary.schema.json",
+          "description": "Consumable Unity mount readiness summary consumed by art production and scene assembly."
+        },
+        {
+          "path": "outputs/artifacts/stage_10/semantic_alignment_report.json",
+          "schema": "knowledge/schemas/ai_design/semantic_alignment_report.schema.json",
+          "description": "Final semantic alignment report across Project DNA, program tasks, and art tasks."
+        },
+        {
+          "path": "outputs/artifacts/stage_10/semantic_coverage_matrix.json",
+          "schema": "knowledge/schemas/ai_design/semantic_coverage_matrix.schema.json",
+          "description": "Final semantic coverage matrix consumed by later implementation stages."
+        },
+        {
+          "path": "outputs/artifacts/stage_10/customization_score_report.json",
+          "schema": "knowledge/schemas/ai_design/customization_score_report.schema.json",
+          "description": "Asset alignment specificity score."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Frozen_Contracts.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_11.dev_execution_bundle",
+      "stage": 11,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_04.art_requirements_bundle",
+        "stage_09.art_plan_bundle",
+        "stage_10.asset_alignment_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_11.resolve_dev_execution",
+          "type": "import_or_declare_missing",
+          "description": "Import development execution or record missing source artifact."
+        },
+        {
+          "id": "stage_11.generate_dev_execution",
+          "type": "deterministic_generation",
+          "description": "Generate traced development execution records from program plan tasks."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_11/dev_execution_report.json",
+          "schema": "knowledge/schemas/ai_design/dev_execution_report.schema.json",
+          "description": "Structured development execution report with execution object states and blockers."
+        },
+        {
+          "path": "outputs/execution_objects/execution_objects.json",
+          "schema": "knowledge/schemas/execution_object_workflow.schema.json",
+          "description": "Project-save scoped execution object workflow store."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    },
+    {
+      "id": "stage_12.art_production_bundle",
+      "stage": 12,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_10.asset_alignment_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_12.resolve_art_production",
+          "type": "import_or_declare_missing",
+          "description": "Import art production or record missing source artifact."
+        },
+        {
+          "id": "stage_12.generate_art_production",
+          "type": "deterministic_generation",
+          "description": "Generate traced art production records from art plan tasks, confirmed style, and placeholder-only audio requirements."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_12/art_production_report.json",
+          "schema": "knowledge/schemas/ai_design/art_production_report.schema.json",
+          "description": "Structured art production report listing produced and missing consumable assets."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/audio_placeholder_manifest_runtime.json",
+          "schema": "knowledge/schemas/playable_contracts/audio_placeholder_manifest_runtime.schema.json",
+          "description": "Runtime record of generated empty audio placeholder files."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/raw_generated_asset_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/raw_generated_asset_manifest.schema.json",
+          "description": "Raw image generation intake and availability manifest."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/image_quality_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/image_quality_report.schema.json",
+          "description": "Technical image quality report with format, alpha, and fallback status."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_semantic_review_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_semantic_review_report.schema.json",
+          "description": "Semantic consumability review and human review queue seed."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_rework_queue.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_rework_queue.schema.json",
+          "description": "Blocking and non-blocking art rework queue."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/processed_asset_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/processed_asset_manifest.schema.json",
+          "description": "Processed asset manifest. Python does not crop or slice pixels."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/sprite_slice_result_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/sprite_slice_result_manifest.schema.json",
+          "description": "Sprite slice metadata for Unity TextureImporter."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/unity_import_settings_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_import_settings_manifest.schema.json",
+          "description": "Per-asset Unity TextureImporter and asset importer settings."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/sprite_atlas_plan.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/sprite_atlas_plan.schema.json",
+          "description": "Sprite atlas packing plan for Unity."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/addressable_asset_plan.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/addressable_asset_plan.schema.json",
+          "description": "Optional Addressables plan. Non-blocking unless the Unity package is enabled."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/ugui_prefab_contract.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/ugui_prefab_contract.schema.json",
+          "description": "UGUI prefab contract generated from UI asset tasks."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/ui_prefab_generation_request.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/ui_prefab_generation_request.schema.json",
+          "description": "Unity Editor request payload for UGUI prefab generation."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/asset_mount_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/asset_mount_manifest.schema.json",
+          "description": "Final mount manifest consumed by scene assembly."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/program_asset_binding_preflight.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/program_asset_binding_preflight.schema.json",
+          "description": "Preflight report for program-to-art binding readiness."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_handoff_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_handoff_manifest.schema.json",
+          "description": "Strong handoff gate consumed by Step13 Unity materialization."
+        },
+        {
+          "path": "outputs/execution_objects/execution_objects.json",
+          "schema": "knowledge/schemas/execution_object_workflow.schema.json",
+          "description": "Project-save scoped execution object workflow store."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Naming_Convention.md"
+      ]
+    },
+    {
+      "id": "stage_13.scene_assembly_bundle",
+      "stage": 13,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_11.dev_execution_bundle",
+        "stage_12.art_production_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_13.resolve_scene_assembly",
+          "type": "import_or_declare_missing",
+          "description": "Import optional scene assembly instructions or use the generated runtime intent contract."
+        },
+        {
+          "id": "stage_13.generate_scene_assembly",
+          "type": "deterministic_generation",
+          "description": "Create a visible Unity demo scene, runtime bootstrap, BuildSettings entry, smoke test record, and scene assembly execution object."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_13/scene_assembly_report.json",
+          "schema": "knowledge/schemas/ai_design/scene_assembly_report.schema.json",
+          "description": "Structured scene assembly report with static playable structure and source contract summary."
+        },
+        {
+          "path": "outputs/artifacts/stage_11/dev_execution_report.json",
+          "schema": "knowledge/schemas/ai_design/dev_execution_report.schema.json",
+          "description": "Structured development execution report with execution object states and blockers."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_production_report.json",
+          "schema": "knowledge/schemas/ai_design/art_production_report.schema.json",
+          "description": "Structured art production report listing produced and missing consumable assets."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/audio_placeholder_manifest_runtime.json",
+          "schema": "knowledge/schemas/playable_contracts/audio_placeholder_manifest_runtime.schema.json",
+          "description": "Runtime record of generated empty audio placeholder files."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_handoff_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_handoff_manifest.schema.json",
+          "description": "Strong art handoff gate consumed by scene assembly."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/asset_mount_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/asset_mount_manifest.schema.json",
+          "description": "Mount manifest consumed by Unity scene assembly."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_editor_request.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_editor_request.schema.json",
+          "description": "Two-phase Unity Editor compile and execute request."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_art_import_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_art_import_report.schema.json",
+          "description": "Unity art import materialization report."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_prefab_generation_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_prefab_generation_report.schema.json",
+          "description": "Unity UGUI prefab generation report."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/program_asset_binding_contract.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/program_asset_binding_contract.schema.json",
+          "description": "Program-to-art binding contract after Unity materialization."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_scene_mount_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_scene_mount_report.schema.json",
+          "description": "Scene mount and visible content report."
+        },
+        {
+          "path": "outputs/execution_objects/execution_objects.json",
+          "schema": "knowledge/schemas/execution_object_workflow.schema.json",
+          "description": "Project-save scoped execution object workflow store."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    },
+    {
+      "id": "stage_14.integration_validation_bundle",
+      "stage": 14,
+      "kind": "source_placeholder_or_import",
+      "depends_on": [
+        "stage_13.scene_assembly_bundle"
+      ],
+      "tasks": [
+        {
+          "id": "stage_14.resolve_integration_validation",
+          "type": "import_or_declare_missing",
+          "description": "Import integration validation or record missing source artifact."
+        },
+        {
+          "id": "stage_14.generate_integration_validation",
+          "type": "deterministic_validation",
+          "description": "Validate development execution, art production, scene assembly, automated test records, and issue fix log."
+        }
+      ],
+      "reviewers": [
+        "structure_reviewer",
+        "source_trace_reviewer",
+        "task_reviewer",
+        "dependency_reviewer"
+      ],
+      "validators": [
+        "validator_first_contract",
+        "stage_files_validator",
+        "review_report_validator",
+        "manifest_validator",
+        "schema_contract_validator",
+        "knowledge_refs_validator",
+        "dependency_status_validator"
+      ],
+      "schema_refs": [
+        {
+          "path": "outputs/artifacts/stage_14/integration_validation_report.json",
+          "schema": "knowledge/schemas/ai_design/integration_validation_report.schema.json",
+          "description": "Layered playable integration validation report."
+        },
+        {
+          "path": "outputs/artifacts/stage_14/playmode_test_results.json",
+          "schema": "knowledge/schemas/ai_design/playmode_test_results.schema.json",
+          "description": "Layered playmode and environment validation results."
+        },
+        {
+          "path": "outputs/artifacts/stage_14/art_acceptance_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_acceptance_report.schema.json",
+          "description": "Art handoff, import, prefab, and scene mount acceptance report."
+        },
+        {
+          "path": "outputs/artifacts/stage_14/playable_acceptance_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/playable_acceptance_report.schema.json",
+          "description": "Structured playable acceptance report with validation levels."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/scene_assembly_report.json",
+          "schema": "knowledge/schemas/ai_design/scene_assembly_report.schema.json",
+          "description": "Structured scene assembly report consumed by playable validation."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_art_import_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_art_import_report.schema.json",
+          "description": "Unity art import report consumed by art acceptance."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_prefab_generation_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_prefab_generation_report.schema.json",
+          "description": "Unity prefab generation report consumed by art acceptance."
+        },
+        {
+          "path": "outputs/artifacts/stage_13/unity_scene_mount_report.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/unity_scene_mount_report.schema.json",
+          "description": "Unity scene mount report consumed by art acceptance."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_handoff_manifest.json",
+          "schema": "knowledge/schemas/ai_design/art_pipeline/art_handoff_manifest.schema.json",
+          "description": "Art handoff gate consumed by integration validation."
+        },
+        {
+          "path": "outputs/artifacts/stage_02/playable_contracts/playable_acceptance_contract.json",
+          "schema": "knowledge/schemas/playable_contracts/playable_acceptance_contract.schema.json",
+          "description": "Playable acceptance checks required for integration validation."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/art_production_report.json",
+          "schema": "knowledge/schemas/ai_design/art_production_report.schema.json",
+          "description": "Structured art production report listing produced and missing consumable assets."
+        },
+        {
+          "path": "outputs/artifacts/stage_12/audio_placeholder_manifest_runtime.json",
+          "schema": "knowledge/schemas/playable_contracts/audio_placeholder_manifest_runtime.schema.json",
+          "description": "Runtime record of generated empty audio placeholder files."
+        },
+        {
+          "path": "outputs/execution_objects/execution_objects.json",
+          "schema": "knowledge/schemas/execution_object_workflow.schema.json",
+          "description": "Project-save scoped execution object workflow store."
+        }
+      ],
+      "knowledge_refs": [
+        "knowledge/Core_Rules.md",
+        "knowledge/Frozen_Contracts.md",
+        "knowledge/Runtime_Standards.md"
+      ]
+    }
+  ]
+}

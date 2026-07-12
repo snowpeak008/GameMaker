@@ -2,6 +2,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::portable::verify_portable_resource_root;
+
 pub const DEFAULT_DIST_EXE_NAME: &str = "AutoDesignMaker.exe";
 pub const DEFAULT_MIN_EXE_BYTES: u64 = 1_000_000;
 
@@ -18,6 +20,7 @@ pub struct DistBuildPlan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DistBundleVerification {
     pub ok: bool,
+    pub portable_integrity_checked: bool,
     pub bundle_dir: String,
     pub exe_path: String,
     pub exe_size_bytes: u64,
@@ -44,6 +47,7 @@ pub fn dist_build_plan(newrust_root: &Path) -> DistBuildPlan {
         target_exe: path_string(
             &newrust_root
                 .join("target")
+                .join("x86_64-pc-windows-msvc")
                 .join("release")
                 .join("desktop-tauri.exe"),
         ),
@@ -80,8 +84,16 @@ pub fn verify_dist_bundle(
             errors.push(format!("Missing bundled item: {item}"));
         }
     }
+    let portable = verify_portable_resource_root(bundle_dir);
+    errors.extend(
+        portable
+            .blockers
+            .iter()
+            .map(|blocker| format!("Portable integrity: {blocker}")),
+    );
     DistBundleVerification {
         ok: errors.is_empty(),
+        portable_integrity_checked: true,
         bundle_dir: path_string(bundle_dir),
         exe_path: path_string(&exe_path),
         exe_size_bytes,
@@ -159,7 +171,7 @@ mod tests {
         );
         assert!(
             plan.target_exe
-                .ends_with("target/release/desktop-tauri.exe")
+                .ends_with("target/x86_64-pc-windows-msvc/release/desktop-tauri.exe")
         );
         assert!(plan.dist_dir.ends_with("dist/AutoDesignMaker-NEWrust"));
     }
@@ -190,8 +202,16 @@ mod tests {
 
         std::fs::create_dir_all(root.join("resources")).unwrap();
         std::fs::write(root.join("resources").join("app.json"), b"{}").unwrap();
-        let ok = verify_dist_bundle(&root, DEFAULT_DIST_EXE_NAME, 5, &required);
-        assert!(ok.ok);
+        let structurally_present_but_unverified =
+            verify_dist_bundle(&root, DEFAULT_DIST_EXE_NAME, 5, &required);
+        assert!(!structurally_present_but_unverified.ok);
+        assert!(structurally_present_but_unverified.portable_integrity_checked);
+        assert!(
+            structurally_present_but_unverified
+                .errors
+                .iter()
+                .any(|error| error.contains("Portable integrity"))
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

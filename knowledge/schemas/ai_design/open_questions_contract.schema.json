@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "open_questions_contract.schema.json",
+  "title": "Open Questions Contract",
+  "type": "object",
+  "required": ["schema_version", "questions"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "draft_session_id": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "questions": {"type": "array", "items": {"type": "object"}},
+    "blocking_count": {"type": "integer"},
+    "resolved_count": {"type": "integer"},
+    "source_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

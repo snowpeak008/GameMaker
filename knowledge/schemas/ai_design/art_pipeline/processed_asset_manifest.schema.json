@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Processed Asset Manifest",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "processed_assets"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "processed_assets": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

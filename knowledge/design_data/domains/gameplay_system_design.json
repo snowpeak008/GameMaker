@@ -1,0 +1,526 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "gameplay_system_design",
+    "name": "玩法系统设计",
+    "description": "确认操作、行动规则、目标、结算、成长、构筑、随机性和局外结构。"
+  },
+  "nodes": [
+    {
+      "id": "input_control_decision",
+      "name": "操作与控制决策",
+      "description": "确认输入意图、响应、容错、节奏和反馈。",
+      "roleClass": "system_concrete",
+      "requires": [],
+      "unlocks": [
+        "action_rule_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "shu_ru_yi_tu",
+          "label": "输入意图",
+          "description": "明确输入意图在操作与控制中的具体含义、适用范围和验收判断。",
+          "outputKey": "shuRuYiTu",
+          "legacyIds": [
+            "input_control_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "xiang_ying_gui_ze",
+          "label": "响应规则",
+          "description": "定义响应规则的触发条件、限制条件和处理结果。",
+          "outputKey": "xiangYingGuiZe",
+          "legacyIds": [
+            "input_control_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "cao_zuo_rong_cuo",
+          "label": "操作容错",
+          "description": "明确操作容错在操作与控制中的具体含义、适用范围和验收判断。",
+          "outputKey": "caoZuoRongCuo",
+          "legacyIds": [
+            "input_control_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "cao_zuo_jie_zou",
+          "label": "操作节奏",
+          "description": "明确操作节奏的频率、强弱变化和玩家感知控制。",
+          "outputKey": "caoZuoJieZou",
+          "legacyIds": [
+            "input_control_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "cao_zuo_fan_kui",
+          "label": "操作反馈",
+          "description": "定义操作反馈向玩家传达的信息、时机和表现方式。",
+          "outputKey": "caoZuoFanKui",
+          "legacyIds": [
+            "input_control_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "action_rule_decision",
+      "name": "行动规则决策",
+      "description": "确认玩家行动的条件、成本、收益、限制和失败结果。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "input_control_decision"
+      ],
+      "unlocks": [
+        "objective_system_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "xing_dong_tiao_jian",
+          "label": "行动条件",
+          "description": "明确行动条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "xingDongTiaoJian",
+          "legacyIds": [
+            "action_rule_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "xing_dong_cheng_ben",
+          "label": "行动成本",
+          "description": "定义行动成本消耗的资源、时间或风险，以及可接受区间。",
+          "outputKey": "xingDongChengBen",
+          "legacyIds": [
+            "action_rule_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "xing_dong_shou_yi",
+          "label": "行动收益",
+          "description": "明确行动收益带来的价值、结算方式和强度边界。",
+          "outputKey": "xingDongShouYi",
+          "legacyIds": [
+            "action_rule_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "xing_dong_xian_zhi",
+          "label": "行动限制",
+          "description": "明确行动限制在行动规则中的具体含义、适用范围和验收判断。",
+          "outputKey": "xingDongXianZhi",
+          "legacyIds": [
+            "action_rule_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "xing_dong_shi_bai_jie_guo",
+          "label": "行动失败结果",
+          "description": "明确行动失败结果在行动规则中的具体含义、适用范围和验收判断。",
+          "outputKey": "xingDongShiBaiJieGuo",
+          "legacyIds": [
+            "action_rule_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "objective_system_decision",
+      "name": "目标系统决策",
+      "description": "确认主目标、子目标、可选目标、隐藏目标和失败目标。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "action_rule_decision"
+      ],
+      "unlocks": [
+        "settlement_system_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "zhu_mu_biao",
+          "label": "主目标",
+          "description": "明确主目标要达成的结果、对象和优先级。",
+          "outputKey": "zhuMuBiao",
+          "legacyIds": [
+            "objective_system_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "zi_mu_biao",
+          "label": "子目标",
+          "description": "明确子目标要达成的结果、对象和优先级。",
+          "outputKey": "ziMuBiao",
+          "legacyIds": [
+            "objective_system_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ke_xuan_mu_biao",
+          "label": "可选目标",
+          "description": "明确可选目标要达成的结果、对象和优先级。",
+          "outputKey": "keXuanMuBiao",
+          "legacyIds": [
+            "objective_system_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "yin_cang_mu_biao",
+          "label": "隐藏目标",
+          "description": "明确隐藏目标要达成的结果、对象和优先级。",
+          "outputKey": "yinCangMuBiao",
+          "legacyIds": [
+            "objective_system_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "shi_bai_mu_biao",
+          "label": "失败目标",
+          "description": "明确失败目标要达成的结果、对象和优先级。",
+          "outputKey": "shiBaiMuBiao",
+          "legacyIds": [
+            "objective_system_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "settlement_system_decision",
+      "name": "结算系统决策",
+      "description": "确认胜负、评分、奖励、惩罚和重试规则。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "objective_system_decision"
+      ],
+      "unlocks": [
+        "progression_system_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "sheng_fu_tiao_jian",
+          "label": "胜负条件",
+          "description": "明确胜负条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "shengFuTiaoJian",
+          "legacyIds": [
+            "settlement_system_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ping_fen_tiao_jian",
+          "label": "评分条件",
+          "description": "明确评分条件成立时需要满足的前提、门槛和例外情况。",
+          "outputKey": "pingFenTiaoJian",
+          "legacyIds": [
+            "settlement_system_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "jiang_li_jie_suan",
+          "label": "奖励结算",
+          "description": "明确奖励结算在结算系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "jiangLiJieSuan",
+          "legacyIds": [
+            "settlement_system_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "cheng_fa_jie_suan",
+          "label": "惩罚结算",
+          "description": "明确惩罚结算在结算系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "chengFaJieSuan",
+          "legacyIds": [
+            "settlement_system_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "zhong_shi_gui_ze",
+          "label": "重试规则",
+          "description": "定义重试规则的触发条件、限制条件和处理结果。",
+          "outputKey": "zhongShiGuiZe",
+          "legacyIds": [
+            "settlement_system_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "progression_system_decision",
+      "name": "成长系统决策",
+      "description": "确认等级、能力、装备、收藏和账号成长结构。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "settlement_system_decision"
+      ],
+      "unlocks": [
+        "build_system_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "deng_ji_cheng_zhang",
+          "label": "等级成长",
+          "description": "明确等级成长在成长系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "dengJiChengZhang",
+          "legacyIds": [
+            "progression_system_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "neng_li_cheng_zhang",
+          "label": "能力成长",
+          "description": "明确能力成长在成长系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "nengLiChengZhang",
+          "legacyIds": [
+            "progression_system_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "zhuang_bei_cheng_zhang",
+          "label": "装备成长",
+          "description": "明确装备成长在成长系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "zhuangBeiChengZhang",
+          "legacyIds": [
+            "progression_system_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "shou_cang_cheng_zhang",
+          "label": "收藏成长",
+          "description": "明确收藏成长在成长系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouCangChengZhang",
+          "legacyIds": [
+            "progression_system_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "zhang_hao_cheng_zhang",
+          "label": "账号成长",
+          "description": "明确账号成长在成长系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "zhangHaoChengZhang",
+          "legacyIds": [
+            "progression_system_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "build_system_decision",
+      "name": "构筑系统决策",
+      "description": "确认构筑组件、约束、组合、反制和更新节奏。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "progression_system_decision"
+      ],
+      "unlocks": [
+        "randomness_system_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "gou_zhu_zu_jian",
+          "label": "构筑组件",
+          "description": "明确构筑组件在构筑系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "gouZhuZuJian",
+          "legacyIds": [
+            "build_system_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "gou_zhu_yue_shu",
+          "label": "构筑约束",
+          "description": "明确构筑约束在构筑系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "gouZhuYueShu",
+          "legacyIds": [
+            "build_system_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "gou_zhu_zu_he",
+          "label": "构筑组合",
+          "description": "明确构筑组合在构筑系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "gouZhuZuHe",
+          "legacyIds": [
+            "build_system_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "gou_zhu_fan_zhi",
+          "label": "构筑反制",
+          "description": "明确构筑反制在构筑系统中的具体含义、适用范围和验收判断。",
+          "outputKey": "gouZhuFanZhi",
+          "legacyIds": [
+            "build_system_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "gou_zhu_geng_xin_jie_zou",
+          "label": "构筑更新节奏",
+          "description": "明确构筑更新节奏的频率、强弱变化和玩家感知控制。",
+          "outputKey": "gouZhuGengXinJieZou",
+          "legacyIds": [
+            "build_system_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "randomness_system_decision",
+      "name": "随机性决策",
+      "description": "确认随机入口、权重、保底、可控随机和结果反馈。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "settlement_system_decision"
+      ],
+      "unlocks": [
+        "meta_structure_decision"
+      ],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "sui_ji_ru_kou",
+          "label": "随机入口",
+          "description": "明确随机入口出现的位置、触发方式和进入成本。",
+          "outputKey": "suiJiRuKou",
+          "legacyIds": [
+            "randomness_system_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "sui_ji_quan_zhong",
+          "label": "随机权重",
+          "description": "明确随机权重在随机性中的具体含义、适用范围和验收判断。",
+          "outputKey": "suiJiQuanZhong",
+          "legacyIds": [
+            "randomness_system_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "bao_di_gui_ze",
+          "label": "保底规则",
+          "description": "定义保底规则的触发条件、限制条件和处理结果。",
+          "outputKey": "baoDiGuiZe",
+          "legacyIds": [
+            "randomness_system_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ke_kong_sui_ji",
+          "label": "可控随机",
+          "description": "明确可控随机在随机性中的具体含义、适用范围和验收判断。",
+          "outputKey": "keKongSuiJi",
+          "legacyIds": [
+            "randomness_system_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "sui_ji_jie_guo_fan_kui",
+          "label": "随机结果反馈",
+          "description": "定义随机结果反馈向玩家传达的信息、时机和表现方式。",
+          "outputKey": "suiJiJieGuoFanKui",
+          "legacyIds": [
+            "randomness_system_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "meta_structure_decision",
+      "name": "局外结构决策",
+      "description": "确认局外准备、成长、收藏、结算承接和局内外转换。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "progression_system_decision"
+      ],
+      "unlocks": [],
+      "domain": "gameplay_system_design",
+      "checklist": [
+        {
+          "id": "ju_wai_zhun_bei",
+          "label": "局外准备",
+          "description": "明确局外准备在局外结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "juWaiZhunBei",
+          "legacyIds": [
+            "meta_structure_decision_item_1"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ju_wai_cheng_zhang",
+          "label": "局外成长",
+          "description": "明确局外成长在局外结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "juWaiChengZhang",
+          "legacyIds": [
+            "meta_structure_decision_item_2"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ju_wai_shou_cang",
+          "label": "局外收藏",
+          "description": "明确局外收藏在局外结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "juWaiShouCang",
+          "legacyIds": [
+            "meta_structure_decision_item_3"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ju_wai_jie_suan_cheng_jie",
+          "label": "局外结算承接",
+          "description": "明确局外结算承接在局外结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "juWaiJieSuanChengJie",
+          "legacyIds": [
+            "meta_structure_decision_item_4"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        },
+        {
+          "id": "ju_nei_ju_wai_zhuan_huan",
+          "label": "局内局外转换",
+          "description": "明确局内局外转换在局外结构中的具体含义、适用范围和验收判断。",
+          "outputKey": "juNeiJuWaiZhuanHuan",
+          "legacyIds": [
+            "meta_structure_decision_item_5"
+          ],
+          "templateRef": "shared_gameplay_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

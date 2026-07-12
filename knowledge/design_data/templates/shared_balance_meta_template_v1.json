@@ -1,0 +1,304 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_balance_meta_template_v1",
+  "name": "Shared balance meta template v1",
+  "description": "Shared balance meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "balance_goal",
+      "label": "平衡目标",
+      "description": "平衡设计先确认要保护的体验结果。这一层把“属性定义”推进到体验目标。",
+      "outputKey": "balanceGoal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_balance_goal",
+      "designQuestion": "这个平衡项要保护哪种体验公平？",
+      "options": [
+        {
+          "id": "fair_competition",
+          "label": "公平竞争",
+          "description": "玩家相信胜负主要来自能力和策略。用于推进“属性定义”的具体判断。",
+          "outputKey": "fairCompetition"
+        },
+        {
+          "id": "growth_pace",
+          "label": "成长节奏",
+          "description": "玩家成长速度与目标周期匹配。用于推进“属性定义”的具体判断。",
+          "outputKey": "growthPace"
+        },
+        {
+          "id": "difficulty_pressure",
+          "label": "难度压强",
+          "description": "挑战强度处于目标玩家承载范围。用于推进“属性定义”的具体判断。",
+          "outputKey": "difficultyPressure"
+        },
+        {
+          "id": "economy_stability",
+          "label": "经济稳定",
+          "description": "资源价值和消耗保持稳定。用于推进“属性定义”的具体判断。",
+          "outputKey": "economyStability"
+        },
+        {
+          "id": "content_value",
+          "label": "内容价值",
+          "description": "内容投入与奖励、风险和时间匹配。用于推进“属性定义”的具体判断。",
+          "outputKey": "contentValue"
+        }
+      ]
+    },
+    {
+      "id": "balance_numeric_dynamic",
+      "label": "数值动态",
+      "description": "把平衡目标转成强度、收益、资源和胜率动态。这一层把“属性定义”推进到玩家动态。",
+      "outputKey": "balanceNumericDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "balance_goal_to_numeric_dynamic",
+      "designQuestion": "数值会怎样随时间和行为变化？",
+      "options": [
+        {
+          "id": "power_growth",
+          "label": "强度增长",
+          "description": "角色、装备或账号强度随进度增长。用于推进“属性定义”的具体判断。",
+          "outputKey": "powerGrowth"
+        },
+        {
+          "id": "diminishing_return",
+          "label": "收益递减",
+          "description": "收益随投入或重复发生边际变化。用于推进“属性定义”的具体判断。",
+          "outputKey": "diminishingReturn"
+        },
+        {
+          "id": "resource_flow",
+          "label": "资源流动",
+          "description": "产出、消耗和储备形成资源流。用于推进“属性定义”的具体判断。",
+          "outputKey": "resourceFlow"
+        },
+        {
+          "id": "winrate_distribution",
+          "label": "胜率分布",
+          "description": "不同角色、策略或玩家段位胜率分布。用于推进“属性定义”的具体判断。",
+          "outputKey": "winrateDistribution"
+        },
+        {
+          "id": "risk_reward",
+          "label": "风险收益",
+          "description": "更高风险对应更高或更稀有回报。用于推进“属性定义”的具体判断。",
+          "outputKey": "riskReward"
+        }
+      ]
+    },
+    {
+      "id": "balance_tuning_lever",
+      "label": "调节杠杆",
+      "description": "把数值动态落到公式、概率、匹配、阈值和补偿。这一层把“属性定义”推进到机制抓手。",
+      "outputKey": "balanceTuningLever",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "numeric_dynamic_to_tuning_lever",
+      "designQuestion": "用什么数值杠杆调节这个平衡项？",
+      "options": [
+        {
+          "id": "formula_parameter",
+          "label": "公式参数",
+          "description": "通过成长、伤害或收益公式调节曲线。用于推进“属性定义”的具体判断。",
+          "outputKey": "formulaParameter"
+        },
+        {
+          "id": "drop_rate",
+          "label": "掉落概率",
+          "description": "通过概率、保底和权重控制产出。用于推进“属性定义”的具体判断。",
+          "outputKey": "dropRate"
+        },
+        {
+          "id": "match_rule",
+          "label": "匹配规则",
+          "description": "通过段位、分池和匹配条件控制对抗。用于推进“属性定义”的具体判断。",
+          "outputKey": "matchRule"
+        },
+        {
+          "id": "cap_threshold",
+          "label": "上限阈值",
+          "description": "通过上限、阈值和软硬限制控制极端值。用于推进“属性定义”的具体判断。",
+          "outputKey": "capThreshold"
+        },
+        {
+          "id": "recovery_compensation",
+          "label": "恢复补偿",
+          "description": "通过失败恢复、补偿和追赶控制挫败。用于推进“属性定义”的具体判断。",
+          "outputKey": "recoveryCompensation"
+        }
+      ]
+    },
+    {
+      "id": "balance_break_boundary",
+      "label": "失衡边界",
+      "description": "平衡必须限定滚雪球、通胀、卡点和付费差距。这一层把“属性定义”推进到边界约束。",
+      "outputKey": "balanceBreakBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "tuning_lever_to_break_boundary",
+      "designQuestion": "什么数值结果会被认为失衡？",
+      "options": [
+        {
+          "id": "snowball",
+          "label": "滚雪球",
+          "description": "早期优势过度放大后续结果。用于推进“属性定义”的具体判断。",
+          "outputKey": "snowball"
+        },
+        {
+          "id": "inflation",
+          "label": "通胀",
+          "description": "资源过量导致价值下跌。用于推进“属性定义”的具体判断。",
+          "outputKey": "inflation"
+        },
+        {
+          "id": "dominant_strategy",
+          "label": "过强策略",
+          "description": "单一策略或角色压制其他选择。用于推进“属性定义”的具体判断。",
+          "outputKey": "dominantStrategy"
+        },
+        {
+          "id": "progression_wall",
+          "label": "卡点",
+          "description": "难度或资源需求突然阻断进度。用于推进“属性定义”的具体判断。",
+          "outputKey": "progressionWall"
+        },
+        {
+          "id": "payment_gap",
+          "label": "付费差距",
+          "description": "付费效率差破坏公平感。用于推进“属性定义”的具体判断。",
+          "outputKey": "paymentGap"
+        }
+      ]
+    },
+    {
+      "id": "balance_monitor_signal",
+      "label": "监控信号",
+      "description": "用胜率、完成率、资源存量、差距和投诉验证平衡。这一层把“属性定义”推进到验收信号。",
+      "outputKey": "balanceMonitorSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "break_boundary_to_monitor_signal",
+      "designQuestion": "怎样监控这个平衡项是否健康？",
+      "options": [
+        {
+          "id": "winrate_distribution",
+          "label": "胜率分布",
+          "description": "角色、策略、段位胜率在可控范围。用于推进“属性定义”的具体判断。",
+          "outputKey": "winrateDistribution"
+        },
+        {
+          "id": "completion_rate",
+          "label": "完成率",
+          "description": "关卡、任务或阶段完成率符合预期。用于推进“属性定义”的具体判断。",
+          "outputKey": "completionRate"
+        },
+        {
+          "id": "resource_stock",
+          "label": "资源存量",
+          "description": "玩家资源库存和流速健康。用于推进“属性定义”的具体判断。",
+          "outputKey": "resourceStock"
+        },
+        {
+          "id": "payment_gap_metric",
+          "label": "付费差距",
+          "description": "付费与免费玩家进度差可解释。用于推进“属性定义”的具体判断。",
+          "outputKey": "paymentGapMetric"
+        },
+        {
+          "id": "player_complaint",
+          "label": "玩家投诉",
+          "description": "平衡相关投诉和负反馈可控。用于推进“属性定义”的具体判断。",
+          "outputKey": "playerComplaint"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_balance_goal_fair_competition_vs_growth_pace",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "balance_goal",
+        "optionId": "fair_competition"
+      },
+      "targets": [
+        {
+          "groupId": "balance_goal",
+          "optionId": "growth_pace"
+        }
+      ],
+      "reason": "公平竞争要求强度差受控，成长节奏需要能力提升，需要定义成长对对抗的影响边界。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_balance_goal_difficulty_pressure_vs_content_value",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "balance_goal",
+        "optionId": "difficulty_pressure"
+      },
+      "targets": [
+        {
+          "groupId": "balance_goal",
+          "optionId": "content_value"
+        }
+      ],
+      "reason": "难度压强和内容价值同时拉高时，失败成本可能过重。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_balance_numeric_dynamic_power_growth_vs_winrate_distribution",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "balance_numeric_dynamic",
+        "optionId": "power_growth"
+      },
+      "targets": [
+        {
+          "groupId": "balance_numeric_dynamic",
+          "optionId": "winrate_distribution"
+        }
+      ],
+      "reason": "强度增长会改变胜率分布，需要控制成长对公平性的影响。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_balance_numeric_dynamic_resource_flow_vs_risk_reward",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "balance_numeric_dynamic",
+        "optionId": "resource_flow"
+      },
+      "targets": [
+        {
+          "groupId": "balance_numeric_dynamic",
+          "optionId": "risk_reward"
+        }
+      ],
+      "reason": "资源流动和风险收益同时复杂时，容易让收益原因不可读。",
+      "severity": "warning"
+    }
+  ]
+}

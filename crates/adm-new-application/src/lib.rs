@@ -60,7 +60,10 @@ pub use adm_new_save::{
     BlankSaveRepairReport, LoadedSave, ParallelIsolationAuditReport, ParallelRepairReport,
     SaveServiceReport,
 };
-use adm_new_sdk::SdkKnowledgeService;
+use adm_new_sdk::{
+    LEGACY_DESKTOP_SDK_FILE, LegacySdkMigrationReport, SdkKnowledgeBase, SdkKnowledgeService,
+    SkillDocument, SkillOverlayRepository, SkillRecord,
+};
 use serde_json::Value;
 
 pub const CRATE_NAME: &str = "adm-new-application";
@@ -1557,17 +1560,51 @@ impl PatchApplicationService {
 #[derive(Debug, Clone, Default)]
 pub struct SdkKnowledgeApplicationService {
     service: SdkKnowledgeService,
+    store: Option<SdkKnowledgeBase>,
+    dirty_sdk_ids: BTreeSet<String>,
+    legacy_migration: LegacySdkMigrationReport,
 }
 
 impl SdkKnowledgeApplicationService {
     pub fn new() -> Self {
         Self {
             service: SdkKnowledgeService::new(),
+            store: None,
+            dirty_sdk_ids: BTreeSet::new(),
+            legacy_migration: LegacySdkMigrationReport::default(),
         }
     }
 
+    pub fn open(
+        resource_root: impl AsRef<std::path::Path>,
+        data_root: impl AsRef<std::path::Path>,
+    ) -> AdmResult<Self> {
+        let store = SdkKnowledgeBase::from_project_and_data_roots(&resource_root, &data_root);
+        store.initialize()?;
+        let legacy_migration =
+            store.migrate_legacy_flat_file(store.root().join(LEGACY_DESKTOP_SDK_FILE))?;
+        let mut service = SdkKnowledgeService::new();
+        service.replace_specs(store.list_specs()?);
+        Ok(Self {
+            service,
+            store: Some(store),
+            dirty_sdk_ids: BTreeSet::new(),
+            legacy_migration,
+        })
+    }
+
+    pub fn legacy_migration(&self) -> &LegacySdkMigrationReport {
+        &self.legacy_migration
+    }
+
+    pub fn store_root(&self) -> Option<&std::path::Path> {
+        self.store.as_ref().map(|store| store.root())
+    }
+
     pub fn add_placeholder(&mut self, sdk_id: &str, name: &str) -> AdmResult<SdkSpec> {
-        self.service.add_placeholder(sdk_id, name)
+        let spec = self.service.add_placeholder(sdk_id, name)?;
+        self.dirty_sdk_ids.insert(spec.sdk_id.clone());
+        Ok(spec)
     }
 
     pub fn add_placeholder_with_source_url(
@@ -1576,12 +1613,17 @@ impl SdkKnowledgeApplicationService {
         name: &str,
         source_url: &str,
     ) -> AdmResult<SdkSpec> {
-        self.service
-            .add_placeholder_with_source_url(sdk_id, name, source_url)
+        let spec = self
+            .service
+            .add_placeholder_with_source_url(sdk_id, name, source_url)?;
+        self.dirty_sdk_ids.insert(spec.sdk_id.clone());
+        Ok(spec)
     }
 
     pub fn ingest_ai_extracted_spec(&mut self, spec: SdkSpec) -> SdkSpec {
-        self.service.ingest_ai_extracted_spec(spec)
+        let spec = self.service.ingest_ai_extracted_spec(spec);
+        self.dirty_sdk_ids.insert(spec.sdk_id.clone());
+        spec
     }
 
     pub fn index(&self) -> SdkIndex {
@@ -1597,7 +1639,9 @@ impl SdkKnowledgeApplicationService {
         sdk_id: &str,
         status: SdkReviewStatus,
     ) -> AdmResult<SdkSpec> {
-        self.service.set_review_status(sdk_id, status)
+        let spec = self.service.set_review_status(sdk_id, status)?;
+        self.dirty_sdk_ids.insert(spec.sdk_id.clone());
+        Ok(spec)
     }
 
     pub fn approved_context(&self) -> String {
@@ -1605,7 +1649,83 @@ impl SdkKnowledgeApplicationService {
     }
 
     pub fn replace_specs(&mut self, specs: Vec<SdkSpec>) {
+        self.dirty_sdk_ids
+            .extend(specs.iter().map(|spec| spec.sdk_id.clone()));
         self.service.replace_specs(specs);
+    }
+
+    pub fn persist(&mut self) -> AdmResult<()> {
+        let Some(store) = self.store.clone() else {
+            self.dirty_sdk_ids.clear();
+            return Ok(());
+        };
+        store.validate()?;
+        let dirty_ids = self.dirty_sdk_ids.iter().cloned().collect::<Vec<_>>();
+        for sdk_id in dirty_ids {
+            let spec = self
+                .service
+                .list_specs()
+                .into_iter()
+                .find(|spec| spec.sdk_id == sdk_id)
+                .ok_or_else(|| AdmError::new(format!("missing dirty SDK spec: {sdk_id}")))?;
+            store.write_spec(spec)?;
+            self.dirty_sdk_ids.remove(&sdk_id);
+        }
+        self.reload()
+    }
+
+    pub fn reload(&mut self) -> AdmResult<()> {
+        let Some(store) = self.store.as_ref() else {
+            return Ok(());
+        };
+        self.service.replace_specs(store.list_specs()?);
+        self.dirty_sdk_ids.clear();
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SkillOverlayApplicationService {
+    repository: SkillOverlayRepository,
+}
+
+impl SkillOverlayApplicationService {
+    pub fn open(
+        resource_root: impl AsRef<std::path::Path>,
+        data_root: impl AsRef<std::path::Path>,
+    ) -> AdmResult<Self> {
+        let repository =
+            SkillOverlayRepository::from_project_and_data_roots(resource_root, data_root);
+        repository.initialize()?;
+        Ok(Self { repository })
+    }
+
+    pub fn overlay_root(&self) -> &std::path::Path {
+        self.repository.root()
+    }
+
+    pub fn list(&self) -> AdmResult<Vec<SkillRecord>> {
+        self.repository.list()
+    }
+
+    pub fn write_json(&self, skill_id: &str, value: &Value) -> AdmResult<SkillRecord> {
+        self.repository.write_json(skill_id, value)
+    }
+
+    pub fn write_markdown(&self, skill_id: &str, text: &str) -> AdmResult<SkillRecord> {
+        self.repository.write_markdown(skill_id, text)
+    }
+
+    pub fn remove(&self, skill_id: &str) -> AdmResult<()> {
+        self.repository.remove(skill_id)
+    }
+
+    pub fn get(&self, skill_id: &str) -> AdmResult<Option<SkillRecord>> {
+        self.repository.get(skill_id)
+    }
+
+    pub fn document(&self, skill_id: &str) -> AdmResult<Option<SkillDocument>> {
+        Ok(self.get(skill_id)?.map(|record| record.document))
     }
 }
 

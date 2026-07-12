@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity Import Settings Manifest",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "import_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "unity_root": {"type": "string"},
+    "import_items": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

@@ -37,20 +37,12 @@ use adm_new_contracts::sdk::SdkReviewStatus;
 use adm_new_foundation::{AdmResult, GateReport};
 use adm_new_governance::{
     final_handoff_v3_gate_report, find_repo_root, handoff_report,
-    integration_test_migration_gate_report, iteration_gate_report, package_gate_report,
-    parity_gate_report, plan_gate_report, release_gate_report, ui_ai_gate_report,
-    ui_parity_v3_gate_report, ui_pipeline_gate_report, ui_settings_style_gate_report,
-    ui_shell_gate_report, ui_utility_gate_report, ui_workbench_gate_report,
-    unit_test_migration_gate_report, validation_gate_report,
-};
-use adm_new_knowledge::{
-    context::{ContextFormat, build_context, context_inventory, format_context},
-    freshness::{check_staleness, update_freshness},
-    identity::IdentityEngine,
-    memory::{MemoryEngine, MemoryTier},
-    orchestration::WorldModelEngine,
-    skill::SkillEngine,
-    store::UcosStore,
+    integration_test_migration_gate_report, is_standalone_repo_root, iteration_gate_report,
+    package_gate_report, parity_gate_report, plan_gate_report, release_gate_report,
+    standalone_boundary_gate_report, ui_ai_gate_report, ui_parity_v3_gate_report,
+    ui_pipeline_gate_report, ui_settings_style_gate_report, ui_shell_gate_report,
+    ui_utility_gate_report, ui_workbench_gate_report, unit_test_migration_gate_report,
+    validation_gate_report,
 };
 use adm_new_packaging::{
     DEFAULT_DIST_EXE_NAME, DEFAULT_MIN_EXE_BYTES, PackagingService, dist_build_plan,
@@ -63,14 +55,40 @@ use adm_new_sdk::{
 use serde_json::json;
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+use std::sync::OnceLock;
+
+const LEGACY_MEMORY_COMMAND_DEPRECATED: &str = "legacy_memory_command_deprecated";
+static PROJECT_ROOT_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 
 fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    let explicit_project_root =
+        match take_leading_project_root(&mut args).and_then(|root| match root {
+            Some(root) => Ok(Some(root)),
+            None => take_root_scoped_project_root(&mut args),
+        }) {
+            Ok(root) => root,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::from(2);
+            }
+        };
+    if let Some(root) = explicit_project_root {
+        if !is_standalone_repo_root(&root) {
+            eprintln!("invalid_standalone_project_root:{}", root.display());
+            return ExitCode::from(2);
+        }
+        let canonical = root.canonicalize().unwrap_or(root);
+        let _ = PROJECT_ROOT_OVERRIDE.set(canonical);
+    }
     let command = args.get(1).map(String::as_str).unwrap_or("doctor");
     match command {
-        "plan-gate" | "doctor" => run_gate("plan", plan_gate_report),
+        "doctor" | "standalone-boundary-gate" => {
+            run_gate("standalone-boundary", standalone_boundary_gate_report)
+        }
+        "plan-gate" => run_gate("plan", plan_gate_report),
         "parity-gate" => run_gate("parity", |repo_root| {
             let mut report = parity_gate_report(repo_root)?;
             add_cargo_test_result(repo_root, &mut report);
@@ -78,7 +96,7 @@ fn main() -> ExitCode {
         }),
         "ui-gate" => run_gate("ui", |repo_root| {
             let mut report = GateReport::new("NEWrust UI Parity Gate");
-            let web_root = repo_root.join("NEWrust").join("web");
+            let web_root = repo_root.join("web");
             report.add_row("web_root", web_root.display().to_string());
             add_process_result(
                 &mut report,
@@ -162,7 +180,7 @@ fn run_patch_command(args: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     let parsed = match parse_patch_args(args, &repo_root) {
@@ -335,7 +353,7 @@ fn run_sdk_command(args: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     let parsed = match parse_sdk_args(args, &repo_root) {
@@ -346,7 +364,7 @@ fn run_sdk_command(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let kb = SdkKnowledgeBase::new(&parsed.root);
+    let kb = SdkKnowledgeBase::with_seed_root(&parsed.root, &parsed.seed_root);
     match parsed.command.as_str() {
         "init" => match kb.initialize() {
             Ok(()) => print_json_result(Ok(json!({
@@ -457,12 +475,14 @@ fn run_sdk_command(args: &[String]) -> ExitCode {
 #[derive(Debug, Clone)]
 struct ParsedSdkArgs {
     root: std::path::PathBuf,
+    seed_root: std::path::PathBuf,
     command: String,
     rest: Vec<String>,
 }
 
 fn parse_sdk_args(args: &[String], repo_root: &Path) -> AdmResult<ParsedSdkArgs> {
     let mut root = None;
+    let mut data_root = None;
     let mut command = String::new();
     let mut rest = Vec::new();
     let mut index = 0usize;
@@ -474,6 +494,15 @@ fn parse_sdk_args(args: &[String], repo_root: &Path) -> AdmResult<ParsedSdkArgs>
                     return Err(adm_new_foundation::AdmError::new("--root requires a path"));
                 };
                 root = Some(std::path::PathBuf::from(value));
+            }
+            "--data-root" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err(adm_new_foundation::AdmError::new(
+                        "--data-root requires a path",
+                    ));
+                };
+                data_root = Some(std::path::PathBuf::from(value));
             }
             value if value.starts_with('-') => {
                 return Err(adm_new_foundation::AdmError::new(format!(
@@ -491,11 +520,45 @@ fn parse_sdk_args(args: &[String], repo_root: &Path) -> AdmResult<ParsedSdkArgs>
     if command.is_empty() {
         return Err(adm_new_foundation::AdmError::new("sdk command is required"));
     }
+    if root.is_some() && data_root.is_some() {
+        return Err(adm_new_foundation::AdmError::new(
+            "--root and --data-root are mutually exclusive",
+        ));
+    }
+    let root = root.unwrap_or_else(|| {
+        data_root
+            .unwrap_or_else(default_runtime_data_root)
+            .join("knowledge")
+            .join("sdks")
+    });
     Ok(ParsedSdkArgs {
-        root: root.unwrap_or_else(|| SdkKnowledgeBase::from_project_root(repo_root).root().into()),
+        root,
+        seed_root: repo_root.join("knowledge").join("sdks"),
         command,
         rest,
     })
+}
+
+fn default_runtime_data_root() -> PathBuf {
+    if let Some(path) = env::var_os("ADM_NEWRUST_DATA_DIR").filter(|value| !value.is_empty()) {
+        return PathBuf::from(path);
+    }
+    if cfg!(windows) {
+        if let Some(path) = env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty()) {
+            return PathBuf::from(path).join("AutoDesignMaker-NEWrust");
+        }
+    } else {
+        if let Some(path) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
+            return PathBuf::from(path).join("autodesignmaker-newrust");
+        }
+        if let Some(path) = env::var_os("HOME").filter(|value| !value.is_empty()) {
+            return PathBuf::from(path)
+                .join(".local")
+                .join("share")
+                .join("autodesignmaker-newrust");
+        }
+    }
+    env::temp_dir().join("AutoDesignMaker-NEWrust")
 }
 
 fn parse_sdk_review_status(value: &str) -> AdmResult<SdkReviewStatus> {
@@ -520,6 +583,61 @@ fn take_option(values: &mut Vec<String>, flag: &str) -> Option<String> {
     }
 }
 
+fn take_leading_project_root(args: &mut Vec<String>) -> Result<Option<PathBuf>, String> {
+    let Some(value) = args.get(1).cloned() else {
+        return Ok(None);
+    };
+    if value == "--project-root" {
+        let Some(path) = args.get(2).cloned() else {
+            return Err("--project-root requires a path".to_string());
+        };
+        args.drain(1..=2);
+        return Ok(Some(PathBuf::from(path)));
+    }
+    if let Some(path) = value.strip_prefix("--project-root=") {
+        if path.trim().is_empty() {
+            return Err("--project-root requires a path".to_string());
+        }
+        args.remove(1);
+        return Ok(Some(PathBuf::from(path)));
+    }
+    Ok(None)
+}
+
+fn take_root_scoped_project_root(args: &mut Vec<String>) -> Result<Option<PathBuf>, String> {
+    let Some(command) = args.get(1) else {
+        return Ok(None);
+    };
+    if !(command == "doctor"
+        || command == "package"
+        || command == "dist"
+        || command == "handoff-report"
+        || command.ends_with("-gate"))
+    {
+        return Ok(None);
+    }
+    let Some(index) = args.iter().enumerate().skip(2).find_map(|(index, value)| {
+        (value == "--project-root" || value.starts_with("--project-root=")).then_some(index)
+    }) else {
+        return Ok(None);
+    };
+    let option = args[index].clone();
+    if option == "--project-root" {
+        let Some(path) = args.get(index + 1).cloned() else {
+            return Err("--project-root requires a path".to_string());
+        };
+        args.drain(index..=index + 1);
+        return Ok(Some(PathBuf::from(path)));
+    }
+    let path = option.trim_start_matches("--project-root=");
+    if path.trim().is_empty() {
+        return Err("--project-root requires a path".to_string());
+    }
+    let path = PathBuf::from(path);
+    args.remove(index);
+    Ok(Some(path))
+}
+
 fn run_package_command(args: &[String]) -> ExitCode {
     if args
         .first()
@@ -530,7 +648,7 @@ fn run_package_command(args: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     let parsed = match parse_package_args(args, &repo_root) {
@@ -616,7 +734,7 @@ fn run_dist_command(args: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     match args.first().map(String::as_str).unwrap_or("") {
@@ -639,8 +757,7 @@ fn run_dist_build(repo_root: &Path, args: &[String]) -> ExitCode {
         eprintln!("unknown dist build option: {unknown}");
         return ExitCode::from(2);
     }
-    let newrust_root = repo_root.join("NEWrust");
-    let plan = dist_build_plan(&newrust_root);
+    let plan = dist_build_plan(repo_root);
     if !execute {
         return print_json_result(Ok(plan));
     }
@@ -905,7 +1022,7 @@ fn run_image_metadata(args: &[String]) -> ExitCode {
 
 fn run_image_probe_request(args: &[String]) -> ExitCode {
     let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     let mut rest = args.to_vec();
@@ -1844,120 +1961,17 @@ fn take_repeated_options(values: &mut Vec<String>, flag: &str) -> Vec<String> {
     results
 }
 
-fn run_memory_command(args: &[String]) -> ExitCode {
-    let subcommand = args.first().map(String::as_str).unwrap_or("--help");
-    if matches!(subcommand, "--help" | "-h" | "help") {
-        print_memory_help();
-        return ExitCode::SUCCESS;
-    }
-    let Some(repo_root) = repo_root_from_cwd() else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
-        return ExitCode::from(1);
-    };
-    let store = UcosStore::new(&repo_root);
-    match subcommand {
-        "inventory" => print_json_result(store.inventory()),
-        "context" => {
-            let format = option_value(args, "--format")
-                .map(ContextFormat::parse)
-                .unwrap_or(ContextFormat::Summary);
-            match build_context(&store, adm_new_knowledge::context::MAX_TOKENS) {
-                Ok(context) => {
-                    print!("{}", format_context(&context, format));
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("context failed: {error}");
-                    ExitCode::from(1)
-                }
-            }
-        }
-        "query" => {
-            let Some(tier) = args.get(1) else {
-                eprintln!("memory query requires a tier");
-                return ExitCode::from(2);
-            };
-            let tier = match MemoryTier::parse(tier) {
-                Ok(tier) => tier,
-                Err(error) => {
-                    eprintln!("{error}");
-                    return ExitCode::from(2);
-                }
-            };
-            let keywords = args.iter().skip(2).cloned().collect::<Vec<_>>();
-            let engine = MemoryEngine::new(store);
-            print_json_result(engine.query(tier, &keywords, 5, 0.2))
-        }
-        "check-freshness" => print_json_result(check_staleness(&repo_root)),
-        "update-freshness" => {
-            print_json_result(update_freshness(&repo_root).map(|(snapshot, missing)| {
-                json!({
-                    "updated": snapshot.files.len(),
-                    "missing": missing,
-                    "generated_at": snapshot.generated_at,
-                })
-            }))
-        }
-        "validate" => {
-            let inventory = match store.inventory() {
-                Ok(inventory) => inventory,
-                Err(error) => {
-                    eprintln!("inventory failed: {error}");
-                    return ExitCode::from(1);
-                }
-            };
-            let inventory_errors = inventory.validation_errors();
-            let identity = IdentityEngine::new(store.clone());
-            let profile_ok = identity.load_profile().is_ok();
-            let skill_engine = SkillEngine::new(store.clone());
-            let skill_count = skill_engine
-                .load_specs()
-                .map(|skills| skills.len())
-                .unwrap_or(0);
-            let context_info = context_inventory(&store).ok();
-            let world = WorldModelEngine::new(store);
-            let world_diagnostics = world.diagnostics();
-            let ok = inventory_errors.is_empty() && profile_ok && skill_count > 0;
-            let value = json!({
-                "ok": ok,
-                "inventory": inventory,
-                "inventory_errors": inventory_errors,
-                "identity_profile_ok": profile_ok,
-                "skill_count": skill_count,
-                "context": context_info,
-                "world_model": world_diagnostics,
-            });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&value).unwrap_or_default()
-            );
-            if ok {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(1)
-            }
-        }
-        other => {
-            eprintln!("unknown memory command: {other}");
-            print_memory_help();
-            ExitCode::from(2)
-        }
-    }
+fn run_memory_command(_args: &[String]) -> ExitCode {
+    eprintln!("{LEGACY_MEMORY_COMMAND_DEPRECATED}");
+    ExitCode::from(2)
 }
 
 fn run_gate<F>(report_slug: &str, build_report: F) -> ExitCode
 where
     F: FnOnce(&Path) -> AdmResult<GateReport>,
 {
-    let cwd = match env::current_dir() {
-        Ok(cwd) => cwd,
-        Err(error) => {
-            eprintln!("failed to read current directory: {error}");
-            return ExitCode::from(1);
-        }
-    };
-    let Some(repo_root) = find_repo_root(&cwd) else {
-        eprintln!("failed to locate repository root containing plan/NEWrust");
+    let Some(repo_root) = repo_root_from_cwd() else {
+        eprintln!("failed to locate standalone project root");
         return ExitCode::from(1);
     };
     match build_report(&repo_root) {
@@ -1982,12 +1996,11 @@ where
 }
 
 fn add_cargo_test_result(repo_root: &Path, report: &mut GateReport) {
-    let newrust_root = repo_root.join("NEWrust");
     let output = Command::new("cargo")
         .arg("test")
         .arg("--workspace")
         .arg("--quiet")
-        .current_dir(&newrust_root)
+        .current_dir(repo_root)
         .output();
     match output {
         Ok(output) => {
@@ -2038,19 +2051,16 @@ fn add_process_result(
 }
 
 fn write_gate_report(repo_root: &Path, report_slug: &str, rendered: &str) -> std::io::Result<()> {
-    let report_dir = repo_root.join("NEWrust").join("gates");
+    let report_dir = repo_root.join("gates");
     fs::create_dir_all(&report_dir)?;
     fs::write(report_dir.join(format!("{report_slug}-gate.adm")), rendered)
 }
 
 fn repo_root_from_cwd() -> Option<std::path::PathBuf> {
+    if let Some(root) = PROJECT_ROOT_OVERRIDE.get() {
+        return Some(root.clone());
+    }
     env::current_dir().ok().and_then(|cwd| find_repo_root(&cwd))
-}
-
-fn option_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
-    args.windows(2)
-        .find(|window| window[0] == flag)
-        .map(|window| window[1].as_str())
 }
 
 fn print_json_result<T: serde::Serialize>(result: AdmResult<T>) -> ExitCode {
@@ -2070,10 +2080,10 @@ fn print_json_result<T: serde::Serialize>(result: AdmResult<T>) -> ExitCode {
 }
 
 fn print_help() {
+    println!("usage: adm-new-cli [--project-root DIR] <command> [args]");
     println!("adm-new-cli commands:");
-    println!(
-        "  plan-gate   verify plan/NEWrust scorecards pass: role >=90, weighted >=95, no hard gates"
-    );
+    println!("  doctor      verify the standalone source/resource/portable boundary");
+    println!("  standalone-boundary-gate verify the relocatable independent-project contract");
     println!(
         "  parity-gate verify required Rust parity checks and run cargo test --workspace --quiet"
     );
@@ -2084,25 +2094,7 @@ fn print_help() {
         "  iteration-gate verify A30 iteration parser, scheduler, inheritor, and CLI coverage"
     );
     println!("  ui-shell-gate verify A31 desktop shell, theme, startup, and Web shell coverage");
-    println!("  ui-workbench-gate verify A32 design workbench Web/Tauri command coverage");
-    println!("  ui-ai-gate verify A33 AI interview Web/Tauri command and bottom tab coverage");
-    println!(
-        "  ui-pipeline-gate verify A34 pipeline tree, run controls, and semantic return paths"
-    );
-    println!("  ui-utility-gate verify A35 patch/package/SDK/save utility panels");
-    println!(
-        "  ui-settings-style-gate verify A36 AI config, project config, and Step07 style prompt modals"
-    );
-    println!(
-        "  ui-parity-v3-gate verify A37 UI baseline records, screenshots, traces, and diff tables"
-    );
-    println!("  unit-test-migration-gate verify A38 core/tests/unit migration coverage");
-    println!(
-        "  integration-test-migration-gate verify A39 core/tests/integration and conftest migration coverage"
-    );
-    println!("  release-gate verify all Rust/Web/plan/parity/package gates before release");
-    println!("  final-handoff-v3-gate generate and verify A40 file-level final handoff evidence");
-    println!("  handoff-report generate final Python evidence -> NEWrust implementation manifest");
+    println!("  release-gate verify current Rust/Web/resource/boundary/package release checks");
     println!("  package     run current project packaging readiness and write package outputs");
     println!("  dist        build or verify desktop distribution bundles");
     println!("  asset       run asset production helpers");
@@ -2117,21 +2109,8 @@ fn print_help() {
     println!("  governance  run repository governance inspections");
     println!("  design      export design handoff artifacts");
     println!("  iteration   parse, plan, inherit, prepare, and resume iteration delta runs");
-    println!("  memory      inspect and maintain UCOS/AI memory state");
-    println!("  ucos        alias for memory");
     println!("  patch       analyze, apply, validate, promote quick patch records");
     println!("  sdk         manage SDK knowledge specs and approved prompt context");
-    println!("  doctor      alias for plan-gate during Phase 0");
-}
-
-fn print_memory_help() {
-    println!("adm-new-cli memory commands:");
-    println!("  inventory                 print UCOS file inventory from knowledge/ucos");
-    println!("  context [--format FMT]    print context as summary, agents-md, or json");
-    println!("  query <tier> <keywords>   query short_term/episodic/semantic/patterns/failures");
-    println!("  check-freshness           compare AI memory freshness snapshot with current files");
-    println!("  update-freshness          rewrite AI memory freshness snapshot");
-    println!("  validate                  run knowledge-store-v3 structural checks");
 }
 
 fn print_patch_help() {
@@ -2146,13 +2125,17 @@ fn print_patch_help() {
 
 fn print_sdk_help() {
     println!("adm-new-cli sdk commands:");
-    println!("  sdk [--root DIR] init");
-    println!("  sdk [--root DIR] list");
-    println!("  sdk [--root DIR] show <sdk_id>");
-    println!("  sdk [--root DIR] add <name> [--url URL]");
-    println!("  sdk [--root DIR] review <sdk_id> <draft|pending_review|approved|rejected>");
-    println!("  sdk [--root DIR] context");
-    println!("  sdk [--root DIR] sync <local_html_file>");
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] init");
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] list");
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] show <sdk_id>");
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] add <name> [--url URL]");
+    println!(
+        "  sdk [--data-root DIR|--root OVERLAY_DIR] review <sdk_id> <draft|pending_review|approved|rejected>"
+    );
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] context");
+    println!("  sdk [--data-root DIR|--root OVERLAY_DIR] sync <local_html_file>");
+    println!("  seed: <project-root>/knowledge/sdks (read-only, lower priority)");
+    println!("  overlay: <data-root>/knowledge/sdks (writable, higher priority)");
 }
 
 fn print_package_help() {
@@ -2391,6 +2374,75 @@ mod tests {
     }
 
     #[test]
+    fn sdk_cli_uses_runtime_overlay_and_project_seed_roots() {
+        let project_root = temp_root("sdk_project_seed");
+        let data_root = temp_root("sdk_runtime_data");
+        let parsed = parse_sdk_args(
+            &[
+                "--data-root".to_string(),
+                data_root.to_string_lossy().to_string(),
+                "list".to_string(),
+            ],
+            &project_root,
+        )
+        .unwrap();
+        assert_eq!(parsed.root, data_root.join("knowledge/sdks"));
+        assert_eq!(parsed.seed_root, project_root.join("knowledge/sdks"));
+        assert_ne!(parsed.root, parsed.seed_root);
+        let _ = fs::remove_dir_all(project_root);
+        let _ = fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn legacy_memory_commands_are_stably_deprecated() {
+        assert_eq!(run_memory_command(&[]), ExitCode::from(2));
+        assert_eq!(
+            run_memory_command(&["inventory".to_string()]),
+            ExitCode::from(2)
+        );
+        assert_eq!(
+            run_memory_command(&["--help".to_string()]),
+            ExitCode::from(2)
+        );
+    }
+
+    #[test]
+    fn global_project_root_option_is_leading_and_name_independent() {
+        let mut args = vec![
+            "adm-new-cli".to_string(),
+            "--project-root".to_string(),
+            "C:/renamed standalone 项目".to_string(),
+            "doctor".to_string(),
+        ];
+        let root = take_leading_project_root(&mut args).unwrap().unwrap();
+        assert_eq!(root, PathBuf::from("C:/renamed standalone 项目"));
+        assert_eq!(args, vec!["adm-new-cli", "doctor"]);
+
+        let mut trailing = vec![
+            "adm-new-cli".to_string(),
+            "doctor".to_string(),
+            "--project-root=C:/renamed standalone 项目".to_string(),
+        ];
+        let root = take_root_scoped_project_root(&mut trailing)
+            .unwrap()
+            .unwrap();
+        assert_eq!(root, PathBuf::from("C:/renamed standalone 项目"));
+        assert_eq!(trailing, vec!["adm-new-cli", "doctor"]);
+    }
+
+    #[test]
+    fn gate_reports_are_written_under_internal_gates_directory() {
+        let root = temp_root("gate_output_root");
+        write_gate_report(&root, "doctor", "status=passed\n").unwrap();
+        assert!(root.join("gates/doctor-gate.adm").is_file());
+        assert_eq!(
+            fs::read_to_string(root.join("gates/doctor-gate.adm")).unwrap(),
+            "status=passed\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn package_cli_runs_packaging_service_and_reports_blocked_status() {
         let root = temp_root("package_cli");
         let artifacts = root.join("artifacts");
@@ -2427,7 +2479,7 @@ mod tests {
     }
 
     #[test]
-    fn dist_cli_build_plan_and_verify_bundle() {
+    fn dist_cli_build_plan_and_rejects_unverified_bundle() {
         assert_eq!(run_dist_command(&["build".to_string()]), ExitCode::SUCCESS);
 
         let root = temp_root("dist_cli");
@@ -2444,7 +2496,7 @@ mod tests {
                 "--require".to_string(),
                 "resources/app.json".to_string(),
             ]),
-            ExitCode::SUCCESS
+            ExitCode::from(1)
         );
         assert_eq!(
             run_dist_command(&[

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ucos/schemas/skill.schema.json",
+  "type": "object",
+  "required": [
+    "skill_id",
+    "name",
+    "type",
+    "level",
+    "version",
+    "status",
+    "domain",
+    "description",
+    "capabilities",
+    "dependencies",
+    "trigger_rule",
+    "input_schema",
+    "output_schema",
+    "anti_patterns",
+    "episode_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

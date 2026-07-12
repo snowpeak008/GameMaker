@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_ux_meta_template_v1",
+  "name": "Shared UX meta template v1",
+  "description": "Shared ux meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "ux_understanding_experience",
+      "label": "理解体验",
+      "description": "UX 的上游目标是让玩家顺利理解和完成行为。这一层把“主界面结构”推进到体验目标。",
+      "outputKey": "uxUnderstandingExperience",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_understanding",
+      "designQuestion": "这个界面项要降低哪类理解成本？",
+      "options": [
+        {
+          "id": "quick_understanding",
+          "label": "快速理解",
+          "description": "玩家能快速知道要做什么。用于推进“主界面结构”的具体判断。",
+          "outputKey": "quickUnderstanding"
+        },
+        {
+          "id": "low_browsing_load",
+          "label": "低负担浏览",
+          "description": "信息密度不会压垮阅读和扫视。用于推进“主界面结构”的具体判断。",
+          "outputKey": "lowBrowsingLoad"
+        },
+        {
+          "id": "clear_state",
+          "label": "清晰状态",
+          "description": "玩家能区分当前状态、资源和风险。用于推进“主界面结构”的具体判断。",
+          "outputKey": "clearState"
+        },
+        {
+          "id": "recoverable_error",
+          "label": "错误可恢复",
+          "description": "玩家犯错后知道如何回到正轨。用于推进“主界面结构”的具体判断。",
+          "outputKey": "recoverableError"
+        },
+        {
+          "id": "accessible_use",
+          "label": "可访问",
+          "description": "不同能力和设备条件下也能使用。用于推进“主界面结构”的具体判断。",
+          "outputKey": "accessibleUse"
+        }
+      ]
+    },
+    {
+      "id": "ux_operation_dynamic",
+      "label": "操作动态",
+      "description": "把理解目标转成入口、流程、确认和恢复路径。这一层把“主界面结构”推进到玩家动态。",
+      "outputKey": "uxOperationDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "understanding_to_flow",
+      "designQuestion": "玩家会怎样在界面中推进行为？",
+      "options": [
+        {
+          "id": "find_entry",
+          "label": "寻找入口",
+          "description": "玩家能找到下一步入口。用于推进“主界面结构”的具体判断。",
+          "outputKey": "findEntry"
+        },
+        {
+          "id": "advance_flow",
+          "label": "推进流程",
+          "description": "玩家能按预期完成操作链路。用于推进“主界面结构”的具体判断。",
+          "outputKey": "advanceFlow"
+        },
+        {
+          "id": "confirm_state",
+          "label": "确认状态",
+          "description": "玩家能确认行为是否生效。用于推进“主界面结构”的具体判断。",
+          "outputKey": "confirmState"
+        },
+        {
+          "id": "claim_reward",
+          "label": "领取奖励",
+          "description": "玩家能顺利理解并领取价值。用于推进“主界面结构”的具体判断。",
+          "outputKey": "claimReward"
+        },
+        {
+          "id": "back_exit",
+          "label": "返回退出",
+          "description": "玩家能可靠地返回、暂停或退出。用于推进“主界面结构”的具体判断。",
+          "outputKey": "backExit"
+        }
+      ]
+    },
+    {
+      "id": "ux_interface_mechanic",
+      "label": "界面机制",
+      "description": "把操作动态落到信息架构、导航、HUD、引导和提示。这一层把“主界面结构”推进到机制抓手。",
+      "outputKey": "uxInterfaceMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "flow_to_interface_mechanic",
+      "designQuestion": "用什么界面机制支撑这种操作动态？",
+      "options": [
+        {
+          "id": "information_hierarchy",
+          "label": "信息层级",
+          "description": "安排优先级、分组和扫读路径。用于推进“主界面结构”的具体判断。",
+          "outputKey": "informationHierarchy"
+        },
+        {
+          "id": "navigation_structure",
+          "label": "导航结构",
+          "description": "规定入口层级、返回和跳转关系。用于推进“主界面结构”的具体判断。",
+          "outputKey": "navigationStructure"
+        },
+        {
+          "id": "hud_feedback",
+          "label": "HUD 反馈",
+          "description": "持续展示关键状态、资源和风险。用于推进“主界面结构”的具体判断。",
+          "outputKey": "hudFeedback"
+        },
+        {
+          "id": "guidance_trigger",
+          "label": "引导触发",
+          "description": "在需要时触发教程、提示或复习。用于推进“主界面结构”的具体判断。",
+          "outputKey": "guidanceTrigger"
+        },
+        {
+          "id": "error_message",
+          "label": "错误提示",
+          "description": "说明异常原因和恢复方式。用于推进“主界面结构”的具体判断。",
+          "outputKey": "errorMessage"
+        }
+      ]
+    },
+    {
+      "id": "ux_load_boundary",
+      "label": "负担边界",
+      "description": "界面必须限制文字、层级、状态和操作压力。这一层把“主界面结构”推进到边界约束。",
+      "outputKey": "uxLoadBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "interface_mechanic_to_load_boundary",
+      "designQuestion": "什么会让这个界面项变成负担？",
+      "options": [
+        {
+          "id": "long_copy",
+          "label": "文案过长",
+          "description": "说明文字超过快速理解能力。用于推进“主界面结构”的具体判断。",
+          "outputKey": "longCopy"
+        },
+        {
+          "id": "deep_hierarchy",
+          "label": "层级过深",
+          "description": "入口和流程需要过多跳转。用于推进“主界面结构”的具体判断。",
+          "outputKey": "deepHierarchy"
+        },
+        {
+          "id": "state_confusion",
+          "label": "状态混淆",
+          "description": "不同状态或资源无法区分。用于推进“主界面结构”的具体判断。",
+          "outputKey": "stateConfusion"
+        },
+        {
+          "id": "no_alternative_control",
+          "label": "操作不可替代",
+          "description": "缺少替代输入或可访问方案。用于推进“主界面结构”的具体判断。",
+          "outputKey": "noAlternativeControl"
+        },
+        {
+          "id": "poor_interruption_recovery",
+          "label": "中断恢复差",
+          "description": "玩家回来后不知道当前进度。用于推进“主界面结构”的具体判断。",
+          "outputKey": "poorInterruptionRecovery"
+        }
+      ]
+    },
+    {
+      "id": "ux_usability_signal",
+      "label": "可用性信号",
+      "description": "用路径完成、误触、新手理解和异常恢复验证 UX。这一层把“主界面结构”推进到验收信号。",
+      "outputKey": "uxUsabilitySignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "load_boundary_to_usability_signal",
+      "designQuestion": "怎样证明这个界面项真的可用？",
+      "options": [
+        {
+          "id": "short_completion_path",
+          "label": "完成路径短",
+          "description": "关键行为能在合理步骤内完成。用于推进“主界面结构”的具体判断。",
+          "outputKey": "shortCompletionPath"
+        },
+        {
+          "id": "low_misclick",
+          "label": "误触低",
+          "description": "错误点击、返回和取消次数可控。用于推进“主界面结构”的具体判断。",
+          "outputKey": "lowMisclick"
+        },
+        {
+          "id": "newbie_understands",
+          "label": "新手能理解",
+          "description": "首次玩家不依赖解释也能推进。用于推进“主界面结构”的具体判断。",
+          "outputKey": "newbieUnderstands"
+        },
+        {
+          "id": "error_recovered",
+          "label": "异常能恢复",
+          "description": "玩家遇到错误后能自行恢复。用于推进“主界面结构”的具体判断。",
+          "outputKey": "errorRecovered"
+        },
+        {
+          "id": "readability_passed",
+          "label": "可读性达标",
+          "description": "字号、颜色和层级能被目标设备识别。用于推进“主界面结构”的具体判断。",
+          "outputKey": "readabilityPassed"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_ux_understanding_experience_quick_understanding_vs_clear_state",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "ux_understanding_experience",
+        "optionId": "quick_understanding"
+      },
+      "targets": [
+        {
+          "groupId": "ux_understanding_experience",
+          "optionId": "clear_state"
+        }
+      ],
+      "reason": "快速理解和完整状态展示同时做强时，容易增加界面密度。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_ux_understanding_experience_low_browsing_load_vs_clear_state",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "ux_understanding_experience",
+        "optionId": "low_browsing_load"
+      },
+      "targets": [
+        {
+          "groupId": "ux_understanding_experience",
+          "optionId": "clear_state"
+        }
+      ],
+      "reason": "低浏览负担要求减少信息，清晰状态要求充分展示，需要定义信息优先级。",
+      "severity": "warning"
+    }
+  ]
+}

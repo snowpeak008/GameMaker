@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Program Asset Binding Preflight",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "ready", "blockers", "checked_mount_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "ready": {"type": "boolean"},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "checked_mount_items": {"type": "integer"}
+  },
+  "additionalProperties": true
+}

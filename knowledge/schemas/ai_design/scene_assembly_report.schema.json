@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scene_assembly_report.schema.json",
+  "title": "Scene Assembly Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "status",
+    "scene_path",
+    "source_contracts",
+    "contract_summary",
+    "static_structure",
+    "blocking_issues"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": ["integer", "string"]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "scene_path": {
+      "type": "string"
+    },
+    "source_contracts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contract_summary": {
+      "type": "object",
+      "required": [
+        "entry_scene",
+        "ui_screen_count",
+        "input_action_count",
+        "objective_count",
+        "produced_asset_count"
+      ],
+      "properties": {
+        "entry_scene": {
+          "type": "string"
+        },
+        "ui_screen_count": {
+          "type": "integer"
+        },
+        "input_action_count": {
+          "type": "integer"
+        },
+        "objective_count": {
+          "type": "integer"
+        },
+        "produced_asset_count": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "static_structure": {
+      "type": "object",
+      "required": [
+        "entry_scene_exists",
+        "active_camera_exists",
+        "canvas_ui_root_exists",
+        "event_system_exists",
+        "input_router_exists",
+        "objective_tracker_exists",
+        "visible_content_verified"
+      ],
+      "properties": {
+        "entry_scene_exists": {
+          "type": "boolean"
+        },
+        "active_camera_exists": {
+          "type": "boolean"
+        },
+        "runtime_root_exists": {
+          "type": "boolean"
+        },
+        "canvas_ui_root_exists": {
+          "type": "boolean"
+        },
+        "event_system_exists": {
+          "type": "boolean"
+        },
+        "input_router_exists": {
+          "type": "boolean"
+        },
+        "objective_tracker_exists": {
+          "type": "boolean"
+        },
+        "game_state_exists": {
+          "type": "boolean"
+        },
+        "initial_ui_exists": {
+          "type": "boolean"
+        },
+        "visible_content_verified": {
+          "type": "boolean"
+        },
+        "audio_placeholder_declared": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "blocking_issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

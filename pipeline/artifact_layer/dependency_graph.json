@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "stage_00.concept_bundle",
+      "stage": 0,
+      "kind": "design_import_bundle",
+      "tasks": [
+        "stage_00.import_concept",
+        "stage_00.generate_design_machine_files"
+      ]
+    },
+    {
+      "id": "stage_01.gameplay_framework_bundle",
+      "stage": 1,
+      "kind": "framework_graph_bundle",
+      "tasks": [
+        "stage_01.import_framework_history",
+        "stage_01.generate_framework_graphs"
+      ]
+    },
+    {
+      "id": "stage_02.design_freeze_bundle",
+      "stage": 2,
+      "kind": "design_freeze_bundle",
+      "tasks": [
+        "stage_02.import_subsystems",
+        "stage_02.import_ai_design_script",
+        "stage_02.import_development_design",
+        "stage_02.freeze_traced_scope"
+      ]
+    },
+    {
+      "id": "stage_03.program_requirements_bundle",
+      "stage": 3,
+      "kind": "program_requirements_bundle",
+      "tasks": [
+        "stage_03.import_program_requirements",
+        "stage_03.generate_traceability_matrix"
+      ]
+    },
+    {
+      "id": "stage_04.art_requirements_bundle",
+      "stage": 4,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_04.resolve_art_requirements",
+        "stage_04.generate_art_requirements"
+      ]
+    },
+    {
+      "id": "stage_05.program_review_bundle",
+      "stage": 5,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_05.resolve_program_review",
+        "stage_05.generate_program_review"
+      ]
+    },
+    {
+      "id": "stage_06.art_review_bundle",
+      "stage": 6,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_06.resolve_art_review",
+        "stage_06.generate_art_review"
+      ]
+    },
+    {
+      "id": "stage_07.art_style_generation_confirmation_bundle",
+      "stage": 7,
+      "kind": "manual_gate",
+      "tasks": [
+        "stage_07.resolve_art_review_context",
+        "stage_07.generate_style_options",
+        "stage_07.score_style_options",
+        "stage_07.check_manual_style_gate",
+        "stage_07.write_style_confirmation"
+      ]
+    },
+    {
+      "id": "stage_08.program_plan_bundle",
+      "stage": 8,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_08.resolve_program_plan",
+        "stage_08.generate_program_plan"
+      ]
+    },
+    {
+      "id": "stage_09.art_plan_bundle",
+      "stage": 9,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_09.resolve_art_plan",
+        "stage_09.generate_art_plan"
+      ]
+    },
+    {
+      "id": "stage_10.asset_alignment_bundle",
+      "stage": 10,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_10.resolve_asset_alignment",
+        "stage_10.generate_asset_alignment"
+      ]
+    },
+    {
+      "id": "stage_11.dev_execution_bundle",
+      "stage": 11,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_11.resolve_dev_execution",
+        "stage_11.generate_dev_execution"
+      ]
+    },
+    {
+      "id": "stage_12.art_production_bundle",
+      "stage": 12,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_12.resolve_art_production",
+        "stage_12.generate_art_production"
+      ]
+    },
+    {
+      "id": "stage_13.scene_assembly_bundle",
+      "stage": 13,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_13.resolve_scene_assembly",
+        "stage_13.generate_scene_assembly"
+      ]
+    },
+    {
+      "id": "stage_14.integration_validation_bundle",
+      "stage": 14,
+      "kind": "source_placeholder_or_import",
+      "tasks": [
+        "stage_14.resolve_integration_validation",
+        "stage_14.generate_integration_validation"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "stage_00.concept_bundle",
+      "to": "stage_01.gameplay_framework_bundle"
+    },
+    {
+      "from": "stage_01.gameplay_framework_bundle",
+      "to": "stage_02.design_freeze_bundle"
+    },
+    {
+      "from": "stage_02.design_freeze_bundle",
+      "to": "stage_03.program_requirements_bundle"
+    },
+    {
+      "from": "stage_02.design_freeze_bundle",
+      "to": "stage_08.program_plan_bundle"
+    },
+    {
+      "from": "stage_03.program_requirements_bundle",
+      "to": "stage_04.art_requirements_bundle"
+    },
+    {
+      "from": "stage_03.program_requirements_bundle",
+      "to": "stage_05.program_review_bundle"
+    },
+    {
+      "from": "stage_03.program_requirements_bundle",
+      "to": "stage_08.program_plan_bundle"
+    },
+    {
+      "from": "stage_04.art_requirements_bundle",
+      "to": "stage_06.art_review_bundle"
+    },
+    {
+      "from": "stage_04.art_requirements_bundle",
+      "to": "stage_09.art_plan_bundle"
+    },
+    {
+      "from": "stage_04.art_requirements_bundle",
+      "to": "stage_11.dev_execution_bundle"
+    },
+    {
+      "from": "stage_05.program_review_bundle",
+      "to": "stage_08.program_plan_bundle"
+    },
+    {
+      "from": "stage_06.art_review_bundle",
+      "to": "stage_07.art_style_generation_confirmation_bundle"
+    },
+    {
+      "from": "stage_07.art_style_generation_confirmation_bundle",
+      "to": "stage_09.art_plan_bundle"
+    },
+    {
+      "from": "stage_08.program_plan_bundle",
+      "to": "stage_10.asset_alignment_bundle"
+    },
+    {
+      "from": "stage_09.art_plan_bundle",
+      "to": "stage_10.asset_alignment_bundle"
+    },
+    {
+      "from": "stage_09.art_plan_bundle",
+      "to": "stage_11.dev_execution_bundle"
+    },
+    {
+      "from": "stage_10.asset_alignment_bundle",
+      "to": "stage_11.dev_execution_bundle"
+    },
+    {
+      "from": "stage_10.asset_alignment_bundle",
+      "to": "stage_12.art_production_bundle"
+    },
+    {
+      "from": "stage_11.dev_execution_bundle",
+      "to": "stage_13.scene_assembly_bundle"
+    },
+    {
+      "from": "stage_12.art_production_bundle",
+      "to": "stage_13.scene_assembly_bundle"
+    },
+    {
+      "from": "stage_13.scene_assembly_bundle",
+      "to": "stage_14.integration_validation_bundle"
+    }
+  ],
+  "topological_order": [
+    "stage_00.concept_bundle",
+    "stage_01.gameplay_framework_bundle",
+    "stage_02.design_freeze_bundle",
+    "stage_03.program_requirements_bundle",
+    "stage_04.art_requirements_bundle",
+    "stage_05.program_review_bundle",
+    "stage_06.art_review_bundle",
+    "stage_07.art_style_generation_confirmation_bundle",
+    "stage_08.program_plan_bundle",
+    "stage_09.art_plan_bundle",
+    "stage_10.asset_alignment_bundle",
+    "stage_11.dev_execution_bundle",
+    "stage_12.art_production_bundle",
+    "stage_13.scene_assembly_bundle",
+    "stage_14.integration_validation_bundle"
+  ],
+  "errors": []
+}

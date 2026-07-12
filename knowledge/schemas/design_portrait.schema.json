@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoDesignMaker Design Portrait",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project_name",
+    "business_model",
+    "platform",
+    "target_audience",
+    "design_domain_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "stage_id": {
+      "type": "string"
+    },
+    "project_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_version": {
+      "type": "string"
+    },
+    "business_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "target_audience": {
+      "type": "string",
+      "minLength": 1
+    },
+    "development_path": {
+      "type": "string"
+    },
+    "unity_editor_path": {
+      "type": "string"
+    },
+    "design_domain_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "design_node_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "checklist_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "option_group_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "option_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "validation_error_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "validation_warning_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "data_source": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

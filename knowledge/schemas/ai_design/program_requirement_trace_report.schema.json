@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Program Requirement Trace Report",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "requirement_reviews"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "requirement_reviews": {"type": "array"},
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

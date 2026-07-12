@@ -1,0 +1,396 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "balance_design",
+    "name": "数值与平衡设计",
+    "description": "确认基础数值模型、难度、经济、内容、对抗和付费平衡。"
+  },
+  "nodes": [
+    {
+      "id": "balance_model_decision",
+      "name": "基础数值模型决策",
+      "description": "确认属性、关系、成长公式、收益曲线和阈值区间。",
+      "roleClass": "system_concrete",
+      "requires": [],
+      "unlocks": [
+        "balance_difficulty_decision"
+      ],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "shu_xing_ding_yi",
+          "label": "属性定义",
+          "description": "明确属性定义的含义、适用范围和判断标准。",
+          "outputKey": "shuXingDingYi",
+          "legacyIds": [
+            "balance_model_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "shu_xing_guan_xi",
+          "label": "属性关系",
+          "description": "明确属性关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "shuXingGuanXi",
+          "legacyIds": [
+            "balance_model_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "cheng_zhang_gong_shi",
+          "label": "成长公式",
+          "description": "明确成长公式在基础数值模型中的具体含义、适用范围和验收判断。",
+          "outputKey": "chengZhangGongShi",
+          "legacyIds": [
+            "balance_model_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "shou_yi_qu_xian",
+          "label": "收益曲线",
+          "description": "明确收益曲线在基础数值模型中的具体含义、适用范围和验收判断。",
+          "outputKey": "shouYiQuXian",
+          "legacyIds": [
+            "balance_model_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "yu_zhi_qu_jian",
+          "label": "阈值区间",
+          "description": "明确阈值区间在基础数值模型中的具体含义、适用范围和验收判断。",
+          "outputKey": "yuZhiQuJian",
+          "legacyIds": [
+            "balance_model_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "balance_difficulty_decision",
+      "name": "难度曲线决策",
+      "description": "确认初期、中期、后期、峰值难度和失败恢复。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "balance_model_decision"
+      ],
+      "unlocks": [
+        "balance_economy_decision"
+      ],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "chu_qi_nan_du",
+          "label": "初期难度",
+          "description": "明确初期难度在难度曲线中的具体含义、适用范围和验收判断。",
+          "outputKey": "chuQiNanDu",
+          "legacyIds": [
+            "balance_difficulty_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "zhong_qi_nan_du",
+          "label": "中期难度",
+          "description": "明确中期难度在难度曲线中的具体含义、适用范围和验收判断。",
+          "outputKey": "zhongQiNanDu",
+          "legacyIds": [
+            "balance_difficulty_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "hou_qi_nan_du",
+          "label": "后期难度",
+          "description": "明确后期难度在难度曲线中的具体含义、适用范围和验收判断。",
+          "outputKey": "houQiNanDu",
+          "legacyIds": [
+            "balance_difficulty_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "feng_zhi_nan_du",
+          "label": "峰值难度",
+          "description": "明确峰值难度在难度曲线中的具体含义、适用范围和验收判断。",
+          "outputKey": "fengZhiNanDu",
+          "legacyIds": [
+            "balance_difficulty_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "shi_bai_hui_fu",
+          "label": "失败恢复",
+          "description": "明确失败恢复在难度曲线中的具体含义、适用范围和验收判断。",
+          "outputKey": "shiBaiHuiFu",
+          "legacyIds": [
+            "balance_difficulty_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "balance_economy_decision",
+      "name": "经济平衡决策",
+      "description": "确认产出、消耗、储备、稀缺和通胀监控。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "balance_model_decision"
+      ],
+      "unlocks": [
+        "balance_content_decision"
+      ],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "chan_chu_su_lv",
+          "label": "产出速率",
+          "description": "明确产出速率在经济平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "chanChuSuLv",
+          "legacyIds": [
+            "balance_economy_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "xiao_hao_su_lv",
+          "label": "消耗速率",
+          "description": "明确消耗速率在经济平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "xiaoHaoSuLv",
+          "legacyIds": [
+            "balance_economy_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "chu_bei_shang_xian",
+          "label": "储备上限",
+          "description": "明确储备上限在经济平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "chuBeiShangXian",
+          "legacyIds": [
+            "balance_economy_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "xi_que_kong_zhi",
+          "label": "稀缺控制",
+          "description": "明确稀缺控制需要限制的对象、阈值和调整手段。",
+          "outputKey": "xiQueKongZhi",
+          "legacyIds": [
+            "balance_economy_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "tong_zhang_jian_kong",
+          "label": "通胀监控",
+          "description": "明确通胀监控在经济平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "tongZhangJianKong",
+          "legacyIds": [
+            "balance_economy_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "balance_content_decision",
+      "name": "内容平衡决策",
+      "description": "确认内容强度、收益、时间成本、风险成本和重复价值。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "balance_model_decision"
+      ],
+      "unlocks": [
+        "balance_competition_decision"
+      ],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "nei_rong_qiang_du",
+          "label": "内容强度",
+          "description": "明确内容强度在内容平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "neiRongQiangDu",
+          "legacyIds": [
+            "balance_content_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_shou_yi",
+          "label": "内容收益",
+          "description": "明确内容收益带来的价值、结算方式和强度边界。",
+          "outputKey": "neiRongShouYi",
+          "legacyIds": [
+            "balance_content_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_shi_jian_cheng_ben",
+          "label": "内容时间成本",
+          "description": "定义内容时间成本消耗的资源、时间或风险，以及可接受区间。",
+          "outputKey": "neiRongShiJianChengBen",
+          "legacyIds": [
+            "balance_content_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_feng_xian_cheng_ben",
+          "label": "内容风险成本",
+          "description": "定义内容风险成本消耗的资源、时间或风险，以及可接受区间。",
+          "outputKey": "neiRongFengXianChengBen",
+          "legacyIds": [
+            "balance_content_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "nei_rong_chong_fu_jia_zhi",
+          "label": "内容重复价值",
+          "description": "明确内容重复价值在内容平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "neiRongChongFuJiaZhi",
+          "legacyIds": [
+            "balance_content_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "balance_competition_decision",
+      "name": "对抗平衡决策",
+      "description": "确认角色、策略、匹配、先后手和滚雪球控制。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "balance_model_decision"
+      ],
+      "unlocks": [
+        "balance_payment_decision"
+      ],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "jue_se_ping_heng",
+          "label": "角色平衡",
+          "description": "明确角色平衡在对抗平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "jueSePingHeng",
+          "legacyIds": [
+            "balance_competition_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "ce_lve_ping_heng",
+          "label": "策略平衡",
+          "description": "明确策略平衡在对抗平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "ceLvePingHeng",
+          "legacyIds": [
+            "balance_competition_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "pi_pei_gong_ping",
+          "label": "匹配公平",
+          "description": "明确匹配公平在对抗平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "piPeiGongPing",
+          "legacyIds": [
+            "balance_competition_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "xian_hou_shou_you_shi",
+          "label": "先后手优势",
+          "description": "明确先后手优势在对抗平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "xianHouShouYouShi",
+          "legacyIds": [
+            "balance_competition_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "gun_xue_qiu_kong_zhi",
+          "label": "滚雪球控制",
+          "description": "明确滚雪球控制需要限制的对象、阈值和调整手段。",
+          "outputKey": "gunXueQiuKongZhi",
+          "legacyIds": [
+            "balance_competition_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "balance_payment_decision",
+      "name": "付费平衡决策",
+      "description": "确认免费进度、付费进度、效率差、付费上限和长期公平感。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "balance_economy_decision"
+      ],
+      "unlocks": [],
+      "domain": "balance_design",
+      "checklist": [
+        {
+          "id": "mian_fei_wan_jia_jin_du",
+          "label": "免费玩家进度",
+          "description": "说明免费玩家进度对目标玩家的判断、限制和验证依据。",
+          "outputKey": "mianFeiWanJiaJinDu",
+          "legacyIds": [
+            "balance_payment_decision_item_1"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_wan_jia_jin_du",
+          "label": "付费玩家进度",
+          "description": "明确付费玩家进度的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "fuFeiWanJiaJinDu",
+          "legacyIds": [
+            "balance_payment_decision_item_2"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_xiao_lv_cha",
+          "label": "付费效率差",
+          "description": "明确付费效率差的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "fuFeiXiaoLvCha",
+          "legacyIds": [
+            "balance_payment_decision_item_3"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_shang_xian",
+          "label": "付费上限",
+          "description": "明确付费上限的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "fuFeiShangXian",
+          "legacyIds": [
+            "balance_payment_decision_item_4"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        },
+        {
+          "id": "chang_qi_gong_ping_gan",
+          "label": "长期公平感",
+          "description": "明确长期公平感在付费平衡中的具体含义、适用范围和验收判断。",
+          "outputKey": "changQiGongPingGan",
+          "legacyIds": [
+            "balance_payment_decision_item_5"
+          ],
+          "templateRef": "shared_balance_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

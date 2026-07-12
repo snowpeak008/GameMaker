@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "presentation_feel_design",
+    "name": "表现与感受设计",
+    "description": "确认美术方向、动效感受、音频体验、手感和演出。"
+  },
+  "nodes": [
+    {
+      "id": "art_direction_decision",
+      "name": "美术方向决策",
+      "description": "确认风格定位、色彩语义、造型规则、场景氛围和视觉一致性。",
+      "roleClass": "system_concrete",
+      "requires": [],
+      "unlocks": [
+        "animation_feel_decision"
+      ],
+      "domain": "presentation_feel_design",
+      "checklist": [
+        {
+          "id": "feng_ge_ding_wei",
+          "label": "风格定位",
+          "description": "明确风格定位在美术方向中的具体含义、适用范围和验收判断。",
+          "outputKey": "fengGeDingWei",
+          "legacyIds": [
+            "art_direction_decision_item_1"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "se_cai_yu_yi",
+          "label": "色彩语义",
+          "description": "明确色彩语义在美术方向中的具体含义、适用范围和验收判断。",
+          "outputKey": "seCaiYuYi",
+          "legacyIds": [
+            "art_direction_decision_item_2"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "zao_xing_gui_ze",
+          "label": "造型规则",
+          "description": "定义造型规则的触发条件、限制条件和处理结果。",
+          "outputKey": "zaoXingGuiZe",
+          "legacyIds": [
+            "art_direction_decision_item_3"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "chang_jing_fen_wei",
+          "label": "场景氛围",
+          "description": "明确场景氛围在美术方向中的具体含义、适用范围和验收判断。",
+          "outputKey": "changJingFenWei",
+          "legacyIds": [
+            "art_direction_decision_item_4"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "shi_jue_yi_zhi_xing",
+          "label": "视觉一致性",
+          "description": "明确视觉一致性在美术方向中的具体含义、适用范围和验收判断。",
+          "outputKey": "shiJueYiZhiXing",
+          "legacyIds": [
+            "art_direction_decision_item_5"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "animation_feel_decision",
+      "name": "动效感受决策",
+      "description": "确认行为、反馈、界面、奖励和节奏动效的感受目标。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "art_direction_decision"
+      ],
+      "unlocks": [
+        "audio_experience_decision"
+      ],
+      "domain": "presentation_feel_design",
+      "checklist": [
+        {
+          "id": "xing_wei_dong_xiao",
+          "label": "行为动效",
+          "description": "明确行为动效在动效感受中的具体含义、适用范围和验收判断。",
+          "outputKey": "xingWeiDongXiao",
+          "legacyIds": [
+            "animation_feel_decision_item_1"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "fan_kui_dong_xiao",
+          "label": "反馈动效",
+          "description": "明确反馈动效在动效感受中的具体含义、适用范围和验收判断。",
+          "outputKey": "fanKuiDongXiao",
+          "legacyIds": [
+            "animation_feel_decision_item_2"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "jie_mian_dong_xiao",
+          "label": "界面动效",
+          "description": "明确界面动效在动效感受中的具体含义、适用范围和验收判断。",
+          "outputKey": "jieMianDongXiao",
+          "legacyIds": [
+            "animation_feel_decision_item_3"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "jiang_li_dong_xiao",
+          "label": "奖励动效",
+          "description": "明确奖励动效在动效感受中的具体含义、适用范围和验收判断。",
+          "outputKey": "jiangLiDongXiao",
+          "legacyIds": [
+            "animation_feel_decision_item_4"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "jie_zou_dong_xiao",
+          "label": "节奏动效",
+          "description": "明确节奏动效在动效感受中的具体含义、适用范围和验收判断。",
+          "outputKey": "jieZouDongXiao",
+          "legacyIds": [
+            "animation_feel_decision_item_5"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "audio_experience_decision",
+      "name": "音频体验决策",
+      "description": "确认音乐情绪、音效反馈、环境声、UI 声音和声音优先级。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "art_direction_decision"
+      ],
+      "unlocks": [
+        "juice_control_feel_decision"
+      ],
+      "domain": "presentation_feel_design",
+      "checklist": [
+        {
+          "id": "yin_yue_qing_xu",
+          "label": "音乐情绪",
+          "description": "明确音乐情绪在音频体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "yinYueQingXu",
+          "legacyIds": [
+            "audio_experience_decision_item_1"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "yin_xiao_fan_kui",
+          "label": "音效反馈",
+          "description": "定义音效反馈向玩家传达的信息、时机和表现方式。",
+          "outputKey": "yinXiaoFanKui",
+          "legacyIds": [
+            "audio_experience_decision_item_2"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "huan_jing_sheng_yin",
+          "label": "环境声音",
+          "description": "明确环境声音在音频体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "huanJingShengYin",
+          "legacyIds": [
+            "audio_experience_decision_item_3"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "u_i_sheng_yin",
+          "label": "UI 声音",
+          "description": "明确UI 声音在音频体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "uIShengYin",
+          "legacyIds": [
+            "audio_experience_decision_item_4"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "sheng_yin_you_xian_ji",
+          "label": "声音优先级",
+          "description": "排列声音优先级的先后顺序，作为取舍和资源分配依据。",
+          "outputKey": "shengYinYouXianJi",
+          "legacyIds": [
+            "audio_experience_decision_item_5"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "juice_control_feel_decision",
+      "name": "手感决策",
+      "description": "确认响应感、重量感、命中感、移动感和操作节奏感。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "animation_feel_decision"
+      ],
+      "unlocks": [
+        "cinematic_presentation_decision"
+      ],
+      "domain": "presentation_feel_design",
+      "checklist": [
+        {
+          "id": "xiang_ying_gan",
+          "label": "响应感",
+          "description": "明确响应感在手感中的具体含义、适用范围和验收判断。",
+          "outputKey": "xiangYingGan",
+          "legacyIds": [
+            "juice_control_feel_decision_item_1"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "zhong_liang_gan",
+          "label": "重量感",
+          "description": "明确重量感在手感中的具体含义、适用范围和验收判断。",
+          "outputKey": "zhongLiangGan",
+          "legacyIds": [
+            "juice_control_feel_decision_item_2"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "ming_zhong_gan",
+          "label": "命中感",
+          "description": "明确命中感在手感中的具体含义、适用范围和验收判断。",
+          "outputKey": "mingZhongGan",
+          "legacyIds": [
+            "juice_control_feel_decision_item_3"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "yi_dong_gan",
+          "label": "移动感",
+          "description": "明确移动感在手感中的具体含义、适用范围和验收判断。",
+          "outputKey": "yiDongGan",
+          "legacyIds": [
+            "juice_control_feel_decision_item_4"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "cao_zuo_jie_zou_gan",
+          "label": "操作节奏感",
+          "description": "明确操作节奏感在手感中的具体含义、适用范围和验收判断。",
+          "outputKey": "caoZuoJieZouGan",
+          "legacyIds": [
+            "juice_control_feel_decision_item_5"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "cinematic_presentation_decision",
+      "name": "演出决策",
+      "description": "确认关键节点、奖励、失败、剧情和宣传可用演出。",
+      "roleClass": "system_concrete",
+      "requires": [
+        "art_direction_decision"
+      ],
+      "unlocks": [],
+      "domain": "presentation_feel_design",
+      "checklist": [
+        {
+          "id": "guan_jian_jie_dian_yan_chu",
+          "label": "关键节点演出",
+          "description": "明确关键节点演出在演出中的具体含义、适用范围和验收判断。",
+          "outputKey": "guanJianJieDianYanChu",
+          "legacyIds": [
+            "cinematic_presentation_decision_item_1"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "jiang_li_yan_chu",
+          "label": "奖励演出",
+          "description": "明确奖励演出在演出中的具体含义、适用范围和验收判断。",
+          "outputKey": "jiangLiYanChu",
+          "legacyIds": [
+            "cinematic_presentation_decision_item_2"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "shi_bai_yan_chu",
+          "label": "失败演出",
+          "description": "明确失败演出在演出中的具体含义、适用范围和验收判断。",
+          "outputKey": "shiBaiYanChu",
+          "legacyIds": [
+            "cinematic_presentation_decision_item_3"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "ju_qing_yan_chu",
+          "label": "剧情演出",
+          "description": "明确剧情演出在演出中的具体含义、适用范围和验收判断。",
+          "outputKey": "juQingYanChu",
+          "legacyIds": [
+            "cinematic_presentation_decision_item_4"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        },
+        {
+          "id": "shang_xian_xuan_chuan_ke_yong_yan_chu",
+          "label": "上线宣传可用演出",
+          "description": "明确上线宣传可用演出在演出中的具体含义、适用范围和验收判断。",
+          "outputKey": "shangXianXuanChuanKeYongYanChu",
+          "legacyIds": [
+            "cinematic_presentation_decision_item_5"
+          ],
+          "templateRef": "shared_presentation_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

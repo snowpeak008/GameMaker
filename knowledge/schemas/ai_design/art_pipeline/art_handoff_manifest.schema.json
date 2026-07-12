@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Art Handoff Manifest",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "ready_for_step13", "blockers", "source_refs"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "ready_for_step13": {"type": "boolean"},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "asset_count": {"type": "integer"},
+    "mount_item_count": {"type": "integer"}
+  },
+  "additionalProperties": true
+}

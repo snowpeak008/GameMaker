@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity Art Import Report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "source_refs", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "imported_assets": {"type": "integer"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

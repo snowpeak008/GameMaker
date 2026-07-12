@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "source-project-root",
+  "projectId": "autodesignmaker-rust-v2",
+  "workspaceManifest": "Cargo.toml",
+  "lockfiles": [
+    "Cargo.lock",
+    "web/package-lock.json"
+  ],
+  "resourceManifest": "knowledge/resource-manifest.json"
+}

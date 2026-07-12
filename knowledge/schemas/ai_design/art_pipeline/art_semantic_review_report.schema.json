@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Art Semantic Review Report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "reviews", "blockers", "rework_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "reviews": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "rework_items": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

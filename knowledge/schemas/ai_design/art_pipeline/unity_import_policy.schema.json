@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity Import Policy",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "unity_root", "allowed_roots", "import_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "unity_root": {"type": "string"},
+    "allowed_roots": {"type": "array", "items": {"type": "string"}},
+    "import_items": {"type": "array", "items": {"type": "object"}},
+    "addressables_policy": {"type": "object"}
+  },
+  "additionalProperties": true
+}

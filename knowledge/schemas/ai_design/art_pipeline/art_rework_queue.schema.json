@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Art Rework Queue",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "items", "blocking_count", "review_count"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "items": {"type": "array", "items": {"type": "object"}},
+    "blocking_count": {"type": "integer"},
+    "review_count": {"type": "integer"}
+  },
+  "additionalProperties": true
+}

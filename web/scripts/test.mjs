@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -147,6 +148,11 @@ import {
   sampleStylePromptResponse,
   sampleTemplateList,
 } from "./fixtures.mjs";
+import {
+  findSourceProjectRoot,
+  openSourceProjectRoot,
+  safeProjectJoin,
+} from "./project-root.mjs";
 
 const root = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const src = join(root, "src");
@@ -157,6 +163,10 @@ const [html, css, pipelineJs, settingsStyleJs] = await Promise.all([
   readFile(join(src, "features", "pipeline.js"), "utf8"),
   readFile(join(src, "features", "settings-style.js"), "utf8"),
 ]);
+
+if (target === "all" || target === "project-root") {
+  await testProjectRoot(root);
+}
 
 if (target === "all" || target === "shell") {
   await testShell(html, css);
@@ -186,11 +196,88 @@ if (target === "all" || target === "settings-style") {
   testSettingsStyle(html, css, pipelineJs, settingsStyleJs);
 }
 
-if (!["all", "shell", "design", "ai-interview", "pipeline", "utility-panels", "ai-config", "settings-style"].includes(target)) {
+if (!["all", "project-root", "shell", "design", "ai-interview", "pipeline", "utility-panels", "ai-config", "settings-style"].includes(target)) {
   throw new Error(`unsupported test target: ${target}`);
 }
 
 console.log(`web ${target} unit checks passed`);
+
+async function testProjectRoot(webRoot) {
+  const sourceProject = await findSourceProjectRoot(webRoot);
+  assert(sourceProject.manifest.projectId === "autodesignmaker-rust-v2", "source project id mismatch");
+  await Promise.all([
+    readFile(await safeProjectJoin(sourceProject.root, "knowledge/resource-manifest.json")),
+    readFile(await safeProjectJoin(sourceProject.root, "pipeline/artifact_layer/registry.json")),
+    readFile(await safeProjectJoin(sourceProject.root, "testdata/ui_baselines/index.json")),
+  ]);
+  await assertRejects(
+    () => safeProjectJoin(sourceProject.root, "../parent-data.json"),
+    "project root safe join must reject parent traversal",
+  );
+
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "adm-newrust-project-root-"));
+  try {
+    const renamedRoot = join(fixtureRoot, "独立 项目-renamed");
+    await writeProjectRootFixture(renamedRoot);
+    const nested = join(renamedRoot, "web", "scripts");
+    await mkdir(nested, { recursive: true });
+    const discovered = await findSourceProjectRoot(nested);
+    assert(discovered.root === renamedRoot, "renamed Unicode source root was not discovered");
+
+    const missingLockRoot = join(fixtureRoot, "missing-lock");
+    await writeProjectRootFixture(missingLockRoot);
+    await rm(join(missingLockRoot, "web", "package-lock.json"));
+    await assertRejects(
+      () => openSourceProjectRoot(missingLockRoot),
+      "source root must reject a missing declared lockfile",
+    );
+
+    const escapeRoot = join(fixtureRoot, "escape-marker");
+    await writeProjectRootFixture(escapeRoot, { resourceManifest: "../outside.json" });
+    await assertRejects(
+      () => openSourceProjectRoot(escapeRoot),
+      "source root must reject marker paths that escape the checkout",
+    );
+
+    const outerRoot = join(fixtureRoot, "valid-outer");
+    await writeProjectRootFixture(outerRoot);
+    const invalidChild = join(outerRoot, "invalid-child");
+    const invalidStart = join(invalidChild, "crates", "demo");
+    await mkdir(invalidStart, { recursive: true });
+    await writeFile(join(invalidChild, ".project_root"), "{}\n", "utf8");
+    await assertRejects(
+      () => findSourceProjectRoot(invalidStart),
+      "invalid nearest marker must not fall through to a parent project",
+    );
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+  }
+}
+
+async function writeProjectRootFixture(rootPath, markerOverrides = {}) {
+  await mkdir(join(rootPath, "knowledge"), { recursive: true });
+  await mkdir(join(rootPath, "web"), { recursive: true });
+  await Promise.all([
+    writeFile(join(rootPath, "Cargo.toml"), "[workspace]\nmembers = []\n", "utf8"),
+    writeFile(join(rootPath, "Cargo.lock"), "# fixture\n", "utf8"),
+    writeFile(join(rootPath, "web", "package-lock.json"), "{}\n", "utf8"),
+    writeFile(
+      join(rootPath, "knowledge", "resource-manifest.json"),
+      `${JSON.stringify({ schemaVersion: 1, projectId: "autodesignmaker-rust-v2", groups: [] }, null, 2)}\n`,
+      "utf8",
+    ),
+  ]);
+  const marker = {
+    schemaVersion: 1,
+    kind: "source-project-root",
+    projectId: "autodesignmaker-rust-v2",
+    workspaceManifest: "Cargo.toml",
+    lockfiles: ["Cargo.lock", "web/package-lock.json"],
+    resourceManifest: "knowledge/resource-manifest.json",
+    ...markerOverrides,
+  };
+  await writeFile(join(rootPath, ".project_root"), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
+}
 
 async function testShell(html, css) {
   assert(TASKS.length === 6, "shell must expose six task areas");
@@ -1118,6 +1205,15 @@ function assert(condition, message) {
 function assertThrows(fn, message) {
   try {
     fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
+async function assertRejects(fn, message) {
+  try {
+    await fn();
   } catch {
     return;
   }

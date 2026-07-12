@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Program Asset Binding Contract",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "status", "bindings_verified", "source_refs", "blockers"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "status": {"type": "string"},
+    "bindings_verified": {"type": "boolean"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

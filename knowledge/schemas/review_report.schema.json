@@ -1,0 +1,95 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "consumer_stage",
+    "source_review_protocol",
+    "reviewed_contract",
+    "reviewed_contract_protocol",
+    "reviewed_contract_schema_version",
+    "verdict",
+    "scores",
+    "findings",
+    "classification_summary",
+    "routing_summary",
+    "gate_decision",
+    "quality"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "consumer_stage": {
+      "type": "string",
+      "enum": ["step_5_program_requirements_review", "step_6_art_requirements_review"]
+    },
+    "source_review_protocol": {"type": "string"},
+    "reviewed_contract": {"type": "string"},
+    "reviewed_contract_protocol": {"type": "string"},
+    "reviewed_contract_schema_version": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["PASS", "FAIL", "FORCED_PASS"]},
+    "scores": {"type": "object"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "finding_id",
+          "severity",
+          "category",
+          "source_refs",
+          "broken_rule",
+          "root_cause_stage",
+          "affected_ids",
+          "affected_files",
+          "auto_correctable",
+          "suggested_correction_type",
+          "evidence"
+        ],
+        "properties": {
+          "finding_id": {"type": "string"},
+          "severity": {"type": "string"},
+          "category": {"type": "string"},
+          "source_refs": {"type": "array", "items": {"type": "object"}},
+          "broken_rule": {"type": "string"},
+          "root_cause_stage": {"type": "string"},
+          "affected_ids": {"type": "array", "items": {"type": "string"}},
+          "affected_files": {"type": "array", "items": {"type": "string"}},
+          "auto_correctable": {"type": "boolean"},
+          "suggested_correction_type": {"type": "string"},
+          "evidence": {"type": "string"}
+        }
+      }
+    },
+    "classification_summary": {
+      "type": "object",
+      "required": ["correctable_count", "design_gap_count"],
+      "properties": {
+        "correctable_count": {"type": "integer"},
+        "design_gap_count": {"type": "integer"}
+      }
+    },
+    "routing_summary": {"type": "object"},
+    "gate_decision": {
+      "type": "object",
+      "required": ["outcome", "queue_path", "original_verdict"],
+      "properties": {
+        "outcome": {"type": "string"},
+        "choice": {"type": "integer"},
+        "queue_path": {"type": "string"},
+        "unresolved_count": {"type": "integer"},
+        "original_verdict": {"type": "string"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": ["schema", "valid", "blockers", "warnings"],
+      "properties": {
+        "schema": {"type": "string"},
+        "valid": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

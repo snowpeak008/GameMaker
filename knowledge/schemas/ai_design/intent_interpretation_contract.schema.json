@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Intent Interpretation Contract",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "genre", "core_loop", "resource_loop"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "genre": {"type": "string"},
+    "perspective": {"type": "string"},
+    "platform_assumptions": {"type": "array", "items": {"type": "string"}},
+    "core_loop": {"type": "string"},
+    "resource_loop": {"type": "string"},
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

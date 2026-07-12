@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program_semantic_coverage_report.schema.json",
+  "title": "Program Semantic Coverage Report",
+  "type": "object",
+  "required": ["schema_version", "status", "coverage_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "status": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_contracts": {"type": "array", "items": {"type": "string"}},
+    "coverage_items": {"type": "array", "items": {"type": "object"}},
+    "missing_program_capabilities": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

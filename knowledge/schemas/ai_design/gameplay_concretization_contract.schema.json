@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gameplay Concretization Contract",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "player_actions", "feedback_loop", "goal_progression", "scene_requirements"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "player_actions": {"type": "array"},
+    "feedback_loop": {"type": "object"},
+    "goal_progression": {"type": "object"},
+    "scene_requirements": {"type": "array"},
+    "runtime_data_needs": {"type": "array"},
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

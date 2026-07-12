@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity Editor Request",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "project_path", "scene_path", "execute_steps"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "project_path": {"type": "string"},
+    "scene_path": {"type": "string"},
+    "compile_step": {"type": "object"},
+    "execute_steps": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

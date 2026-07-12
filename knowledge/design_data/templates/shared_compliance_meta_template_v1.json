@@ -1,0 +1,256 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_compliance_meta_template_v1",
+  "name": "Shared compliance meta template v1",
+  "description": "Shared compliance meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "compliance_protection_goal",
+      "label": "保护目标",
+      "description": "合规和风险设计先确定保护目标。这一层把“内容尺度”推进到体验目标。",
+      "outputKey": "complianceProtectionGoal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_protection",
+      "designQuestion": "这个风险项要保护玩家免受什么伤害？",
+      "options": [
+        {
+          "id": "age_appropriate",
+          "label": "年龄适配",
+          "description": "内容、社交和付费适合目标年龄。用于推进“内容尺度”的具体判断。",
+          "outputKey": "ageAppropriate"
+        },
+        {
+          "id": "spending_protection",
+          "label": "消费保护",
+          "description": "避免诱导、误导和不可控消费。用于推进“内容尺度”的具体判断。",
+          "outputKey": "spendingProtection"
+        },
+        {
+          "id": "community_safety",
+          "label": "社区安全",
+          "description": "降低骚扰、歧视和违规行为。用于推进“内容尺度”的具体判断。",
+          "outputKey": "communitySafety"
+        },
+        {
+          "id": "fairness_trust",
+          "label": "公平感",
+          "description": "玩家相信结果和规则公平。用于推进“内容尺度”的具体判断。",
+          "outputKey": "fairnessTrust"
+        },
+        {
+          "id": "privacy_transparency",
+          "label": "隐私透明",
+          "description": "玩家理解数据用途和控制方式。用于推进“内容尺度”的具体判断。",
+          "outputKey": "privacyTransparency"
+        }
+      ]
+    },
+    {
+      "id": "compliance_risk_dynamic",
+      "label": "风险动态",
+      "description": "把保护目标转成误解、冲动、滥用、争议和不信任动态。这一层把“内容尺度”推进到玩家动态。",
+      "outputKey": "complianceRiskDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "protection_to_risk_dynamic",
+      "designQuestion": "风险会通过什么玩家行为或外部反馈扩散？",
+      "options": [
+        {
+          "id": "promise_misread",
+          "label": "承诺误解",
+          "description": "玩家误解规则、概率、权益或内容承诺。用于推进“内容尺度”的具体判断。",
+          "outputKey": "promiseMisread"
+        },
+        {
+          "id": "impulse_spending",
+          "label": "冲动消费",
+          "description": "玩家在压力或诱导下消费。用于推进“内容尺度”的具体判断。",
+          "outputKey": "impulseSpending"
+        },
+        {
+          "id": "abuse_harassment",
+          "label": "滥用骚扰",
+          "description": "玩家利用系统伤害他人或破坏公平。用于推进“内容尺度”的具体判断。",
+          "outputKey": "abuseHarassment"
+        },
+        {
+          "id": "controversy_spread",
+          "label": "争议扩散",
+          "description": "负面事件在社群或媒体扩散。用于推进“内容尺度”的具体判断。",
+          "outputKey": "controversySpread"
+        },
+        {
+          "id": "data_distrust",
+          "label": "数据不信任",
+          "description": "玩家对权限、推荐或数据用途不信任。用于推进“内容尺度”的具体判断。",
+          "outputKey": "dataDistrust"
+        }
+      ]
+    },
+    {
+      "id": "compliance_protection_mechanic",
+      "label": "防护机制",
+      "description": "把风险动态落到提示、权限、举报、概率表达和分级限制。这一层把“内容尺度”推进到机制抓手。",
+      "outputKey": "complianceProtectionMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "risk_dynamic_to_protection_mechanic",
+      "designQuestion": "用什么机制提前控制这个风险？",
+      "options": [
+        {
+          "id": "notice_explanation",
+          "label": "提示说明",
+          "description": "用明确文案解释规则、权益或风险。用于推进“内容尺度”的具体判断。",
+          "outputKey": "noticeExplanation"
+        },
+        {
+          "id": "permission_control",
+          "label": "权限控制",
+          "description": "限制年龄、消费、数据或功能权限。用于推进“内容尺度”的具体判断。",
+          "outputKey": "permissionControl"
+        },
+        {
+          "id": "report_appeal",
+          "label": "举报申诉",
+          "description": "提供举报、处理和申诉闭环。用于推进“内容尺度”的具体判断。",
+          "outputKey": "reportAppeal"
+        },
+        {
+          "id": "probability_disclosure",
+          "label": "概率表达",
+          "description": "清晰表达随机概率和保底规则。用于推进“内容尺度”的具体判断。",
+          "outputKey": "probabilityDisclosure"
+        },
+        {
+          "id": "rating_limit",
+          "label": "分级限制",
+          "description": "按年龄、区域或平台规则限制内容。用于推进“内容尺度”的具体判断。",
+          "outputKey": "ratingLimit"
+        }
+      ]
+    },
+    {
+      "id": "compliance_redline_boundary",
+      "label": "红线边界",
+      "description": "合规必须明确未成年人、消费、内容、文化和隐私红线。这一层把“内容尺度”推进到边界约束。",
+      "outputKey": "complianceRedlineBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "protection_mechanic_to_redline",
+      "designQuestion": "哪些情况必须被禁止或升级处理？",
+      "options": [
+        {
+          "id": "minor_harm",
+          "label": "未成年人风险",
+          "description": "可能伤害未成年人或违反保护要求。用于推进“内容尺度”的具体判断。",
+          "outputKey": "minorHarm"
+        },
+        {
+          "id": "induced_payment",
+          "label": "诱导消费",
+          "description": "可能构成误导、强迫或冲动消费。用于推进“内容尺度”的具体判断。",
+          "outputKey": "inducedPayment"
+        },
+        {
+          "id": "illegal_content",
+          "label": "违规内容",
+          "description": "内容尺度或表达违反平台和地区规范。用于推进“内容尺度”的具体判断。",
+          "outputKey": "illegalContent"
+        },
+        {
+          "id": "discrimination_offense",
+          "label": "歧视冒犯",
+          "description": "文化、语言或社群表达造成冒犯。用于推进“内容尺度”的具体判断。",
+          "outputKey": "discriminationOffense"
+        },
+        {
+          "id": "privacy_violation",
+          "label": "隐私侵害",
+          "description": "数据收集、使用或删除不透明。用于推进“内容尺度”的具体判断。",
+          "outputKey": "privacyViolation"
+        }
+      ]
+    },
+    {
+      "id": "compliance_signal",
+      "label": "合规信号",
+      "description": "用审核、投诉、退款、舆情和申诉闭环验证风险控制。这一层把“内容尺度”推进到验收信号。",
+      "outputKey": "complianceSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "redline_to_compliance_signal",
+      "designQuestion": "怎样证明风险被控制住？",
+      "options": [
+        {
+          "id": "review_passed",
+          "label": "审核通过",
+          "description": "平台、地区或内部合规审核通过。用于推进“内容尺度”的具体判断。",
+          "outputKey": "reviewPassed"
+        },
+        {
+          "id": "complaint_down",
+          "label": "投诉下降",
+          "description": "相关投诉量在可控范围。用于推进“内容尺度”的具体判断。",
+          "outputKey": "complaintDown"
+        },
+        {
+          "id": "refund_controlled",
+          "label": "退款可控",
+          "description": "消费争议和退款不异常。用于推进“内容尺度”的具体判断。",
+          "outputKey": "refundControlled"
+        },
+        {
+          "id": "sentiment_explained",
+          "label": "舆情可解释",
+          "description": "负面反馈有明确解释和处理口径。用于推进“内容尺度”的具体判断。",
+          "outputKey": "sentimentExplained"
+        },
+        {
+          "id": "appeal_closed",
+          "label": "申诉闭环",
+          "description": "举报、处罚和申诉形成闭环。用于推进“内容尺度”的具体判断。",
+          "outputKey": "appealClosed"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_compliance_protection_goal_community_safety_vs_fairness_trust",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "compliance_protection_goal",
+        "optionId": "community_safety"
+      },
+      "targets": [
+        {
+          "groupId": "compliance_protection_goal",
+          "optionId": "fairness_trust"
+        }
+      ],
+      "reason": "社区安全治理可能影响公平感，需要明确处罚和申诉边界。",
+      "severity": "warning"
+    }
+  ]
+}

@@ -4814,7 +4814,7 @@ mod tests {
     use crate::generation::parse_design_text;
     use crate::stages::step00_02::parse_response_entities;
     use adm_new_contracts::schema::{load_structured_file, validate_contract};
-    use adm_new_foundation::new_stable_id;
+    use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot};
     use std::fs;
     use std::path::PathBuf;
 
@@ -5166,10 +5166,9 @@ mod tests {
                 .unwrap();
         }
 
-        let repository_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .unwrap();
+        let repository_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         let registry =
             load_structured_file(&repository_root.join("pipeline/artifact_layer/registry.json"))
                 .unwrap();
@@ -5573,11 +5572,8 @@ Frozen / Traceable
     }
 
     fn assert_schema_valid(contract: &Value, schema_path: &str) {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("..");
-        let schema = load_structured_file(&root.join(schema_path)).unwrap();
+        let root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let schema = load_structured_file(&root.join(schema_path).unwrap()).unwrap();
         let errors = validate_contract(contract, &schema);
         assert!(errors.is_empty(), "{errors:?}");
     }

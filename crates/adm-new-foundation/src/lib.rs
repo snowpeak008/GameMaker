@@ -13,6 +13,7 @@ pub mod io;
 pub mod markdown;
 pub mod paths;
 pub mod process;
+pub mod source_root;
 pub mod structured_md;
 pub mod text_extractor;
 pub mod tool;

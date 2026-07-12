@@ -68,7 +68,6 @@ dependencies = [
  "adm-new-contracts",
  "adm-new-foundation",
  "adm-new-governance",
- "adm-new-knowledge",
  "adm-new-packaging",
  "adm-new-patch",
  "adm-new-sdk",
@@ -136,6 +135,7 @@ dependencies = [
  "adm-new-foundation",
  "serde",
  "serde_json",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -196,6 +196,7 @@ dependencies = [
  "adm-new-contracts",
  "adm-new-foundation",
  "adm-new-storage",
+ "serde",
  "serde_json",
 ]
 
@@ -849,6 +850,7 @@ dependencies = [
  "adm-new-contracts",
  "adm-new-design",
  "adm-new-foundation",
+ "adm-new-packaging",
  "adm-new-pipeline",
  "adm-new-storage",
  "adm-new-tauri-commands",

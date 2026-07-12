@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "social_community_design",
+    "name": "社交与社区设计",
+    "description": "确认社交关系、协作、竞争、表达和社区行为。"
+  },
+  "nodes": [
+    {
+      "id": "social_relationship_decision",
+      "name": "社交关系决策",
+      "description": "确认好友、临时、团队、竞争和师徒关系。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "social_collaboration_decision"
+      ],
+      "domain": "social_community_design",
+      "checklist": [
+        {
+          "id": "hao_you_guan_xi",
+          "label": "好友关系",
+          "description": "明确好友关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "haoYouGuanXi",
+          "legacyIds": [
+            "social_relationship_decision_item_1"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "lin_shi_guan_xi",
+          "label": "临时关系",
+          "description": "明确临时关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "linShiGuanXi",
+          "legacyIds": [
+            "social_relationship_decision_item_2"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "tuan_dui_guan_xi",
+          "label": "团队关系",
+          "description": "明确团队关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "tuanDuiGuanXi",
+          "legacyIds": [
+            "social_relationship_decision_item_3"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "jing_zheng_guan_xi",
+          "label": "竞争关系",
+          "description": "明确竞争关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "jingZhengGuanXi",
+          "legacyIds": [
+            "social_relationship_decision_item_4"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "shi_tu_huo_yin_dao_guan_xi",
+          "label": "师徒或引导关系",
+          "description": "明确师徒或引导关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "shiTuHuoYinDaoGuanXi",
+          "legacyIds": [
+            "social_relationship_decision_item_5"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "social_collaboration_decision",
+      "name": "协作决策",
+      "description": "确认协作目标、分工、奖励、失败和门槛。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "social_relationship_decision"
+      ],
+      "unlocks": [
+        "social_competition_decision"
+      ],
+      "domain": "social_community_design",
+      "checklist": [
+        {
+          "id": "xie_zuo_mu_biao",
+          "label": "协作目标",
+          "description": "明确协作目标要达成的结果、对象和优先级。",
+          "outputKey": "xieZuoMuBiao",
+          "legacyIds": [
+            "social_collaboration_decision_item_1"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "xie_zuo_fen_gong",
+          "label": "协作分工",
+          "description": "明确协作分工在协作中的具体含义、适用范围和验收判断。",
+          "outputKey": "xieZuoFenGong",
+          "legacyIds": [
+            "social_collaboration_decision_item_2"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "xie_zuo_jiang_li",
+          "label": "协作奖励",
+          "description": "定义协作奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "xieZuoJiangLi",
+          "legacyIds": [
+            "social_collaboration_decision_item_3"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "xie_zuo_shi_bai",
+          "label": "协作失败",
+          "description": "明确协作失败在协作中的具体含义、适用范围和验收判断。",
+          "outputKey": "xieZuoShiBai",
+          "legacyIds": [
+            "social_collaboration_decision_item_4"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "xie_zuo_men_kan",
+          "label": "协作门槛",
+          "description": "明确协作门槛在协作中的具体含义、适用范围和验收判断。",
+          "outputKey": "xieZuoMenKan",
+          "legacyIds": [
+            "social_collaboration_decision_item_5"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "social_competition_decision",
+      "name": "竞争决策",
+      "description": "确认竞争目标、排名、匹配、赛季和反挫败设计。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "social_relationship_decision"
+      ],
+      "unlocks": [
+        "social_expression_decision"
+      ],
+      "domain": "social_community_design",
+      "checklist": [
+        {
+          "id": "jing_zheng_mu_biao",
+          "label": "竞争目标",
+          "description": "明确竞争目标要达成的结果、对象和优先级。",
+          "outputKey": "jingZhengMuBiao",
+          "legacyIds": [
+            "social_competition_decision_item_1"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "pai_ming_gui_ze",
+          "label": "排名规则",
+          "description": "定义排名规则的触发条件、限制条件和处理结果。",
+          "outputKey": "paiMingGuiZe",
+          "legacyIds": [
+            "social_competition_decision_item_2"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "pi_pei_gui_ze",
+          "label": "匹配规则",
+          "description": "定义匹配规则的触发条件、限制条件和处理结果。",
+          "outputKey": "piPeiGuiZe",
+          "legacyIds": [
+            "social_competition_decision_item_3"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "sai_ji_gui_ze",
+          "label": "赛季规则",
+          "description": "定义赛季规则的触发条件、限制条件和处理结果。",
+          "outputKey": "saiJiGuiZe",
+          "legacyIds": [
+            "social_competition_decision_item_4"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "fan_cuo_bai_she_ji",
+          "label": "反挫败设计",
+          "description": "明确反挫败设计在竞争中的具体含义、适用范围和验收判断。",
+          "outputKey": "fanCuoBaiSheJi",
+          "legacyIds": [
+            "social_competition_decision_item_5"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "social_expression_decision",
+      "name": "表达决策",
+      "description": "确认个人展示、成就、外观、文本和情绪表达。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "social_relationship_decision"
+      ],
+      "unlocks": [
+        "community_behavior_decision"
+      ],
+      "domain": "social_community_design",
+      "checklist": [
+        {
+          "id": "ge_ren_zhan_shi",
+          "label": "个人展示",
+          "description": "明确个人展示展示给玩家的内容、位置和表现强度。",
+          "outputKey": "geRenZhanShi",
+          "legacyIds": [
+            "social_expression_decision_item_1"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "cheng_jiu_zhan_shi",
+          "label": "成就展示",
+          "description": "明确成就展示展示给玩家的内容、位置和表现强度。",
+          "outputKey": "chengJiuZhanShi",
+          "legacyIds": [
+            "social_expression_decision_item_2"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "wai_guan_zhan_shi",
+          "label": "外观展示",
+          "description": "明确外观展示展示给玩家的内容、位置和表现强度。",
+          "outputKey": "waiGuanZhanShi",
+          "legacyIds": [
+            "social_expression_decision_item_3"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "she_jiao_wen_ben",
+          "label": "社交文本",
+          "description": "说明社交文本中的互动对象、互动动机和安全边界。",
+          "outputKey": "sheJiaoWenBen",
+          "legacyIds": [
+            "social_expression_decision_item_4"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "qing_xu_biao_da",
+          "label": "情绪表达",
+          "description": "确定情绪表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "qingXuBiaoDa",
+          "legacyIds": [
+            "social_expression_decision_item_5"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "community_behavior_decision",
+      "name": "社区行为决策",
+      "description": "确认正向激励、负向约束、举报、新老玩家关系和社区活动。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "social_relationship_decision"
+      ],
+      "unlocks": [],
+      "domain": "social_community_design",
+      "checklist": [
+        {
+          "id": "zheng_xiang_xing_wei_ji_li",
+          "label": "正向行为激励",
+          "description": "明确正向行为激励在社区行为中的具体含义、适用范围和验收判断。",
+          "outputKey": "zhengXiangXingWeiJiLi",
+          "legacyIds": [
+            "community_behavior_decision_item_1"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "fu_xiang_xing_wei_yue_shu",
+          "label": "负向行为约束",
+          "description": "明确负向行为约束在社区行为中的具体含义、适用范围和验收判断。",
+          "outputKey": "fuXiangXingWeiYueShu",
+          "legacyIds": [
+            "community_behavior_decision_item_2"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "ju_bao_fan_kui",
+          "label": "举报反馈",
+          "description": "定义举报反馈向玩家传达的信息、时机和表现方式。",
+          "outputKey": "juBaoFanKui",
+          "legacyIds": [
+            "community_behavior_decision_item_3"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "xin_lao_wan_jia_guan_xi",
+          "label": "新老玩家关系",
+          "description": "明确新老玩家关系中的对象连接、互动方式和影响范围。",
+          "outputKey": "xinLaoWanJiaGuanXi",
+          "legacyIds": [
+            "community_behavior_decision_item_4"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        },
+        {
+          "id": "she_qu_huo_dong_can_yu",
+          "label": "社区活动参与",
+          "description": "明确社区活动参与在社区行为中的具体含义、适用范围和验收判断。",
+          "outputKey": "sheQuHuoDongCanYu",
+          "legacyIds": [
+            "community_behavior_decision_item_5"
+          ],
+          "templateRef": "shared_social_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

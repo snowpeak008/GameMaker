@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project_dna_contract.schema.json",
+  "title": "Project DNA Contract",
+  "type": "object",
+  "required": ["schema_version", "contract_state", "project_signature"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "contract_state": {"type": "string", "enum": ["seed", "frozen"]},
+    "draft_session_id": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "detected_archetype": {"type": "string"},
+    "source_identity_contract": {"type": "string"},
+    "core_loop": {"type": "object"},
+    "core_entities": {"type": "array", "items": {"type": "object"}},
+    "resources": {"type": "array", "items": {"type": "object"}},
+    "player_actions": {"type": "array", "items": {"type": "object"}},
+    "objectives": {"type": "array", "items": {"type": "object"}},
+    "ui_surfaces": {"type": "array", "items": {"type": "object"}},
+    "runtime_systems": {"type": "array", "items": {"type": "object"}},
+    "asset_needs": {"type": "array", "items": {"type": "object"}},
+    "acceptance_scenarios": {"type": "array", "items": {"type": "object"}},
+    "unresolved_questions": {"type": "array", "items": {"type": "object"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

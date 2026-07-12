@@ -10,12 +10,23 @@ use serde_json::Value;
 
 pub mod dist;
 pub mod file_service;
+pub mod portable;
 
 pub use dist::{
     DEFAULT_DIST_EXE_NAME, DEFAULT_MIN_EXE_BYTES, DistBuildPlan, DistBundleVerification,
     dist_build_plan, verify_dist_bundle,
 };
 pub use file_service::PackageFileRunResult;
+pub use portable::{
+    PORTABLE_ARTIFACT_REGISTRY, PORTABLE_BUILD_MANIFEST, PORTABLE_BUILD_ROOT_KIND,
+    PORTABLE_DATA_ROOT, PORTABLE_EXECUTABLE, PORTABLE_LAUNCHER, PORTABLE_PRODUCT,
+    PORTABLE_RESOURCE_MANIFEST, PORTABLE_RESOURCE_ROOT_KIND, PORTABLE_SCHEMA_VERSION,
+    PORTABLE_TARGET_TRIPLE, PortableResourceRootVerificationReport,
+    REQUIRED_PORTABLE_RESOURCE_GROUPS, REQUIRED_SOURCE_RESOURCE_GROUPS, ResourceGroupVerification,
+    ResourceIntegrityBlocker, ResourceIntegrityError, ResourceTreeMeasure,
+    SOURCE_RESOURCE_MANIFEST, SourceResourceManifestVerificationReport, measure_resource_tree,
+    verify_portable_resource_root, verify_source_resource_manifest,
+};
 
 pub const CRATE_NAME: &str = "adm-new-packaging";
 pub const PACKAGE_DIR: &str = "outputs/package/current";

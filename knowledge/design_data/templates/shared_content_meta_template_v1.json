@@ -1,0 +1,304 @@
+{
+  "schemaVersion": "1.0",
+  "id": "shared_content_meta_template_v1",
+  "name": "Shared content meta template v1",
+  "description": "Shared content meta template: L4 option groups reused by multiple checklist items.",
+  "optionGroups": [
+    {
+      "id": "content_experience",
+      "label": "内容体验",
+      "description": "先明确内容不是数量，而是要服务的玩家体验。这一层把“核心内容”推进到体验目标。",
+      "outputKey": "contentExperience",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "aesthetics",
+      "mdaLayerLabel": "体验目标",
+      "progressionStep": 1,
+      "relation": "experience_to_content",
+      "designQuestion": "这个内容项要承载哪种体验价值？",
+      "options": [
+        {
+          "id": "discovery_surprise",
+          "label": "探索惊喜",
+          "description": "内容用于制造未知、发现和惊喜。用于推进“核心内容”的具体判断。",
+          "outputKey": "discoverySurprise"
+        },
+        {
+          "id": "narrative_immersion",
+          "label": "叙事沉浸",
+          "description": "内容用于承载世界观、角色和剧情。用于推进“核心内容”的具体判断。",
+          "outputKey": "narrativeImmersion"
+        },
+        {
+          "id": "collection_growth",
+          "label": "收集成长",
+          "description": "内容用于支撑收集、养成和长期追逐。用于推进“核心内容”的具体判断。",
+          "outputKey": "collectionGrowth"
+        },
+        {
+          "id": "challenge_conquest",
+          "label": "挑战征服",
+          "description": "内容用于提供难度、空间和胜利目标。用于推进“核心内容”的具体判断。",
+          "outputKey": "challengeConquest"
+        },
+        {
+          "id": "identity_attachment",
+          "label": "角色认同",
+          "description": "内容用于建立角色、阵营或审美认同。用于推进“核心内容”的具体判断。",
+          "outputKey": "identityAttachment"
+        }
+      ]
+    },
+    {
+      "id": "content_consumption_dynamic",
+      "label": "消耗动态",
+      "description": "把内容价值转为可观察的消耗路径。这一层把“核心内容”推进到玩家动态。",
+      "outputKey": "contentConsumptionDynamic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "dynamics",
+      "mdaLayerLabel": "玩家动态",
+      "progressionStep": 2,
+      "relation": "content_to_consumption",
+      "designQuestion": "玩家会如何发现、消耗和重复使用内容？",
+      "options": [
+        {
+          "id": "first_discovery",
+          "label": "首次发现",
+          "description": "玩家第一次接触时获得清晰兴趣点。用于推进“核心内容”的具体判断。",
+          "outputKey": "firstDiscovery"
+        },
+        {
+          "id": "repeat_farming",
+          "label": "重复刷取",
+          "description": "内容能支持重复消耗和效率优化。用于推进“核心内容”的具体判断。",
+          "outputKey": "repeatFarming"
+        },
+        {
+          "id": "branch_choice",
+          "label": "分支选择",
+          "description": "内容让玩家在不同路径间选择。用于推进“核心内容”的具体判断。",
+          "outputKey": "branchChoice"
+        },
+        {
+          "id": "stage_unlock",
+          "label": "阶段解锁",
+          "description": "内容按目标或进度逐渐释放。用于推进“核心内容”的具体判断。",
+          "outputKey": "stageUnlock"
+        },
+        {
+          "id": "long_chase",
+          "label": "长期追逐",
+          "description": "内容成为长期目标或稀有追求。用于推进“核心内容”的具体判断。",
+          "outputKey": "longChase"
+        }
+      ]
+    },
+    {
+      "id": "content_supply_mechanic",
+      "label": "供给机制",
+      "description": "把内容消耗转成关卡、任务、角色和模板等供给机制。这一层把“核心内容”推进到机制抓手。",
+      "outputKey": "contentSupplyMechanic",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "mechanics",
+      "mdaLayerLabel": "机制抓手",
+      "progressionStep": 3,
+      "relation": "consumption_to_supply",
+      "designQuestion": "用什么内容机制维持这种消耗动态？",
+      "options": [
+        {
+          "id": "level_structure",
+          "label": "关卡结构",
+          "description": "通过空间、路径和节奏组织体验。用于推进“核心内容”的具体判断。",
+          "outputKey": "levelStructure"
+        },
+        {
+          "id": "quest_condition",
+          "label": "任务条件",
+          "description": "通过目标、条件和分支组织行动。用于推进“核心内容”的具体判断。",
+          "outputKey": "questCondition"
+        },
+        {
+          "id": "character_ability",
+          "label": "角色能力",
+          "description": "通过定位、能力和可读特征提供差异。用于推进“核心内容”的具体判断。",
+          "outputKey": "characterAbility"
+        },
+        {
+          "id": "item_value",
+          "label": "道具价值",
+          "description": "通过获取、使用和消耗规则承载价值。用于推进“核心内容”的具体判断。",
+          "outputKey": "itemValue"
+        },
+        {
+          "id": "content_template",
+          "label": "内容模板",
+          "description": "通过可复用结构支持版本供给。用于推进“核心内容”的具体判断。",
+          "outputKey": "contentTemplate"
+        }
+      ]
+    },
+    {
+      "id": "content_cost_boundary",
+      "label": "成本边界",
+      "description": "内容设计必须控制制作、复用、难度和更新压力。这一层把“核心内容”推进到边界约束。",
+      "outputKey": "contentCostBoundary",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "constraints",
+      "mdaLayerLabel": "边界约束",
+      "progressionStep": 4,
+      "relation": "supply_to_cost_boundary",
+      "designQuestion": "这个内容项最容易在哪些地方失控？",
+      "options": [
+        {
+          "id": "production_cost",
+          "label": "制作成本",
+          "description": "内容制作量或规格超出团队承载。用于推进“核心内容”的具体判断。",
+          "outputKey": "productionCost"
+        },
+        {
+          "id": "reuse_fatigue",
+          "label": "复用疲劳",
+          "description": "模板复用导致玩家感到机械重复。用于推进“核心内容”的具体判断。",
+          "outputKey": "reuseFatigue"
+        },
+        {
+          "id": "difficulty_mismatch",
+          "label": "难度错配",
+          "description": "内容强度与目标玩家能力不匹配。用于推进“核心内容”的具体判断。",
+          "outputKey": "difficultyMismatch"
+        },
+        {
+          "id": "text_load",
+          "label": "文本负担",
+          "description": "文本、设定或说明超过阅读承载。用于推进“核心内容”的具体判断。",
+          "outputKey": "textLoad"
+        },
+        {
+          "id": "update_pressure",
+          "label": "更新压力",
+          "description": "内容消耗速度高于供给能力。用于推进“核心内容”的具体判断。",
+          "outputKey": "updatePressure"
+        }
+      ]
+    },
+    {
+      "id": "content_signal",
+      "label": "内容信号",
+      "description": "用完成、复用、记忆点和枯竭信号判断内容效果。这一层把“核心内容”推进到验收信号。",
+      "outputKey": "contentSignal",
+      "selectionMode": "multi",
+      "required": true,
+      "allowPrimary": true,
+      "mdaLayer": "evidence",
+      "mdaLayerLabel": "验收信号",
+      "progressionStep": 5,
+      "relation": "cost_boundary_to_content_signal",
+      "designQuestion": "怎样判断这个内容项值得继续投入？",
+      "options": [
+        {
+          "id": "completion_rate",
+          "label": "完成率",
+          "description": "玩家能完成预期内容路径。用于推进“核心内容”的具体判断。",
+          "outputKey": "completionRate"
+        },
+        {
+          "id": "repeat_consumption",
+          "label": "重复消耗",
+          "description": "玩家愿意多次进入或复用内容。用于推进“核心内容”的具体判断。",
+          "outputKey": "repeatConsumption"
+        },
+        {
+          "id": "memory_point",
+          "label": "记忆点",
+          "description": "玩家能记住角色、关卡或事件。用于推进“核心内容”的具体判断。",
+          "outputKey": "memoryPoint"
+        },
+        {
+          "id": "preference_signal",
+          "label": "偏好信号",
+          "description": "玩家对特定内容类型形成明确偏好。用于推进“核心内容”的具体判断。",
+          "outputKey": "preferenceSignal"
+        },
+        {
+          "id": "exhaustion_warning",
+          "label": "枯竭预警",
+          "description": "数据或反馈显示内容即将消耗殆尽。用于推进“核心内容”的具体判断。",
+          "outputKey": "exhaustionWarning"
+        }
+      ]
+    }
+  ],
+  "optionRelations": [
+    {
+      "id": "soft_conflict_content_experience_narrative_immersion_vs_challenge_conquest",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "content_experience",
+        "optionId": "narrative_immersion"
+      },
+      "targets": [
+        {
+          "groupId": "content_experience",
+          "optionId": "challenge_conquest"
+        }
+      ],
+      "reason": "叙事沉浸需要节奏留白，挑战征服需要高压目标，两者同时做强要控制打断感。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_content_experience_discovery_surprise_vs_collection_growth",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "content_experience",
+        "optionId": "discovery_surprise"
+      },
+      "targets": [
+        {
+          "groupId": "content_experience",
+          "optionId": "collection_growth"
+        }
+      ],
+      "reason": "探索惊喜依赖未知，收集成长依赖可预期目标，需要定义信息透明度。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_content_consumption_dynamic_first_discovery_vs_repeat_farming",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "content_consumption_dynamic",
+        "optionId": "first_discovery"
+      },
+      "targets": [
+        {
+          "groupId": "content_consumption_dynamic",
+          "optionId": "repeat_farming"
+        }
+      ],
+      "reason": "首次发现强调新鲜感，重复刷取强调效率和复用，需要避免内容过早机械化。",
+      "severity": "warning"
+    },
+    {
+      "id": "soft_conflict_content_consumption_dynamic_branch_choice_vs_stage_unlock",
+      "type": "soft_conflict",
+      "source": {
+        "groupId": "content_consumption_dynamic",
+        "optionId": "branch_choice"
+      },
+      "targets": [
+        {
+          "groupId": "content_consumption_dynamic",
+          "optionId": "stage_unlock"
+        }
+      ],
+      "reason": "自由分支和阶段解锁同时做强时，可能让玩家感到路径被限制。",
+      "severity": "warning"
+    }
+  ]
+}

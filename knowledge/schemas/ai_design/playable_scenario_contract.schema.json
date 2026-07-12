@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "playable_scenario_contract.schema.json",
+  "title": "Playable Scenario Contract",
+  "type": "object",
+  "required": ["schema_version", "project_signature", "scenarios"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "project_signature": {"type": "string"},
+    "source_project_dna": {"type": "string"},
+    "scenarios": {"type": "array", "items": {"type": "object"}},
+    "acceptance_checks": {"type": "array", "items": {"type": "object"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,396 @@
+{
+  "schemaVersion": "0.5.0",
+  "domain": {
+    "id": "release_growth_design",
+    "name": "发行与增长设计",
+    "description": "确认商店入口、宣发内容、预注册预约、社群预热、区域发行和平台上架材料。"
+  },
+  "nodes": [
+    {
+      "id": "release_store_entry_decision",
+      "name": "商店与外部入口体验决策",
+      "description": "确认卖点、截图顺序、商店承诺、版本说明和下载预期。",
+      "roleClass": "meta_planning",
+      "requires": [],
+      "unlocks": [
+        "release_promotion_content_decision"
+      ],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "he_xin_mai_dian_biao_da",
+          "label": "核心卖点表达",
+          "description": "确定核心卖点表达对外或对内呈现的措辞、重点和限制。",
+          "outputKey": "heXinMaiDianBiaoDa",
+          "legacyIds": [
+            "release_store_entry_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "jie_tu_xin_xi_shun_xu",
+          "label": "截图信息顺序",
+          "description": "明确截图信息顺序在商店与外部入口体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "jieTuXinXiShunXu",
+          "legacyIds": [
+            "release_store_entry_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "shang_dian_wen_an_cheng_nuo",
+          "label": "商店文案承诺",
+          "description": "说明商店文案承诺要向玩家兑现的体验价值、表达口径和最低标准。",
+          "outputKey": "shangDianWenAnChengNuo",
+          "legacyIds": [
+            "release_store_entry_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "ban_ben_nei_rong_shuo_ming",
+          "label": "版本内容说明",
+          "description": "明确版本内容说明需要解释的对象、信息层级和边界。",
+          "outputKey": "banBenNeiRongShuoMing",
+          "legacyIds": [
+            "release_store_entry_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "gou_mai_huo_xia_zai_yu_qi",
+          "label": "购买或下载预期",
+          "description": "明确购买或下载预期在商店与外部入口体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "gouMaiHuoXiaZaiYuQi",
+          "legacyIds": [
+            "release_store_entry_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "release_promotion_content_decision",
+      "name": "宣发内容决策",
+      "description": "确认宣发主线、玩法证明、内容展示、商业卖点和风险边界。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "release_store_entry_decision"
+      ],
+      "unlocks": [
+        "release_preregistration_decision"
+      ],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "xuan_fa_xu_shi_zhu_xian",
+          "label": "宣发叙事主线",
+          "description": "明确宣发叙事主线在宣发内容中的具体含义、适用范围和验收判断。",
+          "outputKey": "xuanFaXuShiZhuXian",
+          "legacyIds": [
+            "release_promotion_content_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "wan_fa_zheng_ming_pian_duan",
+          "label": "玩法证明片段",
+          "description": "明确玩法证明片段在宣发内容中的具体含义、适用范围和验收判断。",
+          "outputKey": "wanFaZhengMingPianDuan",
+          "legacyIds": [
+            "release_promotion_content_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "jue_se_huo_nei_rong_zhan_shi_shun_xu",
+          "label": "角色或内容展示顺序",
+          "description": "明确角色或内容展示顺序在宣发内容中的具体含义、适用范围和验收判断。",
+          "outputKey": "jueSeHuoNeiRongZhanShiShunXu",
+          "legacyIds": [
+            "release_promotion_content_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "shang_ye_mai_dian_lu_chu",
+          "label": "商业卖点露出",
+          "description": "明确商业卖点露出在宣发内容中的具体含义、适用范围和验收判断。",
+          "outputKey": "shangYeMaiDianLuChu",
+          "legacyIds": [
+            "release_promotion_content_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "feng_xian_xin_xi_bian_jie",
+          "label": "风险信息边界",
+          "description": "划定风险信息边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "fengXianXinXiBianJie",
+          "legacyIds": [
+            "release_promotion_content_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "release_preregistration_decision",
+      "name": "预注册与预约决策",
+      "description": "确认预约动机、奖励、阶段目标、转化承接和预期管理。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "release_promotion_content_decision"
+      ],
+      "unlocks": [
+        "release_community_warmup_decision"
+      ],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "yu_yue_dong_ji",
+          "label": "预约动机",
+          "description": "明确预约动机在预注册与预约中的具体含义、适用范围和验收判断。",
+          "outputKey": "yuYueDongJi",
+          "legacyIds": [
+            "release_preregistration_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "yu_yue_jiang_li",
+          "label": "预约奖励",
+          "description": "定义预约奖励的获得条件、价值层级和发放节奏。",
+          "outputKey": "yuYueJiangLi",
+          "legacyIds": [
+            "release_preregistration_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "jie_duan_mu_biao",
+          "label": "阶段目标",
+          "description": "明确阶段目标要达成的结果、对象和优先级。",
+          "outputKey": "jieDuanMuBiao",
+          "legacyIds": [
+            "release_preregistration_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "yu_yue_zhuan_hua_cheng_jie",
+          "label": "预约转化承接",
+          "description": "明确预约转化承接在预注册与预约中的具体含义、适用范围和验收判断。",
+          "outputKey": "yuYueZhuanHuaChengJie",
+          "legacyIds": [
+            "release_preregistration_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "yu_qi_guan_li",
+          "label": "预期管理",
+          "description": "明确预期管理的记录、审批、同步和回滚方式。",
+          "outputKey": "yuQiGuanLi",
+          "legacyIds": [
+            "release_preregistration_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "release_community_warmup_decision",
+      "name": "社群预热决策",
+      "description": "确认社群主题、话题、测试反馈、创作者边界和上线前情绪管理。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "release_promotion_content_decision"
+      ],
+      "unlocks": [
+        "release_regional_experience_decision"
+      ],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "she_qun_zhu_ti",
+          "label": "社群主题",
+          "description": "明确社群主题在社群预热中的具体含义、适用范围和验收判断。",
+          "outputKey": "sheQunZhuTi",
+          "legacyIds": [
+            "release_community_warmup_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "tao_lun_hua_ti",
+          "label": "讨论话题",
+          "description": "明确讨论话题在社群预热中的具体含义、适用范围和验收判断。",
+          "outputKey": "taoLunHuaTi",
+          "legacyIds": [
+            "release_community_warmup_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "ce_shi_fan_kui_cheng_jie",
+          "label": "测试反馈承接",
+          "description": "明确测试反馈承接在社群预热中的具体含义、适用范围和验收判断。",
+          "outputKey": "ceShiFanKuiChengJie",
+          "legacyIds": [
+            "release_community_warmup_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "chuang_zuo_zhe_xie_zuo_bian_jie",
+          "label": "创作者协作边界",
+          "description": "划定创作者协作边界的包含范围、排除范围和不可越界条件。",
+          "outputKey": "chuangZuoZheXieZuoBianJie",
+          "legacyIds": [
+            "release_community_warmup_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "shang_xian_qian_qing_xu_guan_li",
+          "label": "上线前情绪管理",
+          "description": "明确上线前情绪管理的记录、审批、同步和回滚方式。",
+          "outputKey": "shangXianQianQingXuGuanLi",
+          "legacyIds": [
+            "release_community_warmup_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "release_regional_experience_decision",
+      "name": "区域发行体验决策",
+      "description": "确认区域卖点、文案语气、活动偏好、付费预期和社区沟通。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "release_store_entry_decision"
+      ],
+      "unlocks": [
+        "release_platform_material_decision"
+      ],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "qu_yu_mai_dian_shi_pei",
+          "label": "区域卖点适配",
+          "description": "说明区域卖点适配针对不同平台、区域或人群的调整要求。",
+          "outputKey": "quYuMaiDianShiPei",
+          "legacyIds": [
+            "release_regional_experience_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "qu_yu_wen_an_yu_qi",
+          "label": "区域文案语气",
+          "description": "明确区域文案语气在区域发行体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "quYuWenAnYuQi",
+          "legacyIds": [
+            "release_regional_experience_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "qu_yu_huo_dong_pian_hao",
+          "label": "区域活动偏好",
+          "description": "明确区域活动偏好在区域发行体验中的具体含义、适用范围和验收判断。",
+          "outputKey": "quYuHuoDongPianHao",
+          "legacyIds": [
+            "release_regional_experience_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "qu_yu_fu_fei_yu_qi",
+          "label": "区域付费预期",
+          "description": "明确区域付费预期的价值边界、玩家感知和公平控制要求。",
+          "outputKey": "quYuFuFeiYuQi",
+          "legacyIds": [
+            "release_regional_experience_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "qu_yu_she_qu_gou_tong",
+          "label": "区域社区沟通",
+          "description": "定义区域社区沟通面向对象、信息重点和反馈闭环。",
+          "outputKey": "quYuSheQuGouTong",
+          "legacyIds": [
+            "release_regional_experience_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    },
+    {
+      "id": "release_platform_material_decision",
+      "name": "平台规范与上架材料决策",
+      "description": "确认商店分类、分级信息、付费说明、权限说明和审核风险口径。",
+      "roleClass": "meta_planning",
+      "requires": [
+        "release_store_entry_decision"
+      ],
+      "unlocks": [],
+      "domain": "release_growth_design",
+      "checklist": [
+        {
+          "id": "shang_dian_fen_lei_kou_jing",
+          "label": "商店分类口径",
+          "description": "统一商店分类口径在设计、运营和对外沟通中的说法。",
+          "outputKey": "shangDianFenLeiKouJing",
+          "legacyIds": [
+            "release_platform_material_decision_item_1"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "nian_ling_fen_ji_xin_xi",
+          "label": "年龄分级信息",
+          "description": "确定年龄分级信息要传达的内容、优先级和展示边界。",
+          "outputKey": "nianLingFenJiXinXi",
+          "legacyIds": [
+            "release_platform_material_decision_item_2"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "fu_fei_nei_rong_shuo_ming",
+          "label": "付费内容说明",
+          "description": "明确付费内容说明需要解释的对象、信息层级和边界。",
+          "outputKey": "fuFeiNeiRongShuoMing",
+          "legacyIds": [
+            "release_platform_material_decision_item_3"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "quan_xian_yu_shu_ju_shuo_ming",
+          "label": "权限与数据说明",
+          "description": "明确权限与数据说明需要解释的对象、信息层级和边界。",
+          "outputKey": "quanXianYuShuJuShuoMing",
+          "legacyIds": [
+            "release_platform_material_decision_item_4"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        },
+        {
+          "id": "shen_he_feng_xian_kou_jing",
+          "label": "审核风险口径",
+          "description": "统一审核风险口径在设计、运营和对外沟通中的说法。",
+          "outputKey": "shenHeFengXianKouJing",
+          "legacyIds": [
+            "release_platform_material_decision_item_5"
+          ],
+          "templateRef": "shared_release_meta_template_v1"
+        }
+      ]
+    }
+  ]
+}

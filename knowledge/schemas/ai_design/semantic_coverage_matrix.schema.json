@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic_coverage_matrix.schema.json",
+  "title": "Semantic Coverage Matrix",
+  "type": "object",
+  "required": ["schema_version", "matrix_state", "coverage_items"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "matrix_state": {"type": "string", "enum": ["seed", "program", "art", "final"]},
+    "project_signature": {"type": "string"},
+    "source_contracts": {"type": "array", "items": {"type": "string"}},
+    "coverage_items": {"type": "array", "items": {"type": "object"}},
+    "program_coverage": {"type": "object"},
+    "art_coverage": {"type": "object"},
+    "uncovered_items": {"type": "array", "items": {"type": "object"}},
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

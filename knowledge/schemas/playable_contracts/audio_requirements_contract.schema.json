@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audio_requirements_contract.schema.json",
+  "title": "Audio Requirements Contract",
+  "type": "object",
+  "required": ["schema_version", "audio_generation_status", "events"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "audio_generation_status": {"const": "placeholder_only"},
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "audio_event_id",
+          "event_type",
+          "trigger",
+          "priority",
+          "runtime_blocking",
+          "placeholder_file",
+          "future_ai_prompt"
+        ],
+        "properties": {
+          "audio_event_id": {"type": "string"},
+          "event_type": {"type": "string"},
+          "trigger": {"type": "string"},
+          "priority": {"type": "string"},
+          "runtime_blocking": {"type": "boolean"},
+          "placeholder_file": {"type": "string"},
+          "future_ai_prompt": {"type": "string"},
+          "source_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "placeholder_policy": {
+      "type": "object",
+      "properties": {
+        "runtime_blocking": {"type": "boolean"},
+        "standard_placeholder_path": {"type": "string"},
+        "future_provider_required": {"type": "boolean"}
+      }
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "contract_refs": {"type": "object"}
+  }
+}

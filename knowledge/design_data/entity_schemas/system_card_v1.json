@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "system_card_v1",
+  "kind": "system",
+  "schemaVersion": "v1",
+  "title": "System Card v1",
+  "type": "object",
+  "required": [
+    "kind",
+    "id",
+    "inputs",
+    "outputs",
+    "owners",
+    "updateTick"
+  ],
+  "properties": {
+    "kind": {
+      "const": "system"
+    },
+    "schemaVersion": {
+      "const": "v1"
+    },
+    "schema": {
+      "const": "system_card_v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "label": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owners": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "updateTick": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "unity_asset_mount_plan.schema.json",
+  "title": "Unity Asset Mount Plan",
+  "type": "object",
+  "required": ["schema_version", "mount_items", "blockers"],
+  "properties": {
+    "schema_version": {"type": ["string", "integer"]},
+    "generated_at": {"type": "string"},
+    "mount_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "asset_id",
+          "asset_type",
+          "unity_target_path",
+          "mount_point",
+          "consumer_system",
+          "import_settings",
+          "fallback_policy",
+          "acceptance_check",
+          "source_refs"
+        ],
+        "properties": {
+          "asset_id": {"type": "string"},
+          "asset_type": {"type": "string"},
+          "unity_target_path": {"type": "string"},
+          "mount_point": {"type": "string"},
+          "consumer_system": {"type": "string"},
+          "import_settings": {"type": "object"},
+          "fallback_policy": {"type": "string"},
+          "acceptance_check": {"type": "string"},
+          "source_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "blockers": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

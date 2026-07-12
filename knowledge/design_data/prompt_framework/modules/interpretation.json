@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "interpretation",
+  "moduleVersion": "1",
+  "title": "意图解释",
+  "order": 4,
+  "dependencies": [
+    "questioning"
+  ],
+  "rules": [
+    {
+      "id": "interpret_context",
+      "text": "解释用户回答时优先识别目标玩家、核心体验、商业约束、制作约束和风险信号。"
+    },
+    {
+      "id": "do_not_use_framework_terms_as_user_terms",
+      "text": "不要要求用户使用领域、节点、MDA 或 L4 等框架术语；AI 负责把自然语言转为结构化推断。"
+    }
+  ],
+  "validationConstraints": {
+    "forbidDesignOptionChanges": true,
+    "forbidBackendParameterChanges": true,
+    "maxDirectDependencies": 2,
+    "maxDependencyDepth": 2
+  }
+}

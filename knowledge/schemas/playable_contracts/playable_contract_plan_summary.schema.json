@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "playable_contract_plan_summary.schema.json",
+  "title": "Playable Contract Plan Summary",
+  "type": "object",
+  "required": ["schema_version", "contract_source", "task_count", "tasks"],
+  "properties": {
+    "schema_version": {"type": "integer"},
+    "contract_source": {"type": "string"},
+    "task_count": {"type": "integer", "minimum": 0},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "task_type", "requirement_id", "output_files"]
+      }
+    }
+  }
+}

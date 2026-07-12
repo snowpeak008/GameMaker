@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Task Synthesis Report",
+  "type": "object",
+  "required": ["schema_version", "source_refs", "task_reviews"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "task_reviews": {"type": "array"},
+    "blockers": {"type": "array"},
+    "warnings": {"type": "array"},
+    "summary": {"type": "object"}
+  }
+}

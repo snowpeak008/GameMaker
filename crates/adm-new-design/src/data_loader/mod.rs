@@ -1157,10 +1157,12 @@ pub(crate) fn scale_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use adm_new_foundation::paths::locate_project_root;
+    use adm_new_foundation::paths::SourceProjectRoot;
 
     fn loader() -> DesignDataLoader {
-        let root = locate_project_root(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
         DesignDataLoader::new(root)
     }
 

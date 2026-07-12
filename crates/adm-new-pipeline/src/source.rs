@@ -84,7 +84,7 @@ impl SourceService {
             .load_run_context_value()
             .and_then(|value| string_field(&value, "source_artifacts_root"))
             .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
+            .and_then(|value| resolve_project_owned_path(&self.paths.project_root, &value))
         {
             push_unique_root(&mut roots, &mut seen, context_root);
             if !allow_cross_draft_fallback {
@@ -991,7 +991,16 @@ impl SourceService {
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
+            .and_then(|value| {
+                let configured = PathBuf::from(&value);
+                if configured.is_absolute() {
+                    configured
+                        .starts_with(&self.paths.project_root)
+                        .then(|| canonical_or_self(&configured))
+                } else {
+                    resolve_project_owned_path(&self.paths.project_root, &value)
+                }
+            });
         let path = env_path.unwrap_or_else(|| {
             self.paths
                 .draft_dir
@@ -1478,6 +1487,26 @@ fn canonical_or_self(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn resolve_project_owned_path(project_root: &Path, persisted: &str) -> Option<PathBuf> {
+    let value = Path::new(persisted.trim());
+    if value.as_os_str().is_empty()
+        || value.is_absolute()
+        || value.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::Prefix(_)
+                    | std::path::Component::RootDir
+            )
+        })
+    {
+        return None;
+    }
+    let project_root = canonical_or_self(project_root);
+    let candidate = canonical_or_self(&project_root.join(value));
+    candidate.starts_with(&project_root).then_some(candidate)
+}
+
 fn mtime_secs(path: &Path) -> u64 {
     path.metadata()
         .and_then(|metadata| metadata.modified())
@@ -1812,5 +1841,49 @@ mod tests {
 
     fn cleanup(root: PathBuf) {
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn relocated_source_context_never_reads_an_existing_old_data_root() {
+        let current_root = temp_root("relocated_current");
+        let old_root = temp_root("relocated_old");
+        let current = SourceService::new(&current_root, "session_a").unwrap();
+        let old_source = old_root.join("drafts/session_a/source_artifacts");
+        fs::create_dir_all(&old_source).unwrap();
+        fs::write(old_source.join("old-sentinel.txt"), "must not be read").unwrap();
+        let runtime_dir = current.paths.draft_dir.join("runtime");
+        fs::create_dir_all(&runtime_dir).unwrap();
+        write_json(
+            &runtime_dir.join("run_context.json"),
+            &json!({"source_artifacts_root": old_source.display().to_string()}),
+        )
+        .unwrap();
+
+        assert_eq!(
+            current.source_artifact_roots(),
+            vec![current.paths.source_artifacts_dir.clone()]
+        );
+
+        cleanup(current_root);
+        cleanup(old_root);
+    }
+
+    #[test]
+    fn relative_source_context_resolves_inside_the_current_data_root() {
+        let root = temp_root("relative_context");
+        let service = SourceService::new(&root, "session_a").unwrap();
+        let runtime_dir = service.paths.draft_dir.join("runtime");
+        fs::create_dir_all(&runtime_dir).unwrap();
+        write_json(
+            &runtime_dir.join("run_context.json"),
+            &json!({"source_artifacts_root": "drafts/session_a/source_artifacts"}),
+        )
+        .unwrap();
+
+        assert_eq!(
+            service.source_artifact_roots(),
+            vec![canonical_or_self(&service.paths.source_artifacts_dir)]
+        );
+        cleanup(root);
     }
 }

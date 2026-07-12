@@ -1,9 +1,11 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findSourceProjectRoot, safeProjectJoin } from "./project-root.mjs";
 
 const webRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
-const repositoryRoot = resolve(webRoot, "..", "..");
+const sourceProject = await findSourceProjectRoot(webRoot);
+const designDataRoot = await safeProjectJoin(sourceProject.root, "knowledge/design_data");
 const localesRoot = join(webRoot, "src", "locales");
 const outputPath = join(localesRoot, "design-content.generated.js");
 const checkOnly = process.argv.includes("--check");
@@ -128,7 +130,7 @@ async function loadEnglishOverrides() {
 }
 
 async function loadDomains() {
-  const root = join(repositoryRoot, "knowledge", "design_data", "domains");
+  const root = join(designDataRoot, "domains");
   const files = (await readdir(root)).filter((name) => name.endsWith(".json")).sort();
   for (const name of files) {
     const payload = JSON.parse(await readFile(join(root, name), "utf8"));
@@ -157,7 +159,7 @@ async function loadDomains() {
 }
 
 async function loadTemplates() {
-  const root = join(repositoryRoot, "knowledge", "design_data", "templates");
+  const root = join(designDataRoot, "templates");
   const files = (await readdir(root)).filter((name) => name.endsWith(".json")).sort();
   for (const name of files) {
     const payload = JSON.parse(await readFile(join(root, name), "utf8"));
@@ -181,7 +183,7 @@ function addOptionGroups(groups = []) {
 }
 
 async function loadGameplaySystems() {
-  const path = join(repositoryRoot, "knowledge", "design_data", "gameplay_system_options.json");
+  const path = join(designDataRoot, "gameplay_system_options.json");
   const payload = JSON.parse(await readFile(path, "utf8"));
   for (const option of payload.options ?? []) {
     const id = String(option.id ?? "").trim();

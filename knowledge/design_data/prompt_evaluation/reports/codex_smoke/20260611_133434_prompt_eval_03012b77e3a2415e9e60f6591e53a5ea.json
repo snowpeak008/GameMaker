@@ -1,0 +1,81 @@
+﻿{
+  "schemaVersion": "1.0",
+  "reportId": "prompt_eval_03012b77e3a2415e9e60f6591e53a5ea",
+  "createdAt": "2026-06-11T13:34:34",
+  "runtimeRoot": "<legacy-design-tool>",
+  "sampleSetId": "core_v1",
+  "sampleSetVersion": "1",
+  "mode": "codex_smoke",
+  "promptVersionSnapshot": {
+    "frameworkVersion": "1",
+    "modules": {
+      "questioning": "1",
+      "followup": "1",
+      "routing": "1",
+      "interpretation": "1",
+      "mapping": "1",
+      "confidence": "1",
+      "readiness": "1",
+      "output": "1",
+      "memory_influence": "1"
+    },
+    "manifestHash": "f811d9ad8ef940cb9ba0dc1f27d0b1dbb22d02ed5bfeaf060e9bcdd43abf2c27"
+  },
+  "summary": {
+    "sampleCount": 1,
+    "scoredSampleCount": 0,
+    "backendFailureCount": 1,
+    "acceptedAnnotationCount": 12,
+    "draftAnnotationCount": 0,
+    "averageScores": {
+      "followup": 0.0,
+      "mapping": 0.0,
+      "stability": 0.0,
+      "total": 0.0
+    },
+    "failurePatternCount": 0
+  },
+  "failurePatterns": [],
+  "backendFailures": [
+    {
+      "sampleId": "core_v1_001_midcore_mastery_loop",
+      "source": "codex_smoke_failed",
+      "backendError": "Codex CLI timed out after 5 seconds"
+    }
+  ],
+  "advice": [
+    {
+      "targetModule": "ai_backend",
+      "priority": "info",
+      "reason": "No samples produced score-eligible AI output.",
+      "suggestedAction": "Resolve backend availability or increase Codex timeout before interpreting prompt quality."
+    }
+  ],
+  "sampleResults": [
+    {
+      "sampleId": "core_v1_001_midcore_mastery_loop",
+      "title": "Midcore mastery loop with unclear target audience",
+      "source": "codex_smoke_failed",
+      "scoreEligible": false,
+      "annotationStatus": "accepted",
+      "scores": {
+        "followup": {
+          "score": null
+        },
+        "mapping": {
+          "score": null
+        },
+        "stability": {
+          "score": null
+        },
+        "total": null
+      },
+      "failureSignals": [],
+      "backendError": "Codex CLI timed out after 5 seconds"
+    }
+  ],
+  "promotionPolicy": {
+    "stage": "warning_only",
+    "blocksPromotion": false
+  }
+}
