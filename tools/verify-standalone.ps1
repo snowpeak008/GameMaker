@@ -39,6 +39,7 @@ $gitCommit = ''
 $sourceTreeClean = $false
 $portableEvidence = $null
 $portableTransactionManifest = ''
+$phase = 'startup'
 $evidenceId = [guid]::NewGuid().ToString('N')
 $verificationStartedAtUnix = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $cargoVariables = @('CARGO_TARGET_DIR', 'CARGO_BUILD_JOBS', 'CARGO_PROFILE_TEST_DEBUG', 'CARGO_INCREMENTAL')
@@ -407,6 +408,7 @@ $runningEvidence = [ordered]@{
 Write-Utf8NoBomAtomic $evidencePath $runningEvidence
 
 try {
+    $phase = 'source-preflight'
     Import-Module (Join-Path $portableModuleRoot 'PortableBuildSupport.psm1') -Force
     Import-Module (Join-Path $portableModuleRoot 'PortableSwap.psm1') -Force
     $marker = Get-Content -LiteralPath (Join-Path $projectRoot '.project_root') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -420,6 +422,7 @@ try {
     $sourceTreeClean = [string]::IsNullOrWhiteSpace((@(& git -C $projectRoot status --porcelain=v1 --untracked-files=all) -join "`n"))
     if (-not $sourceTreeClean) { throw 'formal standalone verification requires a clean source worktree' }
 
+    $phase = 'resource-manifest'
     Invoke-InternalCheck 'resource_manifest' 'internal: verify tracked source resource manifest' {
         $manifestPath = Join-Path $projectRoot 'knowledge\resource-manifest.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -434,6 +437,7 @@ try {
         "groups=$(@($manifest.groups).Count)"
     } | Out-Null
 
+    $phase = 'temporary-parent-preflight'
     $volumeRoot = [IO.Path]::GetPathRoot($projectRoot)
     if ([string]::IsNullOrWhiteSpace($TempParent)) {
         $TempParent = Join-Path $volumeRoot ("独立化验证 空间-{0}-{1}" -f $PID, [guid]::NewGuid().ToString('N'))
@@ -445,6 +449,7 @@ try {
         $tempParentCreated = $true
     }
     Assert-AncestorsHaveNoProjectResources $TempParent
+    $phase = 'cleanup-lease-issue'
     $leaseCapture = Invoke-RequiredNative 'Issuing cleanup lease' {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\new-cleanup-lease.ps1') `
             -Operation Issue -Kind owned-ephemeral-workspace -ProjectRoot $projectRoot -TempParent $TempParent -Json
@@ -453,6 +458,7 @@ try {
     if ($lease.operation -ne 'issued') { throw 'cleanup lease was refused' }
     $cloneRoot = [string]$lease.target
 
+    $phase = 'clean-clone-relocation'
     Invoke-InternalCheck 'clean_clone_relocation' 'git clone --no-local <source> <leased-clone>; git fsck --full' {
         $clone = Invoke-CapturedNative { & git clone --no-local --quiet $projectRoot $cloneRoot }
         if ($clone.ExitCode -ne 0) { throw "git clone failed: $($clone.Text)" }
@@ -469,6 +475,7 @@ try {
         "commit=$cloneCommit; shared_alternates=false; path_class=same-volume-root-Chinese-space"
     } | Out-Null
 
+    $phase = 'web-and-rust-verification'
     Invoke-RequiredNative 'Installing locked Web dependencies' { & npm.cmd --prefix (Join-Path $cloneRoot 'web') ci } | Out-Null
     Invoke-NativeCheck 'web_unit' 'npm --prefix <clone>/web test' { & npm.cmd --prefix (Join-Path $cloneRoot 'web') test } | Out-Null
     Invoke-NativeCheck 'web_i18n' 'npm --prefix <clone>/web run i18n-test' { & npm.cmd --prefix (Join-Path $cloneRoot 'web') run i18n-test } | Out-Null
@@ -504,6 +511,7 @@ try {
             $receiptsBefore[(ConvertTo-NormalizedPath $receipt.FullName)] = $true
         }
     }
+    $phase = 'formal-portable-build'
     Invoke-NativeCheck 'portable_build' 'powershell tools/build-portable.ps1 -OutputName AutoDesignMaker-NEWrust-release -CleanUserData' {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\build-portable.ps1') `
             -OutputName 'AutoDesignMaker-NEWrust-release' -CleanUserData
@@ -591,9 +599,10 @@ try {
     Write-Host $transactionScan
 }
 catch {
-    $errors.Add($_.Exception.Message)
+    $errors.Add("phase=$phase; line=$($_.InvocationInfo.ScriptLineNumber); $($_.Exception.Message)")
 }
 finally {
+    $phase = 'generated-cleanup'
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $cleanupText = New-Object Text.StringBuilder
     $cleanupFailures = New-Object 'System.Collections.Generic.List[string]'
@@ -636,10 +645,11 @@ finally {
         }
     }
     try {
-        $protectedUserData = @(
-            (Join-Path $projectRoot 'dist\AutoDesignMaker-NEWrust\user_data'),
-            (Join-Path $projectRoot 'dist\AutoDesignMaker-NEWrust-release\user_data')
-        )
+        # A single scalar avoids Windows PowerShell -File rebinding a second
+        # string[] value as the positional Target parameter. Formal release
+        # data is outside the ordinary generated allowlist and is verified
+        # separately below; the local trial data is the protected user state.
+        $protectedUserData = Join-Path $projectRoot 'dist\AutoDesignMaker-NEWrust\user_data'
         $sourceDry = Invoke-CapturedNative { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'tools\clean-generated.ps1') `
                 -ProjectRoot $projectRoot -Kind generated -ProtectedUserData $protectedUserData -Json }
         $null = $cleanupText.AppendLine($sourceDry.Text)
