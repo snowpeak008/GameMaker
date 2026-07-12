@@ -94,6 +94,15 @@ function Assert-SamePath {
     }
 }
 
+function Get-GitTopLevelRaw {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $output = @(& git -c core.quotePath=false -C $Root rev-parse --path-format=absolute --show-toplevel 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$output[0])) {
+        throw "unable to resolve an unquoted Git toplevel for $Root"
+    }
+    [string]$output[0]
+}
+
 function Get-SafeProjectRelativePath {
     param([string]$Path, [string]$Root)
     $full = ConvertTo-NormalizedPath $Path
@@ -349,7 +358,9 @@ function Invoke-SelfTest {
         "status = 'running'",
         'swapReceiptSha256',
         'staged_immutable_tree',
+        'core.quotePath=false',
         'source guarded dry-run',
+        "'dry-run-delete', 'skipped', 'report-only'",
         'final_evidence=write-after-cleanup'
     )) {
         if (-not $sourceText.Contains($marker)) { throw "standalone evidence self-test marker missing: $marker" }
@@ -402,7 +413,7 @@ try {
     if ([int]$marker.schemaVersion -ne 1 -or $marker.kind -ne 'source-project-root' -or $marker.projectId -ne $script:ProjectId) {
         throw 'source project marker is invalid'
     }
-    Assert-SamePath (& git -C $projectRoot rev-parse --show-toplevel) $projectRoot 'Git toplevel is not the standalone root'
+    Assert-SamePath (Get-GitTopLevelRaw $projectRoot) $projectRoot 'Git toplevel is not the standalone root'
     $gitCommit = [string](& git -C $projectRoot rev-parse HEAD)
     if ($LASTEXITCODE -ne 0 -or $gitCommit.Trim() -notmatch '^[a-f0-9]{40,64}$') { throw 'Git HEAD is unavailable' }
     $gitCommit = $gitCommit.Trim()
@@ -446,7 +457,7 @@ try {
         $clone = Invoke-CapturedNative { & git clone --no-local --quiet $projectRoot $cloneRoot }
         if ($clone.ExitCode -ne 0) { throw "git clone failed: $($clone.Text)" }
         Assert-AncestorsHaveNoProjectResources $cloneRoot
-        Assert-SamePath (& git -C $cloneRoot rev-parse --show-toplevel) $cloneRoot 'clone toplevel mismatch'
+        Assert-SamePath (Get-GitTopLevelRaw $cloneRoot) $cloneRoot 'clone toplevel mismatch'
         if (Test-Path -LiteralPath (Join-Path $cloneRoot '.git\objects\info\alternates')) { throw 'clone uses shared Git alternates' }
         $fsck = Invoke-CapturedNative { & git -C $cloneRoot fsck --full }
         if ($fsck.ExitCode -ne 0) { throw "clone fsck failed: $($fsck.Text)" }
@@ -635,7 +646,7 @@ finally {
         $sourceDryJson = $sourceDry.Text | ConvertFrom-Json
         $sourceDryActions = @($sourceDryJson.results | ForEach-Object { [string]$_.action })
         if ($sourceDry.ExitCode -ne 0 -or $sourceDryJson.mode -ne 'dry-run' -or [int]$sourceDryJson.refusedCount -ne 0 -or
-            @($sourceDryActions | Where-Object { $_ -notin @('dry-run-delete', 'skipped') }).Count -ne 0) {
+            @($sourceDryActions | Where-Object { $_ -notin @('dry-run-delete', 'skipped', 'report-only') }).Count -ne 0) {
             throw 'source generated cleanup dry-run was not fully guarded'
         }
         $sourceTargets = @($sourceDryJson.results | Where-Object { $_.action -eq 'dry-run-delete' } | ForEach-Object { [string]$_.target })
@@ -653,7 +664,7 @@ finally {
         $sourceExecuteActions = @($sourceExecuteJson.results | ForEach-Object { [string]$_.action })
         if ($sourceExecute.ExitCode -ne 0 -or $sourceExecuteJson.mode -ne 'execute' -or [int]$sourceExecuteJson.refusedCount -ne 0 -or
             [int]$sourceExecuteJson.deletedCount -ne $plannedDeletes -or
-            @($sourceExecuteActions | Where-Object { $_ -notin @('deleted', 'skipped') }).Count -ne 0) {
+            @($sourceExecuteActions | Where-Object { $_ -notin @('deleted', 'skipped', 'report-only') }).Count -ne 0) {
             throw 'source generated cleanup execute did not match its dry-run plan'
         }
         if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
