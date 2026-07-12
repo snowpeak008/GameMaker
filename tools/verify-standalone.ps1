@@ -85,7 +85,13 @@ function Test-PathInside {
     $candidate = ConvertTo-NormalizedPath $Path
     $root = ConvertTo-NormalizedPath $Boundary
     if ($AllowEqual -and $candidate.Equals($root, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    $candidate.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+    $separator = [string][IO.Path]::DirectorySeparatorChar
+    $prefix = if ($root.EndsWith($separator, [StringComparison]::Ordinal)) {
+        $root
+    } else {
+        $root + $separator
+    }
+    $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
 }
 
 function Assert-SamePath {
@@ -381,6 +387,10 @@ function Invoke-SelfTest {
     if ($pathClass.Length -ne 8 -or -not $pathClass.Contains(' ') -or
         @($pathClass.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -ne 7) {
         throw 'relocation path class did not preserve seven non-ASCII characters and one space'
+    }
+    $volumeRoot = [IO.Path]::GetPathRoot($projectRoot)
+    if (-not (Test-PathInside (Join-Path $volumeRoot 'standalone-boundary-probe') $volumeRoot)) {
+        throw 'volume-root boundary check rejected a direct child'
     }
     $policy = Get-Content -LiteralPath $securityAllowlist -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([int]$policy.schemaVersion -ne 1 -or $policy.projectId -ne $script:ProjectId) { throw 'security allowlist self-test failed' }
