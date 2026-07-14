@@ -1,0 +1,179 @@
+{
+    "generated_at":  "2026-07-15T00:29:19",
+    "project_id":  "autodesignmaker-newrust",
+    "config_sha256":  "38ba5a64c409ffbfb285070feed84184c439d6702eeaad24894c835610ac6496",
+    "files":  {
+                  ".project_root":  {
+                                        "sha256":  "8e9cd49917b30461c9dfed9beb37d1cbe043e4ef33eb7d3746bd9e3e8491e065",
+                                        "size":  263
+                                    },
+                  "Cargo.toml":  {
+                                     "sha256":  "921e94382f178671097b8b210f6e58e15e8f9e23903d166da33f0057f2da27d4",
+                                     "size":  754
+                                 },
+                  "Cargo.lock":  {
+                                     "sha256":  "29f7085548cbe7a34e6e9f3413beef00a7c7fb76f14d5a32a7cc9564a656ab11",
+                                     "size":  127931
+                                 },
+                  "AGENTS.md":  {
+                                    "sha256":  "d3eeaafb6b26849631969027d38b9221c618b43333242a8b6ee8b97e10ca74c9",
+                                    "size":  956
+                                },
+                  "AI_README.md":  {
+                                       "sha256":  "66fa1cfce81246015faec225a37bc23a1f513be0e6210925715a4bf849e0f7be",
+                                       "size":  1782
+                                   },
+                  "README.md":  {
+                                    "sha256":  "803684f9e7f2c05f9fbca2cb399c0efa87d311a14222ab4ad8cd068a05cc1258",
+                                    "size":  16478
+                                },
+                  "docs/independence/README.md":  {
+                                                      "sha256":  "f1f10086301e2ad8b930a6399463d2b4639e8d0e6590cd0c35ae7f8da26d29cc",
+                                                      "size":  2116
+                                                  },
+                  "knowledge/resource-manifest.json":  {
+                                                           "sha256":  "cbe4717507efd9f4c625c6d359b02e43288740bce029c09756fc2c2a4d7c5449",
+                                                           "size":  1618
+                                                       },
+                  "knowledge/ai_memory/INDEX.md":  {
+                                                       "sha256":  "046694db86da19e2317d4332a24e4b23915ccf66066a60878790c82a96f367fa",
+                                                       "size":  647171
+                                                   },
+                  "knowledge/ai_memory/README.md":  {
+                                                        "sha256":  "786d2c4290ad2ae45b55ca628e0da644487e54a53a9fc9879da2c3e41731d7fc",
+                                                        "size":  1066
+                                                    },
+                  "knowledge/ai_memory/session_history/index.json":  {
+                                                                         "sha256":  "0f77aa60f394da394ee394506fc01b77440d7b2c210782f0f538db4b0c11e4bc",
+                                                                         "size":  352108
+                                                                     },
+                  "apps/root-launcher/src/lib.rs":  {
+                                                        "sha256":  "575ea07491a8706eda8d79e530f7d8b30140069f7053692b962be419808b5485",
+                                                        "size":  10984
+                                                    },
+                  "apps/root-launcher/src/main.rs":  {
+                                                         "sha256":  "f5a1976c3db7317a91b43dcf86b9f45a9093fbe99feea0484fd0fc96783ab384",
+                                                         "size":  1933
+                                                     },
+                  "apps/desktop-tauri/src/lib.rs":  {
+                                                        "sha256":  "8507230daa85d9993db965737a2b4e1cf990fa747cd36c3f6b2ab127d349f1cc",
+                                                        "size":  24917
+                                                    },
+                  "apps/desktop-tauri/src/runtime.rs":  {
+                                                            "sha256":  "96eba28106b9860face90f8e7a09ad4d887274b94736e0514876c5b30947a2ff",
+                                                            "size":  92667
+                                                        },
+                  "apps/desktop-tauri/src/draft_retention.rs":  {
+                                                                    "sha256":  "453b8785fa241b5ef261184d6b372a176864df79fd649bbab8cc4d5231902ad5",
+                                                                    "size":  18721
+                                                                },
+                  "apps/adm-new-cli/src/main.rs":  {
+                                                       "sha256":  "17aeddedc9f798dd79805170bdad8c2de280c40d95e11bae8eaf7772f432923b",
+                                                       "size":  122160
+                                                   },
+                  "crates/adm-new-foundation/src/source_root.rs":  {
+                                                                       "sha256":  "406878c087c75ba32131c372ebf0c4cda78ef720c765cad721879457a1fb9c07",
+                                                                       "size":  11937
+                                                                   },
+                  "crates/adm-new-governance/src/lib.rs":  {
+                                                               "sha256":  "45efbd76418e86146e10b353eaa7ac420044d2a0495ee2d39a98d80a407d315a",
+                                                               "size":  254098
+                                                           },
+                  "crates/adm-new-contracts/src/project.rs":  {
+                                                                  "sha256":  "e9c2c85f6cea35aca83a42f9dccc5788b63d334768b0e879b31039b61ec8c28b",
+                                                                  "size":  14592
+                                                              },
+                  "crates/adm-new-contracts/src/save.rs":  {
+                                                               "sha256":  "f0145a270c10e219eaea60479999496ac194cf7fa72487256e3322b57dfab0b3",
+                                                               "size":  12700
+                                                           },
+                  "crates/adm-new-contracts/src/pipeline.rs":  {
+                                                                   "sha256":  "f6633d04ab60eca66d223fdef07f5342dbe32c2a9d8fea6ed28db4c973313a4d",
+                                                                   "size":  17853
+                                                               },
+                  "crates/adm-new-application/src/lib.rs":  {
+                                                                "sha256":  "6f348931d2bceb5ce41be40675b7bf3524107fab0532361f8eb6231dd806833e",
+                                                                "size":  83084
+                                                            },
+                  "crates/adm-new-save/src/lib.rs":  {
+                                                         "sha256":  "4cf1f489b75d1cddedf6253ba293f603c80d6491be92da27365fa3f28dce2a74",
+                                                         "size":  244613
+                                                     },
+                  "crates/adm-new-pipeline/src/lib.rs":  {
+                                                             "sha256":  "8dd7cfd92323f9395e0ff3385ea59e370fc2515d625b5e619e04b2077c550955",
+                                                             "size":  30303
+                                                         },
+                  "crates/adm-new-tauri-commands/src/shell.rs":  {
+                                                                     "sha256":  "d8da67a9a45aba51917900926a3243af47da3cfe119371ecead9fd13a68d3428",
+                                                                     "size":  7629
+                                                                 },
+                  "crates/adm-new-tauri-commands/src/save.rs":  {
+                                                                    "sha256":  "03d0a5588803571c4dea41dd480b53171f7c9619ec9e122d582fc8f38e26ab8a",
+                                                                    "size":  14311
+                                                                },
+                  "web/package.json":  {
+                                           "sha256":  "08f1b821d48faf5214c3b1f6a865c9a531c6b674ac2c1bb8f73aaa22bca1aad9",
+                                           "size":  766
+                                       },
+                  "web/package-lock.json":  {
+                                                "sha256":  "d679871b2522934eeca2aba66faa945f689325b35daabe99f8929c08818301c5",
+                                                "size":  1822
+                                            },
+                  "web/src/main.js":  {
+                                          "sha256":  "759533ff25ad1e01b8faa56680c6bdd9e631156764fd39280cb62b6d73c8190a",
+                                          "size":  12952
+                                      },
+                  "web/src/styles.css":  {
+                                             "sha256":  "01546cb216a06021fd2e5c498edbfe434ff44f3653fa5e6208d991147535e3bb",
+                                             "size":  39602
+                                         },
+                  "web/src/features/design.js":  {
+                                                     "sha256":  "b31d8d0638f5ed5f16a4045d61dbb5a0248c24566f48f167d8027df37d7aa4ec",
+                                                     "size":  72259
+                                                 },
+                  "web/src/features/utility-panels.js":  {
+                                                             "sha256":  "9baaa1012757feab38d476ee1b460383ee99f4ec934dfd1a89dc1f59dc3e8482",
+                                                             "size":  64196
+                                                         },
+                  "web/src/features/pipeline.js":  {
+                                                       "sha256":  "6941c59e86af7c2738d543d835d037ac6c1a91c2a15933093bcaca57bb97b730",
+                                                       "size":  38184
+                                                   },
+                  "web/scripts/test.mjs":  {
+                                               "sha256":  "ed96328aeef05f18d8dda97f02134181b85536045f32080e0df599c1f3ba32d9",
+                                               "size":  67601
+                                           },
+                  "web/scripts/ui-gate.mjs":  {
+                                                  "sha256":  "738ee8218eaae50b60d11e0939a5ec2561a1e6b824e8ea887809b5791f0382fa",
+                                                  "size":  47731
+                                              },
+                  "tools/build-portable.ps1":  {
+                                                   "sha256":  "ab773f0c52267236de1930dcbd5cc8e92225e97e30c99572ed4f3ba13009561d",
+                                                   "size":  20638
+                                               },
+                  "tools/build-root-launcher.ps1":  {
+                                                        "sha256":  "2ec5ca5fdb74065e7d8492639b501c4055e8167599c7d0d7bfdda12e5dc34309",
+                                                        "size":  4659
+                                                    },
+                  "tools/verify-standalone.ps1":  {
+                                                      "sha256":  "3e9b04f8707148f97f2778a41ae175f690f13008a0fa2f54f008eb4567967487",
+                                                      "size":  45540
+                                                  },
+                  "tools/clean-generated.ps1":  {
+                                                    "sha256":  "f5d3e413d582588086aee72075dc6d9eb978e1e5dd536287fe8a0ba13e0d3f8f",
+                                                    "size":  2220
+                                                },
+                  "tools/memory/README.md":  {
+                                                 "sha256":  "fbac5754dd32478eba8dd91d79069491b6d01716e754e0da8abb1fc992c66b99",
+                                                 "size":  583
+                                             },
+                  "tools/memory/Update-MemoryFreshness.ps1":  {
+                                                                  "sha256":  "6ebcda60f8a1e145f8e0ffff7fb848bbdb43d01639d38ca348fa95c99798c178",
+                                                                  "size":  2620
+                                                              },
+                  "tools/memory/Test-MemoryFreshness.ps1":  {
+                                                                "sha256":  "52ec671253bf2cb5cd9cd905110452cdf6e5dca93e502cb21de0b45e02b75cc2",
+                                                                "size":  3052
+                                                            }
+              }
+}

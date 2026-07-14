@@ -117,7 +117,6 @@ fn extract_fenced_block<'a>(content: &'a str, languages: &[&str]) -> Option<&'a 
         let after_start = &remaining[start + 3..];
         let line_end = after_start.find('\n')?;
         let lang = after_start[..line_end]
-            .trim()
             .split_whitespace()
             .next()
             .unwrap_or("");

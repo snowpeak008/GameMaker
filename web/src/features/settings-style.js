@@ -1,5 +1,6 @@
 import { enumLabel, getLanguageMode, t } from "../i18n.js";
 import { setModalVisible } from "../modal-focus.js";
+import { asArray, read } from "../shared/value.js";
 
 export const ENGINE_OPTIONS = [
   {
@@ -1045,23 +1046,6 @@ function unwrapCommandResponse(response) {
     throw new Error(detail);
   }
   return response ?? null;
-}
-
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
 }
 
 function legacyFixActionForCode(code) {

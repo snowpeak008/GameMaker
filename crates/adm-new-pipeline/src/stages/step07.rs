@@ -33,6 +33,8 @@ pub const PROMPT_END: &str = "PROMPT_END";
 
 const FALLBACK_IMAGE_WIDTH: u32 = 640;
 const FALLBACK_IMAGE_HEIGHT: u32 = 384;
+const PROVIDER_IMAGE_WIDTH: u32 = 1536;
+const PROVIDER_IMAGE_HEIGHT: u32 = 1024;
 
 pub fn step07_plugin_spec() -> StagePluginSpec {
     StagePluginSpec {
@@ -1206,8 +1208,8 @@ fn style_image_work_unit_request(
             "negative_prompt": option.negative_prompt,
             "artifact_locale": locale,
             "project_label": stage_title_with_locale(parsed, locale),
-            "requested_width": FALLBACK_IMAGE_WIDTH,
-            "requested_height": FALLBACK_IMAGE_HEIGHT,
+            "requested_width": PROVIDER_IMAGE_WIDTH,
+            "requested_height": PROVIDER_IMAGE_HEIGHT,
             "output_format": "png",
         }),
     )
@@ -2029,9 +2031,10 @@ fn style_prompt(
             format!("风格意图：{}", option.description),
             format!(
                 "代表性资产：{}",
-                representative_asset_text(assets, 80, locale)
+                representative_asset_text(assets, 180, locale)
             ),
-            "构图：可检查的风格板，轮廓清晰，不要文字叠加。".to_string(),
+            "画面内容：聚焦上述项目的核心角色、敌人、场景和玩法互动，不得用无关的通用人物、通用物件或通用风景替代。".to_string(),
+            "构图：1536×1024 横向游戏美术风格板，以一幅完整玩法场景为主体，辅以少量材质与配色细节；轮廓清晰，不要文字叠加。".to_string(),
         ]
         .join("\n")
     } else {
@@ -2042,10 +2045,10 @@ fn style_prompt(
             format!("Style intent: {}", option.description),
             format!(
                 "Representative assets: {}",
-                representative_asset_text(assets, 80, locale)
+                representative_asset_text(assets, 180, locale)
             ),
-            "Composition: inspectable style board, clear silhouettes, no text overlays."
-                .to_string(),
+            "Subject: focus on this project's core characters, enemies, environments, and gameplay interaction; do not substitute unrelated generic people, props, or scenery.".to_string(),
+            "Composition: 1536x1024 landscape game-art style board led by one complete gameplay scene with a small number of material and palette details; clear silhouettes and no text overlays.".to_string(),
         ]
         .join("\n")
     }
@@ -2054,8 +2057,8 @@ fn style_prompt(
 fn style_negative_prompt(locale: ArtifactLocale) -> &'static str {
     localized_text(
         locale,
-        "避免水印、文字叠加、商标、内嵌界面文字、模糊轮廓、杂乱背景和难以辨认的构图。",
-        "Avoid watermarks, text overlays, logos, embedded UI text, blurred silhouettes, cluttered backgrounds, and unreadable composition.",
+        "避免水印、文字叠加、商标、内嵌界面文字、模糊轮廓、杂乱背景、难以辨认的构图，以及与项目无关的通用人物、物件和风景。",
+        "Avoid watermarks, text overlays, logos, embedded UI text, blurred silhouettes, cluttered backgrounds, unreadable composition, and generic people, props, or scenery unrelated to the project.",
     )
 }
 
@@ -2089,12 +2092,10 @@ fn representative_asset_text(
 }
 
 fn short_asset_label(asset: &ArtAssetInput) -> String {
-    let label = if asset.asset_type.trim().is_empty() {
-        if asset.asset_id.trim().is_empty() {
-            asset.name.as_str()
-        } else {
-            asset.asset_id.as_str()
-        }
+    let label = if !asset.name.trim().is_empty() {
+        asset.name.as_str()
+    } else if !asset.asset_id.trim().is_empty() {
+        asset.asset_id.as_str()
     } else {
         asset.asset_type.as_str()
     };
@@ -2979,6 +2980,20 @@ mod tests {
         assert_eq!(result["fallback_image_count"], 0);
         assert_eq!(log["status"], "success");
         assert_eq!(log["provider_generated_count"], 3);
+        assert_eq!(
+            image::image_dimensions(
+                out_dir
+                    .join("generated_images")
+                    .join("STYLE-01-readable_production.png")
+            )
+            .unwrap(),
+            (PROVIDER_IMAGE_WIDTH, PROVIDER_IMAGE_HEIGHT)
+        );
+        let options = read_json(&out_dir.join("style_options.json"), json!({}));
+        let prompt = options["options"][0]["generation_prompt"].as_str().unwrap();
+        assert!(prompt.contains("Hero character concept"));
+        assert!(prompt.contains("1536×1024"));
+        assert!(!prompt.contains("代表性资产：character"));
         assert!(
             log["records"]
                 .as_array()

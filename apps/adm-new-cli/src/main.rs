@@ -36,13 +36,13 @@ use adm_new_contracts::project::ProjectState;
 use adm_new_contracts::sdk::SdkReviewStatus;
 use adm_new_foundation::{AdmResult, GateReport};
 use adm_new_governance::{
-    final_handoff_v3_gate_report, find_repo_root, handoff_report,
+    design_sync_audit_report, final_handoff_v3_gate_report, find_repo_root, handoff_report,
     integration_test_migration_gate_report, is_standalone_repo_root, iteration_gate_report,
     package_gate_report, parity_gate_report, plan_gate_report, release_gate_report,
-    standalone_boundary_gate_report, ui_ai_gate_report, ui_parity_v3_gate_report,
-    ui_pipeline_gate_report, ui_settings_style_gate_report, ui_shell_gate_report,
-    ui_utility_gate_report, ui_workbench_gate_report, unit_test_migration_gate_report,
-    validation_gate_report,
+    render_design_sync_audit, standalone_boundary_gate_report, ui_ai_gate_report,
+    ui_parity_v3_gate_report, ui_pipeline_gate_report, ui_settings_style_gate_report,
+    ui_shell_gate_report, ui_utility_gate_report, ui_workbench_gate_report,
+    unit_test_migration_gate_report, validation_gate_report,
 };
 use adm_new_packaging::{
     DEFAULT_DIST_EXE_NAME, DEFAULT_MIN_EXE_BYTES, PackagingService, dist_build_plan,
@@ -141,6 +141,7 @@ fn main() -> ExitCode {
         "release-gate" => run_gate("release", release_gate_report),
         "final-handoff-v3-gate" => run_gate("final-handoff-v3", final_handoff_v3_gate_report),
         "handoff-report" => run_gate("handoff", handoff_report),
+        "design-sync-audit" => run_design_sync_audit_command(&args[2..]),
         "package" => run_package_command(&args[2..]),
         "dist" => run_dist_command(&args[2..]),
         "asset" => run_asset_command(&args[2..]),
@@ -1961,6 +1962,72 @@ fn take_repeated_options(values: &mut Vec<String>, flag: &str) -> Vec<String> {
     results
 }
 
+fn run_design_sync_audit_command(args: &[String]) -> ExitCode {
+    let mut rest = args.to_vec();
+    if take_bool_flag(&mut rest, "--help") || take_bool_flag(&mut rest, "-h") {
+        println!("adm-new-cli design-sync-audit [--python-root DIR] [--json]");
+        return ExitCode::SUCCESS;
+    }
+    let output_json = take_bool_flag(&mut rest, "--json");
+    let Some(repo_root) = repo_root_from_cwd() else {
+        eprintln!("failed to locate standalone project root");
+        return ExitCode::from(1);
+    };
+    let python_root = match take_option(&mut rest, "--python-root")
+        .map(PathBuf::from)
+        .or_else(|| default_python_audit_root(&repo_root))
+    {
+        Some(root) => root,
+        None => {
+            eprintln!("failed to locate python audit root; pass --python-root DIR");
+            return ExitCode::from(2);
+        }
+    };
+    if !rest.is_empty() {
+        eprintln!("unexpected design-sync-audit args: {}", rest.join(" "));
+        return ExitCode::from(2);
+    }
+    match design_sync_audit_report(&repo_root, &python_root) {
+        Ok(report) => {
+            if output_json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).unwrap_or_default()
+                );
+            } else {
+                let rendered = render_design_sync_audit(&report);
+                print!("{rendered}");
+                if let Err(error) = write_gate_report(&repo_root, "design-sync-audit", &rendered) {
+                    eprintln!("failed to write design sync audit report: {error}");
+                    return ExitCode::from(1);
+                }
+            }
+            design_sync_audit_exit_code(&report.status)
+        }
+        Err(error) => {
+            eprintln!("design-sync-audit failed: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn design_sync_audit_exit_code(status: &str) -> ExitCode {
+    if status == "failed" {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn default_python_audit_root(repo_root: &Path) -> Option<PathBuf> {
+    let parent = repo_root.parent()?.to_path_buf();
+    if parent.join("AI_README.md").is_file() || parent.join("AGENTS.md").is_file() {
+        Some(parent)
+    } else {
+        None
+    }
+}
+
 fn run_memory_command(_args: &[String]) -> ExitCode {
     eprintln!("{LEGACY_MEMORY_COMMAND_DEPRECATED}");
     ExitCode::from(2)
@@ -2084,6 +2151,9 @@ fn print_help() {
     println!("adm-new-cli commands:");
     println!("  doctor      verify the standalone source/resource/portable boundary");
     println!("  standalone-boundary-gate verify the relocatable independent-project contract");
+    println!(
+        "  design-sync-audit [--python-root DIR] [--json] compare Python/Rust design resources"
+    );
     println!(
         "  parity-gate verify required Rust parity checks and run cargo test --workspace --quiet"
     );
@@ -2404,6 +2474,27 @@ mod tests {
             run_memory_command(&["--help".to_string()]),
             ExitCode::from(2)
         );
+    }
+
+    #[test]
+    fn design_sync_audit_help_and_default_parent_detection() {
+        assert_eq!(
+            run_design_sync_audit_command(&["--help".to_string()]),
+            ExitCode::SUCCESS
+        );
+        let parent = temp_root("design_sync_parent");
+        let rust_root = parent.join("NEWrust");
+        fs::create_dir_all(&rust_root).unwrap();
+        assert!(default_python_audit_root(&rust_root).is_none());
+        fs::write(parent.join("AGENTS.md"), "# fixture\n").unwrap();
+        assert_eq!(default_python_audit_root(&rust_root), Some(parent.clone()));
+        assert_eq!(design_sync_audit_exit_code("passed"), ExitCode::SUCCESS);
+        assert_eq!(
+            design_sync_audit_exit_code("attention_required"),
+            ExitCode::SUCCESS
+        );
+        assert_eq!(design_sync_audit_exit_code("failed"), ExitCode::from(1));
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]

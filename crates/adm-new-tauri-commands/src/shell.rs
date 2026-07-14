@@ -117,7 +117,7 @@ impl Default for ShellStartupState {
     fn default() -> Self {
         Self {
             validate_data_integrity: true,
-            auto_restore_current_save: true,
+            auto_restore_current_save: false,
             release_lock_at_exit: true,
             prune_drafts_keep_count: 0,
             startup_status: "系统: 就绪".to_string(),
@@ -198,6 +198,7 @@ mod tests {
         assert_eq!(value["systemStatus"], "系统: 就绪");
         assert_eq!(value["window"]["minWidth"], 1180);
         assert_eq!(value["startup"]["pruneDraftsKeepCount"], 0);
+        assert_eq!(value["startup"]["autoRestoreCurrentSave"], false);
         assert!(
             value["theme"]
                 .as_array()

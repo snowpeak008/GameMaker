@@ -26,6 +26,9 @@ fn shell_state(
 ) -> adm_new_tauri_commands::shell::ShellState {
     let mut shell = adm_new_tauri_commands::shell::ShellState::default();
     shell.ui_language = runtime.ui_language;
+    shell.startup.auto_restore_current_save =
+        runtime.startup_project_policy.auto_restores_current_save();
+    shell.startup.prune_drafts_keep_count = runtime.draft_retention_keep_count;
     let passed = runtime
         .pipeline_state
         .stages
@@ -85,9 +88,11 @@ mod tests {
         ));
         let app =
             crate::runtime::AppRuntime::new_with_ui_language(&root, UiLanguage::EnUs).unwrap();
-        let runtime = app.lock().unwrap();
+        let mut runtime = app.lock().unwrap();
+        runtime.draft_retention_keep_count = 7;
 
         assert_eq!(shell_state(&runtime).ui_language, UiLanguage::EnUs);
+        assert_eq!(shell_state(&runtime).startup.prune_drafts_keep_count, 7);
 
         drop(runtime);
         let _ = app.shutdown_once();

@@ -1,4 +1,7 @@
 /target/
+/.AutoDesignMaker.exe.*
+/AutoDesignMaker.exe
+/AutoDesignMaker-launch-error.txt
 /.adm_newrust_data/
 /dist/
 /web/dist/

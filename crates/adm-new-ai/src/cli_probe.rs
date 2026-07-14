@@ -320,30 +320,40 @@ fn find_program(
 }
 
 fn executable_candidates(base: &Path, path_ext: &str, windows: bool) -> Vec<PathBuf> {
-    let mut candidates = vec![base.to_path_buf()];
-    if !windows || base.extension().is_some() {
-        return candidates;
+    if !windows {
+        return vec![base.to_path_buf()];
+    }
+    if base.extension().is_some() {
+        return vec![base.to_path_buf()];
     }
     let mut extensions = path_ext
         .split(';')
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.trim_start_matches('.').to_ascii_lowercase())
+        .filter(|extension| windows_runnable_extension(extension))
         .collect::<Vec<_>>();
     if extensions.is_empty() {
-        extensions = vec!["exe".to_string(), "cmd".to_string(), "bat".to_string()];
+        extensions = vec![
+            "com".to_string(),
+            "exe".to_string(),
+            "cmd".to_string(),
+            "bat".to_string(),
+        ];
     }
-    for required in ["exe", "cmd", "bat"] {
+    for required in ["com", "exe", "cmd", "bat"] {
         if !extensions.iter().any(|extension| extension == required) {
             extensions.push(required.to_string());
         }
     }
-    candidates.extend(
-        extensions
-            .into_iter()
-            .map(|extension| base.with_extension(extension)),
-    );
-    candidates
+    extensions
+        .into_iter()
+        .map(|extension| base.with_extension(extension))
+        .collect()
+}
+
+fn windows_runnable_extension(extension: &str) -> bool {
+    matches!(extension, "com" | "exe" | "cmd" | "bat")
 }
 
 fn split_search_path(path_env: &str, windows: bool) -> Vec<PathBuf> {
@@ -368,7 +378,11 @@ fn is_runnable_file(path: &Path, windows: bool) -> bool {
         return false;
     }
     if windows {
-        return true;
+        return path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .is_some_and(|extension| windows_runnable_extension(&extension));
     }
     #[cfg(unix)]
     {
@@ -465,7 +479,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn windows_locator_supports_bare_exe_cmd_and_bat_programs() {
+    fn windows_locator_supports_exe_cmd_and_bat_programs() {
         let root = test_dir("windows_locator");
         fs::create_dir_all(&root).unwrap();
         for extension in ["exe", "cmd", "bat"] {
@@ -486,8 +500,29 @@ mod tests {
         File::create(&bare).unwrap();
         let located =
             locate_cli_program_in(None, "tool_bare", &root.to_string_lossy(), "", true, &root);
+        assert!(!located.available);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn windows_locator_skips_posix_npm_shim_in_favor_of_cmd() {
+        let root = test_dir("windows_npm_shim");
+        fs::create_dir_all(&root).unwrap();
+        File::create(root.join("codex")).unwrap();
+        let command = root.join("codex.cmd");
+        File::create(&command).unwrap();
+
+        let located = locate_cli_program_in(
+            None,
+            "codex",
+            &root.to_string_lossy(),
+            ".COM;.EXE;.BAT;.CMD",
+            true,
+            &root,
+        );
+
         assert!(located.available);
-        assert!(located.program.ends_with("tool_bare"));
+        assert_eq!(Path::new(&located.program), command);
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -1,4 +1,6 @@
 import { enumLabel, getLanguageMode, t } from "../i18n.js";
+import { clear, el } from "../shared/dom.js";
+import { asArray, read } from "../shared/value.js";
 
 export const DEFAULT_PIPELINE_VIEW = {
   orderedStageIds: [],
@@ -138,6 +140,10 @@ export function createPipelineModel(viewInput) {
       return lines;
     },
   };
+}
+
+export function styleGridVisibleForStage(stage) {
+  return Boolean(stage && (stage.isStep07 || stage.stageId === "07"));
 }
 
 export function buildRunPipelineRequest(fromStageId, toStageId, options = {}) {
@@ -359,6 +365,7 @@ function renderDetail(panel, model, api = {}) {
   const stage = model.selectedStage();
   if (!stage) {
     detail.textContent = t("pipeline.detail.selectStage");
+    renderStyleGrid(panel, model, null, api);
     return;
   }
   detail.append(
@@ -463,7 +470,7 @@ function renderStyleGrid(panel, model, stage, api = {}) {
   const grid = panel.querySelector('[data-role="style-grid"]');
   revokeStylePreviewObjectUrls(grid);
   clear(grid);
-  const shouldShow = stage?.isStep07 || model.view.waitingConfirmation || model.view.styleOptions.length > 0;
+  const shouldShow = styleGridVisibleForStage(stage);
   grid.hidden = !shouldShow;
   if (!shouldShow) {
     return;
@@ -503,6 +510,9 @@ function renderStyleGrid(panel, model, stage, api = {}) {
           t(`pipeline.style.imageStatus.${option.imageStatus}`),
         ),
       );
+    }
+    if (option.imageStatus !== "generated" && option.imageMessage) {
+      card.append(markRuntime(el("span", "style-image-message", option.imageMessage)));
     }
     const preview = el("div", "style-image-preview");
     const previewStatus = el(
@@ -919,23 +929,6 @@ function bindOnce(panel, action, handler) {
   }
 }
 
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
 function listFromUnknown(value) {
   if (value === null || value === undefined || value === "") {
     return [];
@@ -1131,24 +1124,4 @@ function markRuntime(element) {
 
 function markRuntimeWhen(element, condition) {
   return condition ? markRuntime(element) : element;
-}
-
-function clear(element) {
-  if (!element) {
-    return;
-  }
-  while (element.firstChild) {
-    element.firstChild.remove();
-  }
-}
-
-function el(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
-  }
-  return element;
 }

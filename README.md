@@ -9,6 +9,12 @@ protocol resources, test baselines, and release tooling live below this root; no
 parent AutoDesignMaker or Python project is required. See
 `docs/independence/README.md` for the enforced boundary.
 
+The source-checkout entry follows the Python project's root-launcher design: double-click
+`AutoDesignMaker.exe` in this directory. The small native launcher locates the complete
+Rust portable application under `dist/AutoDesignMaker-NEWrust`, pins all runtime data to
+that Rust-owned directory, and starts a blank project by default. It does not invoke a
+CMD file or read the parent Python project.
+
 ## Requirements
 
 - Windows 10/11 x64 with Microsoft Edge WebView2 Runtime.
@@ -33,13 +39,45 @@ cargo test --workspace --locked
 # Build or run the desktop application.
 cargo build --locked -p desktop-tauri --release
 cargo run -p desktop-tauri
+
+# Build, verify, and atomically install the root AutoDesignMaker.exe entry.
+powershell -ExecutionPolicy Bypass -File .\tools\build-root-launcher.ps1
 ```
 
 The desktop application normally stores runtime data in its Tauri application-data
 directory. Set `ADM_NEWRUST_DATA_DIR` to use an explicit data directory and
 `ADM_NEWRUST_SOURCE_ROOT` to override where `knowledge/design_data` is loaded from.
-The override is for development/testing and must point to a valid standalone source
-root. Release builds do not search parent directories or use the compiler's source path.
+The source-root override exists only in debug builds and must pass the complete Rust v2
+standalone identity contract (`.project_root`, Cargo workspace, both lockfiles, and the
+Rust resource manifest). It cannot point at the legacy Python project. Release builds do
+not search parent directories or use the compiler's source path.
+
+## Startup Project Mode
+
+Normal product startup always creates a new, unbound draft containing the empty project
+and empty pipeline state. Existing drafts and formal saves remain on disk and formal
+saves stay available through the Save Manager; startup does not select or restore one.
+
+Recovery is explicit. Set `ADM_NEWRUST_STARTUP_PROJECT=restore` before launch only when
+the previous desktop draft/current save must be recovered. Any other value, no value,
+and the root launcher's default all select `blank`.
+
+Blank-start sessions can be bounded explicitly with
+`ADM_NEWRUST_PRUNE_BLANK_DRAFTS_KEEP_COUNT`. Missing, invalid, and `0` values disable
+cleanup. A positive value keeps the newest N old sessions that Rust can prove are
+unbound, unsaved, unlocked, equal to the canonical empty project and idle pipeline,
+and contain only the known blank-session file layout:
+
+```powershell
+$env:ADM_NEWRUST_PRUNE_BLANK_DRAFTS_KEEP_COUNT = "3"
+.\AutoDesignMaker.exe
+```
+
+This policy runs only during normal blank startup. `desktop_current`, the current
+session, formal saves, active locks, linked or nonblank drafts, corrupt JSON, symbolic
+links, transaction data, and any unknown file or directory layout are always retained.
+The effective value is exposed as `startup.pruneDraftsKeepCount` in Shell state and
+cleanup diagnostics are written to Runtime Logs.
 
 ## Language Modes
 
@@ -54,7 +92,7 @@ value and otherwise defaults to `zh-CN`:
 
 ```powershell
 $env:ADM_NEWRUST_LANGUAGE = "en-US"
-.\dist\AutoDesignMaker-NEWrust\Start-AutoDesignMaker.cmd
+.\AutoDesignMaker.exe
 ```
 
 The Web localization API also exports `replaceLanguageMode(language)`, which persists
@@ -118,9 +156,10 @@ remain listed so their directory can be inspected or deleted. Cleanup and recove
 warnings are returned to the UI and written to Runtime Logs.
 
 Automatic draft pruning is disabled by default (`pruneDraftsKeepCount = 0`) so recovery
-data is not deleted without an explicit retention policy. The loader also supports
-Python saves that have no Rust autosave file by reading the latest verified
-`design_project` execution object without modifying the legacy archive.
+data is not deleted without an explicit retention policy. When the user explicitly opens
+an imported legacy archive already located inside this Rust data root, the loader can
+recover a missing Rust autosave from its latest verified `design_project` execution
+object without modifying the archive. It never reaches into a Python project directory.
 
 ## Portable Trial Build
 
@@ -157,12 +196,15 @@ dist/AutoDesignMaker-NEWrust/
 `-- user_data/
 ```
 
-Use `Start-AutoDesignMaker.cmd` for a portable trial: it pins the runtime data directory
-to the staged `user_data` folder. Release resource discovery accepts only the complete
-manifest-verified directory beside the executable; it does not honor a source override,
-search the current directory, or fall back to an embedded taxonomy. Moving only the
-`.exe`, changing a tracked resource, or changing either manifest makes startup/smoke
-fail closed.
+For normal source-checkout use, run the root `AutoDesignMaker.exe`. It validates the
+portable layout and WebView2, pins the runtime data directory to the staged `user_data`
+folder, and starts the product executable directly. The internal portable CMD remains a
+release-compatibility support file only; the root EXE neither invokes nor depends on it.
+
+Release resource discovery accepts only the complete manifest-verified directory beside
+the product executable; it does not honor a source override, search the current directory,
+or fall back to an embedded taxonomy. Moving only the product `.exe`, changing a tracked
+resource, or changing either manifest makes startup/smoke fail closed.
 
 `build-manifest.json` binds the executable, launcher, artifact registry, resource
 manifest, Git commit, lockfiles, toolchain, target architecture, CRT result, and
@@ -228,8 +270,9 @@ powershell -File .\tools\clean-generated.ps1 `
 
 ## Trial Workflow
 
-1. Start `dist/AutoDesignMaker-NEWrust/Start-AutoDesignMaker.cmd` so all trial data
-   stays under the staged `user_data/` directory.
+1. From a source checkout, double-click the root `AutoDesignMaker.exe`. It directly starts
+   `dist/AutoDesignMaker-NEWrust/AutoDesignMaker.exe`, so all trial data stays under the
+   staged `user_data/` directory and the parent Python project is never consulted.
 2. Build or edit a project in the design workbench. The save manager creates formal
    saves, switches between them, and restores design, pipeline, logs, patches, and
    generated outputs after restart.
@@ -268,7 +311,9 @@ When the authoritative design taxonomy changes, run
 then rerun the checks above. The UI gate captures both languages at desktop, compact,
 and narrow viewports (90 screenshots) and rejects clipping plus invalid
 template-control heights in critical toolbars and dialogs. The separate baseline gate
-currently verifies 93 records.
+currently verifies 93 records. The UI gate is fail-closed: it requires the Playwright
+dependency from `web/package-lock.json`, applies bounded launch, navigation, action,
+and screenshot timeouts, and does not use a system-browser screenshot fallback.
 
 The generated Web output is `web/dist/`. It is embedded into the desktop executable
 during the Rust release build.
@@ -277,6 +322,7 @@ during the Rust release build.
 
 - `apps/desktop-tauri`: Tauri desktop shell and command adapters.
 - `apps/adm-new-cli`: command-line gates and diagnostics.
+- `apps/root-launcher`: native root EXE entry and launch-contract tests.
 - `crates/adm-new-*`: foundation, contracts, design, save, AI, pipeline, artifact,
   packaging, patch, SDK, application, and Tauri-command layers.
 - `web`: desktop Web UI and its test/gate scripts.

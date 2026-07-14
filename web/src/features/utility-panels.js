@@ -1,5 +1,7 @@
 import { enumLabel, getLanguageMode, t } from "../i18n.js";
 import { setModalVisible } from "../modal-focus.js";
+import { clear, el } from "../shared/dom.js";
+import { asArray, read } from "../shared/value.js";
 
 export const DEFAULT_PACKAGE_VIEW = {
   step14Status: "unknown",
@@ -19,13 +21,9 @@ export function createUtilityPanelApis(invokeCommand) {
   return {
     patch: {
       async list() {
-        try {
-          return unwrapCommandResponse(
-            await invokeCommand("list_patches", { request: { status: null } }),
-          );
-        } catch {
-          return null;
-        }
+        return unwrapCommandResponse(
+          await invokeCommand("list_patches", { request: { status: null } }),
+        );
       },
       async analyze(request) {
         return unwrapCommandResponse(await invokeCommand("analyze_patch_request", { request }));
@@ -33,11 +31,7 @@ export function createUtilityPanelApis(invokeCommand) {
     },
     package: {
       async load() {
-        try {
-          return unwrapCommandResponse(await invokeCommand("load_package_view"));
-        } catch {
-          return null;
-        }
+        return unwrapCommandResponse(await invokeCommand("load_package_view"));
       },
       async packageCurrentProject(request) {
         return unwrapCommandResponse(await invokeCommand("package_current_project", { request }));
@@ -46,11 +40,7 @@ export function createUtilityPanelApis(invokeCommand) {
     },
     logs: {
       async read(request = buildReadLogEntriesRequest("ALL", 200)) {
-        try {
-          return unwrapCommandResponse(await invokeCommand("read_log_entries", { request }));
-        } catch {
-          return null;
-        }
+        return unwrapCommandResponse(await invokeCommand("read_log_entries", { request }));
       },
       async clear() {
         return unwrapCommandResponse(await invokeCommand("clear_logs"));
@@ -61,11 +51,7 @@ export function createUtilityPanelApis(invokeCommand) {
     },
     sdk: {
       async list() {
-        try {
-          return unwrapCommandResponse(await invokeCommand("list_sdks"));
-        } catch {
-          return null;
-        }
+        return unwrapCommandResponse(await invokeCommand("list_sdks"));
       },
       async add(request) {
         return unwrapCommandResponse(await invokeCommand("add_sdk", { request }));
@@ -76,11 +62,7 @@ export function createUtilityPanelApis(invokeCommand) {
         );
       },
       async approvedContext() {
-        try {
-          return unwrapCommandResponse(await invokeCommand("get_approved_sdk_context"));
-        } catch {
-          return "";
-        }
+        return unwrapCommandResponse(await invokeCommand("get_approved_sdk_context"));
       },
     },
     save: {
@@ -402,38 +384,107 @@ export function buildOpenSaveDirectoryRequest(saveId) {
   return { save_id: String(saveId ?? "").trim() };
 }
 
+export const UTILITY_PANEL_TARGETS = ["patch", "package", "logs", "sdk", "save"];
+
+export function createUtilityPanelsController(documentRef, apis = {}) {
+  const requestVersions = new Map();
+
+  const refresh = async (target) => {
+    if (!UTILITY_PANEL_TARGETS.includes(target)) {
+      throw new Error(`Unknown utility panel: ${target}`);
+    }
+    const version = (requestVersions.get(target) ?? 0) + 1;
+    requestVersions.set(target, version);
+    let value;
+    try {
+      value = await loadUtilityPanel(target, apis);
+    } catch (error) {
+      value = utilityLoadFailure(target, error);
+    }
+    if (requestVersions.get(target) !== version) {
+      return { target, stale: true, value };
+    }
+    renderUtilityPanel(documentRef, target, value, apis);
+    return { target, stale: false, value };
+  };
+
+  const refreshAll = async () => {
+    const results = await Promise.all(UTILITY_PANEL_TARGETS.map((target) => refresh(target)));
+    const values = Object.fromEntries(results.map((result) => [result.target, result.value]));
+    return {
+      patches: values.patch,
+      packageView: values.package,
+      logs: values.logs,
+      sdks: values.sdk?.specs ?? values.sdk,
+      sdkContext: values.sdk?.sdkContext ?? "",
+      saveIndex: values.save,
+    };
+  };
+
+  return { refresh, refreshAll };
+}
+
 export async function initUtilityPanels(documentRef, apis) {
   if (!documentRef) {
     return null;
   }
-  const [patches, packageView, logs, sdks, sdkContext, saveResult] = await Promise.all([
-    apis.patch?.list?.() ?? null,
-    apis.package?.load?.() ?? null,
-    apis.logs?.read?.(buildReadLogEntriesRequest("ALL", 200)) ?? null,
-    apis.sdk?.list?.() ?? null,
-    apis.sdk?.approvedContext?.() ?? "",
-    loadSaveIndexResult(apis.save),
-  ]);
-  const saveIndex = saveResult.error
-    ? { __loadError: formatSaveCommandError(saveResult.error) }
-    : saveResult.value;
-  renderPatchPanel(documentRef, patches, apis.patch);
-  renderPackagePanel(documentRef, packageView, apis.package);
-  renderLogsPanel(documentRef, logs, apis.logs);
-  renderSdkPanel(documentRef, sdks, sdkContext, apis.sdk);
-  renderSaveManagerDialog(documentRef, saveIndex, apis.save);
-  return { patches, packageView, logs, sdks, sdkContext, saveIndex };
+  return createUtilityPanelsController(documentRef, apis).refreshAll();
 }
 
-async function loadSaveIndexResult(api) {
-  if (!api?.list) {
-    return { value: null, error: null };
+async function loadUtilityPanel(target, apis) {
+  switch (target) {
+    case "patch":
+      return apis.patch?.list?.() ?? null;
+    case "package":
+      return apis.package?.load?.() ?? null;
+    case "logs":
+      return apis.logs?.read?.(buildReadLogEntriesRequest("ALL", 200)) ?? null;
+    case "sdk": {
+      const [specs, sdkContext] = await Promise.all([
+        apis.sdk?.list?.() ?? null,
+        apis.sdk?.approvedContext?.() ?? "",
+      ]);
+      return { specs, sdkContext };
+    }
+    case "save":
+      return apis.save?.list?.() ?? null;
+    default:
+      return null;
   }
-  try {
-    return { value: await api.list(), error: null };
-  } catch (error) {
-    return { value: null, error };
+}
+
+function utilityLoadFailure(target, error) {
+  const loadError = formatUtilityLoadError(error);
+  return target === "sdk"
+    ? { specs: { __loadError: loadError }, sdkContext: loadError }
+    : { __loadError: loadError };
+}
+
+function renderUtilityPanel(documentRef, target, value, apis) {
+  if (!documentRef) {
+    return;
   }
+  switch (target) {
+    case "patch":
+      renderPatchPanel(documentRef, value, apis.patch);
+      break;
+    case "package":
+      renderPackagePanel(documentRef, value, apis.package);
+      break;
+    case "logs":
+      renderLogsPanel(documentRef, value, apis.logs);
+      break;
+    case "sdk":
+      renderSdkPanel(documentRef, value?.specs, value?.sdkContext, apis.sdk);
+      break;
+    case "save":
+      renderSaveManagerDialog(documentRef, value, apis.save);
+      break;
+  }
+}
+
+function formatUtilityLoadError(error) {
+  return String(error?.message ?? error ?? t("utility.error.commandFailed"));
 }
 
 export function renderPatchPanel(documentRef, recordsInput, api = {}) {
@@ -441,13 +492,16 @@ export function renderPatchPanel(documentRef, recordsInput, api = {}) {
   if (!panel) {
     return [];
   }
+  const loadError = String(recordsInput?.__loadError ?? "");
   const records = normalizePatchRecords(recordsInput);
   const status = panel.querySelector('[data-role="patch-status"]');
   const requestInput = panel.querySelector('[data-role="patch-request"]');
   markContentOrigin(requestInput, "user");
   setText(
     status,
-    recordsInput
+    loadError
+      ? t("utility.patch.status.refreshFailed", { error: loadError })
+      : recordsInput
       ? t("utility.patch.status.records", { count: records.length })
       : t("utility.patch.status.waiting"),
   );
@@ -484,6 +538,7 @@ export function renderPackagePanel(documentRef, viewInput, api = {}) {
   if (!panel) {
     return DEFAULT_PACKAGE_VIEW;
   }
+  const loadError = String(viewInput?.__loadError ?? "");
   const view = normalizePackageView(viewInput);
   const status = panel.querySelector('[data-role="package-status"]');
   const output = panel.querySelector('[data-role="package-output"]');
@@ -491,13 +546,17 @@ export function renderPackagePanel(documentRef, viewInput, api = {}) {
   button.disabled = typeof api.packageCurrentProject !== "function";
   setText(
     status,
-    !viewInput
+    loadError
+      ? t("utility.package.status.refreshFailed", { error: loadError })
+      : !viewInput
       ? t("utility.package.status.waiting")
       : view.canPackage
         ? t("utility.package.status.ready")
         : t("utility.package.status.blocked", { count: view.blockingIssues.length }),
   );
-  output.textContent = packageOutputText(view, viewInput);
+  output.textContent = loadError
+    ? t("utility.package.output.loadFailed", { error: loadError })
+    : packageOutputText(view, viewInput);
   markContentOrigin(output, "artifact");
   bindAction(panel, "refresh-package", async () => {
     setText(status, t("utility.package.status.refreshing"));
@@ -525,14 +584,22 @@ export function renderLogsPanel(documentRef, entriesInput, api = {}) {
   if (!panel) {
     return [];
   }
+  const loadError = String(entriesInput?.__loadError ?? "");
   const entries = normalizeLogEntries(entriesInput);
   const level = panel.querySelector('[data-role="log-level"]')?.value ?? "ALL";
   const table = panel.querySelector('[data-role="log-table"]');
   const status = panel.querySelector('[data-role="logs-status"]');
-  renderLogTable(table, filterLogEntries(entries, level), entriesInput);
+  if (loadError) {
+    clearContentOrigin(table);
+    table.textContent = t("utility.logs.output.loadFailed", { error: loadError });
+  } else {
+    renderLogTable(table, filterLogEntries(entries, level), entriesInput);
+  }
   setText(
     status,
-    entriesInput
+    loadError
+      ? t("utility.logs.status.loadFailed", { error: loadError })
+      : entriesInput
       ? t("utility.logs.status.count", {
           visible: filterLogEntries(entries, level).length,
           total: entries.length,
@@ -588,6 +655,7 @@ export function renderSdkPanel(documentRef, specsInput, contextInput = "", api =
   if (!panel) {
     return [];
   }
+  const loadError = String(specsInput?.__loadError ?? "");
   const specs = normalizeSdkSpecs(specsInput);
   const status = panel.querySelector('[data-role="sdk-status"]');
   const context = panel.querySelector('[data-role="sdk-context"]');
@@ -601,11 +669,13 @@ export function renderSdkPanel(documentRef, specsInput, contextInput = "", api =
   }
   setText(
     status,
-    specsInput
+    loadError
+      ? t("utility.sdk.status.loadFailed", { error: loadError })
+      : specsInput
       ? t("utility.sdk.status.records", { count: specs.length })
       : t("utility.sdk.status.waiting"),
   );
-  context.value = contextInput ?? "";
+  context.value = loadError ? loadError : (contextInput ?? "");
   renderSdkTable(panel.querySelector('[data-role="sdk-table"]'), specs, selectedSdkId, (sdkId) => {
     panel.dataset.selectedSdkId = sdkId;
     renderSdkPanel(documentRef, specs, context.value, api);
@@ -1820,41 +1890,4 @@ function clearContentOrigin(element) {
   if (element?.dataset) {
     delete element.dataset.contentOrigin;
   }
-}
-
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function clear(element) {
-  if (!element) {
-    return;
-  }
-  while (element.firstChild) {
-    element.firstChild.remove();
-  }
-}
-
-function el(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
-  }
-  return element;
 }

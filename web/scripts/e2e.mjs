@@ -37,6 +37,7 @@ import {
   buildResumePipelineRequest,
   buildRunPipelineRequest,
   createPipelineModel,
+  styleGridVisibleForStage,
 } from "../src/features/pipeline.js";
 import {
   buildEditorExecutablePickerRequest,
@@ -265,6 +266,13 @@ function testPipelineE2e() {
   model.selectStage("10");
   if (model.selectedStage().title !== "Asset Alignment") {
     throw new Error("pipeline stage selection mismatch");
+  }
+  if (styleGridVisibleForStage(model.selectedStage())) {
+    throw new Error("Step07 style images must be hidden when another stage is selected");
+  }
+  model.selectStage("07");
+  if (!styleGridVisibleForStage(model.selectedStage())) {
+    throw new Error("Step07 style images must be visible on the selected Step07 stage");
   }
   const run = buildRunPipelineRequest("07", "10");
   if (run.from_stage_id !== "07" || run.to_stage_id !== "10" || run.artifact_locale !== "zh-CN") {

@@ -51,6 +51,15 @@ textarea {
   font: inherit;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) 30px;
@@ -96,6 +105,17 @@ textarea {
   gap: 6px;
   min-width: 0;
   overflow-x: auto;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.task-tabs::-webkit-scrollbar {
+  height: 5px;
+}
+
+.task-tabs::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
 }
 
 .task-tab,
@@ -136,6 +156,23 @@ textarea {
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
+}
+
+.secondary-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 30px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+.secondary-button:hover,
+.command-button.secondary:hover {
+  background: var(--primary-soft);
+  border-color: var(--border-strong);
 }
 
 .route-outlet {
@@ -266,7 +303,7 @@ textarea {
 .pipeline-shell {
   display: grid;
   gap: 10px;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 330px minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -318,6 +355,7 @@ textarea {
 }
 
 .step-card {
+  align-content: center;
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 5px solid var(--border-strong);
@@ -326,7 +364,7 @@ textarea {
   cursor: pointer;
   display: grid;
   gap: 3px;
-  min-height: 62px;
+  min-height: 124px;
   padding: 8px;
   text-align: left;
 }
@@ -549,6 +587,12 @@ textarea {
 .style-image-status.status-failed {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.style-image-message {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .style-image-preview {
@@ -987,6 +1031,26 @@ button:disabled {
   display: flex;
   min-height: 28px;
   padding: 0 10px;
+}
+
+.status-retry-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  flex: 0 0 auto;
+  margin-left: 10px;
+  min-height: 24px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.status-retry-button:hover,
+.status-retry-button:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
 }
 
 .empty-list {
@@ -1928,16 +1992,16 @@ button:disabled {
 }
 
 .ai-entry-active-action {
-  align-self: start;
+  align-self: center;
   background: var(--primary);
   border: 1px solid var(--primary);
   border-radius: 6px;
   color: #ffffff;
   cursor: pointer;
   font-size: 12px;
-  min-height: 40px;
-  padding: 7px 11px;
-  white-space: normal;
+  min-height: 30px;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
 .ai-entry-active-action.is-current {
@@ -2044,7 +2108,7 @@ button:disabled {
   }
 
   .pipeline-shell {
-    grid-template-columns: 220px 720px;
+    grid-template-columns: 330px 720px;
   }
 }
 
@@ -2065,6 +2129,15 @@ button:disabled {
 
   .brand-block {
     display: none;
+  }
+
+  .task-tabs {
+    scroll-snap-type: x proximity;
+    width: 100%;
+  }
+
+  .task-tab {
+    scroll-snap-align: start;
   }
 
   .panel-header > :first-child,
@@ -2141,7 +2214,7 @@ button:disabled {
   }
 
   .ai-entry-active-action {
-    min-height: 44px;
+    min-height: 30px;
   }
 
   .template-browser-body {

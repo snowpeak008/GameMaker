@@ -39,6 +39,7 @@ use tauri::State;
 use crate::design_specs::{load_design_specs, load_design_specs_from_portable_root};
 
 pub const DESKTOP_SESSION_ID: &str = "desktop_current";
+pub const STARTUP_PROJECT_MODE_ENV: &str = "ADM_NEWRUST_STARTUP_PROJECT";
 const DESKTOP_SESSION_PREFIX: &str = "desktop_";
 const DESKTOP_SESSION_LOCK_DIR: &str = ".session_locks";
 const LIFECYCLE_IDLE: u8 = 0;
@@ -80,6 +81,18 @@ struct PipelineRestore {
     needs_rewrite: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupProjectPolicy {
+    Blank,
+    Restore,
+}
+
+impl StartupProjectPolicy {
+    pub fn auto_restores_current_save(self) -> bool {
+        matches!(self, Self::Restore)
+    }
+}
+
 pub struct PipelineRunGuard {
     lifecycle: Arc<AtomicU8>,
 }
@@ -112,11 +125,14 @@ impl Drop for PipelineRunGuard {
 }
 
 impl DesktopSessionLease {
-    fn acquire(data_root: &Path) -> AdmResult<Self> {
+    fn acquire(data_root: &Path, startup_policy: StartupProjectPolicy) -> AdmResult<Self> {
         let drafts_root = data_root.join("drafts");
         fs::create_dir_all(&drafts_root)?;
         let lock_root = drafts_root.join(DESKTOP_SESSION_LOCK_DIR);
         fs::create_dir_all(&lock_root)?;
+        if startup_policy == StartupProjectPolicy::Blank {
+            return Self::allocate_fresh(&drafts_root, &lock_root);
+        }
         let mut candidates = Vec::new();
         if let Ok(entries) = fs::read_dir(&drafts_root) {
             for entry in entries.flatten() {
@@ -148,9 +164,16 @@ impl DesktopSessionLease {
             }
         }
 
+        Self::allocate_fresh(&drafts_root, &lock_root)
+    }
+
+    fn allocate_fresh(drafts_root: &Path, lock_root: &Path) -> AdmResult<Self> {
         let pid = std::process::id();
         for attempt in 0..32_u32 {
             let session_id = format!("desktop_{pid}_{}_{}", unix_timestamp(), attempt);
+            if drafts_root.join(&session_id).exists() {
+                continue;
+            }
             if let Some(lease) = Self::try_acquire(&drafts_root, &lock_root, &session_id)? {
                 return Ok(lease);
             }
@@ -225,6 +248,8 @@ pub struct RuntimeState {
     pub data_root: PathBuf,
     pub source_root: Option<PathBuf>,
     pub ui_language: UiLanguage,
+    pub startup_project_policy: StartupProjectPolicy,
+    pub draft_retention_keep_count: u32,
     pub project_state: ProjectState,
     pub design: DesignWorkbenchService,
     pub save: SaveApplicationService,
@@ -252,7 +277,12 @@ impl AppRuntime {
     pub fn new(data_root: impl AsRef<Path>) -> AdmResult<Self> {
         let language_value = std::env::var(UI_LANGUAGE_ENV).ok();
         let ui_language = normalize_ui_language(language_value.as_deref());
-        Self::new_with_ui_language_and_resource_root(data_root, ui_language, None)
+        Self::new_with_ui_language_resource_root_and_startup_policy(
+            data_root,
+            ui_language,
+            None,
+            startup_project_policy_from_env(),
+        )
     }
 
     #[cfg(test)]
@@ -260,7 +290,24 @@ impl AppRuntime {
         data_root: impl AsRef<Path>,
         ui_language: UiLanguage,
     ) -> AdmResult<Self> {
-        Self::new_with_ui_language_and_resource_root(data_root, ui_language, None)
+        Self::new_with_ui_language_resource_root_and_startup_policy(
+            data_root,
+            ui_language,
+            None,
+            StartupProjectPolicy::Blank,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_restoring(data_root: impl AsRef<Path>) -> AdmResult<Self> {
+        let language_value = std::env::var(UI_LANGUAGE_ENV).ok();
+        let ui_language = normalize_ui_language(language_value.as_deref());
+        Self::new_with_ui_language_resource_root_and_startup_policy(
+            data_root,
+            ui_language,
+            None,
+            StartupProjectPolicy::Restore,
+        )
     }
 
     pub(crate) fn new_with_portable_root(
@@ -269,21 +316,23 @@ impl AppRuntime {
     ) -> AdmResult<Self> {
         let language_value = std::env::var(UI_LANGUAGE_ENV).ok();
         let ui_language = normalize_ui_language(language_value.as_deref());
-        Self::new_with_ui_language_and_resource_root(
+        Self::new_with_ui_language_resource_root_and_startup_policy(
             data_root,
             ui_language,
             Some(portable_root.as_ref().to_path_buf()),
+            StartupProjectPolicy::Blank,
         )
     }
 
-    fn new_with_ui_language_and_resource_root(
+    fn new_with_ui_language_resource_root_and_startup_policy(
         data_root: impl AsRef<Path>,
         ui_language: UiLanguage,
         portable_root: Option<PathBuf>,
+        startup_project_policy: StartupProjectPolicy,
     ) -> AdmResult<Self> {
         let data_root = data_root.as_ref().to_path_buf();
         fs::create_dir_all(&data_root)?;
-        let session_lease = DesktopSessionLease::acquire(&data_root)?;
+        let session_lease = DesktopSessionLease::acquire(&data_root, startup_project_policy)?;
         let session_id = session_lease.session_id.clone();
         let loaded_specs = portable_root
             .as_deref()
@@ -299,11 +348,36 @@ impl AppRuntime {
             .with_runtime_root(template_runtime_root);
         let design = DesignWorkbenchService::new(loaded_specs.specs.clone())
             .with_template_loader(template_loader);
+        let blank_project_state = design.empty_project_state();
+        let draft_retention = match startup_project_policy {
+            StartupProjectPolicy::Blank => crate::draft_retention::prune_configured_blank_drafts(
+                &data_root,
+                &session_id,
+                &blank_project_state,
+                &empty_pipeline_state(),
+            ),
+            StartupProjectPolicy::Restore => Default::default(),
+        };
+        let draft_retention_keep_count = draft_retention.keep_count;
+        let draft_retention_removed_count = draft_retention.removed_count;
+        let draft_retention_warnings = draft_retention.warnings;
         let save = SaveApplicationService::new(&data_root, &session_id)?;
-        if session_lease.needs_initial_state && session_id != DESKTOP_SESSION_ID {
-            save.autosave(&design.empty_project_state())?;
-        }
-        let restored = restore_project_state(&save, &design, &data_root, &session_id)?;
+        let restored = match startup_project_policy {
+            StartupProjectPolicy::Blank => {
+                let state = blank_project_state;
+                save.autosave(&state)?;
+                ProjectRestore {
+                    state,
+                    warnings: Vec::new(),
+                }
+            }
+            StartupProjectPolicy::Restore => {
+                if session_lease.needs_initial_state && session_id != DESKTOP_SESSION_ID {
+                    save.autosave(&design.empty_project_state())?;
+                }
+                restore_project_state(&save, &design, &data_root, &session_id)?
+            }
+        };
         let project_state = restored.state;
         let runtime_config = RuntimeApplicationService::new(&data_root, &session_id)?;
         let pipeline_executor = ProductPipelineExecutor::with_design_data_dir(
@@ -319,6 +393,8 @@ impl AppRuntime {
             data_root: data_root.clone(),
             source_root: Some(resource_root),
             ui_language,
+            startup_project_policy,
+            draft_retention_keep_count,
             project_state,
             design,
             save,
@@ -338,6 +414,18 @@ impl AppRuntime {
         state.reload_package_result();
         state.reload_patch_records();
         state.load_logs();
+        if draft_retention_keep_count > 0 {
+            state.write_log(
+                LogLevel::Info,
+                "draft.retention",
+                &format!(
+                    "blank draft retention enabled with keep_count={draft_retention_keep_count}; removed={draft_retention_removed_count}"
+                ),
+            );
+        }
+        for warning in draft_retention_warnings {
+            state.write_log(LogLevel::Warning, "draft.retention", &warning);
+        }
         if sdk_migration.migrated {
             state.write_log(
                 LogLevel::Info,
@@ -373,7 +461,16 @@ impl AppRuntime {
         for warning in restored.warnings {
             state.write_log(LogLevel::Warning, "save.recovery", &warning);
         }
-        state.write_log(LogLevel::Info, "startup", "desktop runtime initialized");
+        state.write_log(
+            LogLevel::Info,
+            "startup",
+            match startup_project_policy {
+                StartupProjectPolicy::Blank => "desktop runtime initialized with a blank project",
+                StartupProjectPolicy::Restore => {
+                    "desktop runtime initialized with project recovery enabled"
+                }
+            },
+        );
         Ok(Self {
             inner: Mutex::new(state),
             pipeline_stop: Arc::new(AtomicBool::new(false)),
@@ -469,6 +566,13 @@ impl AppRuntime {
             );
         }
         result
+    }
+}
+
+fn startup_project_policy_from_env() -> StartupProjectPolicy {
+    match std::env::var(STARTUP_PROJECT_MODE_ENV) {
+        Ok(value) if value.trim().eq_ignore_ascii_case("restore") => StartupProjectPolicy::Restore,
+        _ => StartupProjectPolicy::Blank,
     }
 }
 
@@ -1290,23 +1394,84 @@ mod tests {
     }
 
     #[test]
-    fn runtime_autosave_survives_reconstruction() {
+    fn default_startup_is_blank_and_keeps_formal_saves_for_explicit_load() {
         let root = std::env::temp_dir().join(format!(
             "adm-newrust-runtime-{}",
             adm_new_foundation::new_stable_id("test").unwrap()
         ));
         let runtime = AppRuntime::new(&root).unwrap();
-        {
+        let save_id = {
             let mut state = runtime.lock().unwrap();
             state.project_state.project_name = "Restarted Project".to_string();
             state.persist_project_state("test").unwrap();
+            state.pipeline_state.run_id = "previous-run".to_string();
+            state.pipeline_state.status = "success".to_string();
+            state.persist_pipeline_state().unwrap();
+            state
+                .save
+                .create_save("Restarted Project", &state.project_state)
+                .unwrap()
+                .manifest
+                .save_id
+        };
+        runtime.shutdown_once().unwrap();
+        drop(runtime);
+
+        let fresh = AppRuntime::new(&root).unwrap();
+        {
+            let state = fresh.lock().unwrap();
+            assert_eq!(state.startup_project_policy, StartupProjectPolicy::Blank);
+            assert_eq!(
+                state.project_state,
+                state.design.empty_project_state(),
+                "default startup must not restore the previous project"
+            );
+            assert_eq!(
+                state.pipeline_state,
+                empty_pipeline_state(),
+                "default startup must not restore the previous pipeline run"
+            );
+            let index = state.save.list_saves().unwrap();
+            assert!(index.current_save_id.is_none());
+            assert!(index.saves.iter().any(|entry| entry.save_id == save_id));
+        }
+        fresh.shutdown_once().unwrap();
+        drop(fresh);
+
+        let loader = AppRuntime::new(&root).unwrap();
+        {
+            let mut state = loader.lock().unwrap();
+            assert_eq!(state.project_state, state.design.empty_project_state());
+            let loaded = state.save.load_save(&save_id).unwrap();
+            state.project_state = state.design.normalize_project_state(loaded.state);
+            assert_eq!(state.project_state.project_name, "Restarted Project");
+        }
+        loader.shutdown_once().unwrap();
+        drop(loader);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn explicit_restore_policy_recovers_previous_autosave() {
+        let root = std::env::temp_dir().join(format!(
+            "adm-newrust-runtime-explicit-restore-{}",
+            adm_new_foundation::new_stable_id("test").unwrap()
+        ));
+        let runtime = AppRuntime::new(&root).unwrap();
+        {
+            let mut state = runtime.lock().unwrap();
+            state.project_state.project_name = "Recoverable Project".to_string();
+            state.persist_project_state("test").unwrap();
         }
         drop(runtime);
-        let restored = AppRuntime::new(&root).unwrap();
+
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(
             restored.lock().unwrap().project_state.project_name,
-            "Restarted Project"
+            "Recoverable Project"
         );
+        restored.shutdown_once().unwrap();
+        drop(restored);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1376,7 +1541,7 @@ mod tests {
         }
         drop(runtime);
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         {
             let mut state = restored.lock().unwrap();
             let listed = state.design.list_project_templates(true).unwrap();
@@ -1420,7 +1585,7 @@ mod tests {
         drop(runtime);
         fs::remove_dir_all(root.join("drafts")).unwrap();
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(
             restored.lock().unwrap().project_state.project_name,
             "Formal Only Project"
@@ -1454,7 +1619,7 @@ mod tests {
         fs::write(&autosave_path, "{invalid").unwrap();
         drop(runtime);
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         let state = restored.lock().unwrap();
         assert_eq!(state.project_state.project_name, "Formal Project");
         assert!(state.logs.latest(100).iter().any(|entry| {
@@ -1506,7 +1671,7 @@ mod tests {
         fs::write(&manifest_path, "{invalid-formal").unwrap();
         drop(runtime);
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         let state = restored.lock().unwrap();
         assert_ne!(state.project_state.project_name, "Corrupt Formal");
         let index = state.save.list_saves().unwrap();
@@ -1557,7 +1722,7 @@ mod tests {
         blocker.load_save(&save_id).unwrap();
         let lock_path = root.join("saves").join(&save_id).join(".archive_lock");
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         let state = restored.lock().unwrap();
         assert_eq!(state.project_state.project_name, "Unsaved Draft Content");
         let index = state.save.list_saves().unwrap();
@@ -1635,11 +1800,11 @@ mod tests {
         )
         .unwrap();
 
-        let runtime = AppRuntime::new(&root).unwrap();
+        let runtime = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(runtime._session_lease.session_id, DESKTOP_SESSION_ID);
         drop(runtime);
         assert!(lock_path.is_file());
-        let reacquired = AppRuntime::new(&root).unwrap();
+        let reacquired = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(reacquired._session_lease.session_id, DESKTOP_SESSION_ID);
         drop(reacquired);
         let _ = fs::remove_dir_all(root);
@@ -1651,7 +1816,7 @@ mod tests {
             "adm-newrust-runtime-malformed-session-{}",
             adm_new_foundation::new_stable_id("test").unwrap()
         ));
-        let runtime = AppRuntime::new(&root).unwrap();
+        let runtime = AppRuntime::new_restoring(&root).unwrap();
         {
             let mut state = runtime.lock().unwrap();
             state.project_state.project_name = "Recover Hidden Draft".to_string();
@@ -1662,7 +1827,7 @@ mod tests {
         let lock_path = lock_root.join(format!("{DESKTOP_SESSION_ID}.lock"));
         fs::write(&lock_path, "{partial").unwrap();
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(restored._session_lease.session_id, DESKTOP_SESSION_ID);
         assert_eq!(
             restored.lock().unwrap().project_state.project_name,
@@ -1703,7 +1868,7 @@ mod tests {
         )
         .unwrap();
 
-        let runtime = AppRuntime::new(&root).unwrap();
+        let runtime = AppRuntime::new_restoring(&root).unwrap();
         let state = runtime.lock().unwrap();
         assert_eq!(state.pipeline_state.run_id, "interrupted-run");
         assert_eq!(state.pipeline_state.status, "recovery_blocked");
@@ -1770,7 +1935,7 @@ mod tests {
         checkpoint.units[0].reconcile_required = true;
         repository.save_attempt_and_current(&checkpoint).unwrap();
 
-        let runtime = AppRuntime::new(&root).unwrap();
+        let runtime = AppRuntime::new_restoring(&root).unwrap();
         assert_eq!(runtime.lock().unwrap().pipeline_state.status, "recoverable");
         let recovered = repository.load_current("recoverable_run").unwrap().unwrap();
         assert_eq!(recovered.status, PipelineCheckpointStatus::Recoverable);
@@ -1830,7 +1995,7 @@ mod tests {
         )
         .unwrap();
 
-        let runtime = AppRuntime::new(&root).unwrap();
+        let runtime = AppRuntime::new_restoring(&root).unwrap();
         let state = runtime.lock().unwrap();
         assert_eq!(state.pipeline_state.run_id, "durable-run");
         assert_eq!(state.pipeline_state.status, "failed");
@@ -2070,7 +2235,7 @@ mod tests {
         }
         drop(runtime);
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         {
             let state = restored.lock().unwrap();
             assert_eq!(state.patch.list().len(), 1);
@@ -2205,7 +2370,7 @@ mod tests {
         }
         drop(runtime);
 
-        let restored = AppRuntime::new(&root).unwrap();
+        let restored = AppRuntime::new_restoring(&root).unwrap();
         {
             let state = restored.lock().unwrap();
             assert_eq!(

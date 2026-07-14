@@ -1,7 +1,9 @@
 # Codex CLI 入口
 
-请先阅读 `README.md` 获取项目导读，再阅读 `docs/independence/README.md` 获取独立性边界。
+请先阅读 `AI_README.md` 获取 AI 开发入口，再阅读 `knowledge/ai_memory/INDEX.md` 获取跨会话记忆。项目导读和独立性边界分别位于 `README.md` 与 `docs/independence/README.md`。
 
 本仓库是独立的 Rust/Tauri 项目。禁止从父目录读取业务数据、Schema、产物注册表、测试基线或计划文件；所有构建、测试和运行输入必须位于本仓库或显式的运行时数据目录。
+
+`knowledge/ai_memory/session_history/` 包含从旧 Python 项目继承的历史开发记忆，仅供开发者和 AI 阅读，不是产品运行时输入。历史中出现的 Python 文件名、旧路径或旧架构不构成当前实现依据；当前代码与本仓库文档优先。
 
 构建和测试产生的缓存必须进入受控输出目录，并在任务结束时执行垃圾清理节点。任何 `user_data`、正式存档、密钥或 portable 恢复副本都属于受保护数据。

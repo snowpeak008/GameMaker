@@ -177,6 +177,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "adm-new-root-launcher"
+version = "0.1.0"
+dependencies = [
+ "embed-resource",
+]
+
+[[package]]
 name = "adm-new-save"
 version = "0.1.0"
 dependencies = [

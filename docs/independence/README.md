@@ -11,6 +11,8 @@ load build, test, protocol, or product data from its parent directory.
   require Cargo workspace files.
 - Runtime user data belongs in the portable `user_data` directory or the Tauri
   application-data directory. It never belongs in the source tree or Git history.
+- Optional blank-draft retention is scoped to that selected Rust data root, is disabled
+  by default, and never scans a parent or sibling project for cleanup candidates.
 
 ## Resource ownership
 

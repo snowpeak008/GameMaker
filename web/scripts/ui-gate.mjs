@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import {
   sampleAiConfig,
@@ -24,7 +23,6 @@ const gateDir = process.env.ADM_UI_GATE_DIR
 const step07ImageBase64 = (
   await readFile(join(newrustRoot, "testdata", "fixplan", "fixtures", "step07", "images", "visible-640x384.png"))
 ).toString("base64");
-const browsers = findBrowsers();
 const playwrightChromium = await loadPlaywrightChromium();
 const viewports = [
   { id: "desktop", width: 1280, height: 820 },
@@ -54,8 +52,8 @@ const targets = [
 if (!existsSync(indexPath)) {
   throw new Error("web/dist/index.html is missing; run npm run build first");
 }
-if (!playwrightChromium && browsers.length === 0) {
-  throw new Error("no headless browser found for UI gate");
+if (!playwrightChromium) {
+  throw new Error("Playwright is required for the UI gate; run npm ci before npm run ui-gate");
 }
 
 await mkdir(gateDir, { recursive: true });
@@ -64,53 +62,55 @@ const baseUrl = `http://127.0.0.1:${staticServer.port}`;
 
 const evidence = [];
 let playwrightBrowser = null;
-if (playwrightChromium) {
-  try {
-    playwrightBrowser = await playwrightChromium.launch({ headless: true });
-  } catch (error) {
-    console.warn(`Playwright Chromium launch failed, using browser fallback if available: ${error.message}`);
-  }
-}
-for (const language of languages) {
-  for (const target of targets) {
-    for (const viewport of viewports) {
-      const viewportSuffix = viewport.id === "desktop" ? "" : `-${viewport.id}`;
-      const languagePrefix = language === "zh-CN" ? "" : `${language}-`;
-      const filename = `ui-${languagePrefix}${target.id}${viewportSuffix}.png`;
-      const screenshotPath = join(gateDir, filename);
-      const url = new URL(`${baseUrl}/index.html`);
-      url.search = target.query;
-      url.searchParams.set("lang", language);
-      const browser = playwrightBrowser
-        ? await captureWithPlaywright(playwrightBrowser, target, viewport, url.href, screenshotPath)
-        : captureScreenshot(target.id, viewport, url.href, screenshotPath);
-      const png = await readFile(screenshotPath);
-      const check = inspectPng(png, viewport);
-      if (!check.ok) {
-        throw new Error(`invalid or blank screenshot for ${language}/${target.id}/${viewport.id}: ${check.reason}`);
+try {
+  playwrightBrowser = await playwrightChromium.launch({ headless: true, timeout: 15_000 });
+  for (const language of languages) {
+    for (const target of targets) {
+      for (const viewport of viewports) {
+        const viewportSuffix = viewport.id === "desktop" ? "" : `-${viewport.id}`;
+        const languagePrefix = language === "zh-CN" ? "" : `${language}-`;
+        const filename = `ui-${languagePrefix}${target.id}${viewportSuffix}.png`;
+        const screenshotPath = join(gateDir, filename);
+        const url = new URL(`${baseUrl}/index.html`);
+        url.search = target.query;
+        url.searchParams.set("lang", language);
+        const browser = await captureWithPlaywright(
+          playwrightBrowser,
+          target,
+          viewport,
+          url.href,
+          screenshotPath,
+        );
+        const png = await readFile(screenshotPath);
+        const check = inspectPng(png, viewport);
+        if (!check.ok) {
+          throw new Error(
+            `invalid or blank screenshot for ${language}/${target.id}/${viewport.id}: ${check.reason}`,
+          );
+        }
+        evidence.push({
+          id: target.id,
+          language,
+          query: target.query,
+          viewport: viewport.id,
+          path: `gates/${filename}`,
+          width: check.width,
+          height: check.height,
+          byteLength: png.length,
+          uniqueByteCount: check.uniqueByteCount,
+          browser,
+        });
       }
-      evidence.push({
-        id: target.id,
-        language,
-        query: target.query,
-        viewport: viewport.id,
-        path: `gates/${filename}`,
-        width: check.width,
-        height: check.height,
-        byteLength: png.length,
-        uniqueByteCount: check.uniqueByteCount,
-        browser,
-      });
     }
   }
+} finally {
+  await playwrightBrowser?.close().catch(() => {});
+  await closeServer(staticServer.server);
 }
-await playwrightBrowser?.close();
-await closeServer(staticServer.server);
 
 const manifest = {
   gate: "ui-parity",
-  browserCandidates: browsers,
-  playwright: Boolean(playwrightChromium),
+  playwright: true,
   languages,
   viewports,
   server: baseUrl,
@@ -160,16 +160,6 @@ function contentType(filePath) {
   }[extname(filePath)] ?? "application/octet-stream";
 }
 
-function findBrowsers() {
-  return [
-    process.env.ADM_BROWSER,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-  ].filter(Boolean).filter((candidate) => existsSync(candidate));
-}
-
 async function loadPlaywrightChromium() {
   try {
     const { chromium } = await import("playwright");
@@ -182,6 +172,8 @@ async function loadPlaywrightChromium() {
 async function captureWithPlaywright(browser, target, viewport, url, screenshotPath) {
   const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
   try {
+    page.setDefaultTimeout(10_000);
+    page.setDefaultNavigationTimeout(15_000);
     if (target.id === "save_manager") {
       await installSaveManagerFixture(page, sampleSaveIndex());
     }
@@ -200,11 +192,11 @@ async function captureWithPlaywright(browser, target, viewport, url, screenshotP
     if (target.id === "config") {
       await installAiConfigFixture(page, sampleAiConfig(), sampleAiConfigDescriptors());
     }
-    await page.goto(url, { waitUntil: "load" });
+    await page.goto(url, { waitUntil: "load", timeout: 15_000 });
     await page.waitForTimeout(700);
     await assertDomState(page, target);
     await assertResponsiveLayout(page, target, viewport);
-    await page.screenshot({ path: screenshotPath, fullPage: false });
+    await page.screenshot({ path: screenshotPath, fullPage: false, timeout: 15_000 });
     return "playwright:chromium";
   } finally {
     await page.close();
@@ -653,12 +645,21 @@ async function assertDomState(page, target) {
     await assertVisible(page, '[data-ai-config-tab="dev"]');
     await page.waitForFunction(() => document.querySelectorAll(".ai-entry-active-action").length >= 2);
     const activeActions = page.locator(".ai-entry-active-action");
-    const minimumHeight = page.viewportSize().width <= 899 ? 44 : 40;
     for (let index = 0; index < await activeActions.count(); index += 1) {
       const box = await activeActions.nth(index).boundingBox();
-      if (!box || box.height + 0.5 < minimumHeight) {
-        throw new Error(`AI current-entry action is too small (${box?.height ?? 0} < ${minimumHeight})`);
+      if (!box || box.height < 28 || box.height > 34) {
+        throw new Error(`AI current-entry action should stay compact (height ${box?.height ?? 0})`);
       }
+    }
+    const entryLabelAudit = await page.locator(".ai-entry-select").evaluateAll((buttons) =>
+      buttons.map((button) => ({
+        text: button.textContent.trim(),
+        label: button.querySelector("strong")?.textContent.trim() ?? "",
+        childCount: button.children.length,
+      })),
+    );
+    if (entryLabelAudit.some((entry) => entry.childCount !== 1 || entry.text !== entry.label)) {
+      throw new Error("AI entry list exposed an internal ID or configuration type");
     }
     const previousCurrent = page.locator(".ai-entry-active-action.is-current").first();
     const nextCurrent = page.locator(".ai-entry-active-action:not(.is-current)").first();
@@ -1017,6 +1018,20 @@ async function assertDomState(page, target) {
   }
   if (target.id === "step07") {
     await assertVisible(page, '[data-role="style-grid"]');
+    const layoutAudit = await page.evaluate(() => {
+      const shell = document.querySelector(".pipeline-shell");
+      const card = document.querySelector(".step-card");
+      return {
+        firstTrack: Number.parseFloat(getComputedStyle(shell).gridTemplateColumns),
+        cardHeight: card?.getBoundingClientRect().height ?? 0,
+      };
+    });
+    if (page.viewportSize().width >= 900 && Math.abs(layoutAudit.firstTrack - 330) > 1) {
+      throw new Error(`pipeline step column is not 330px (${layoutAudit.firstTrack})`);
+    }
+    if (layoutAudit.cardHeight < 123.5) {
+      throw new Error(`pipeline step card height is below 124px (${layoutAudit.cardHeight})`);
+    }
     await page.waitForFunction(() => {
       const image = document.querySelector(".style-image-preview-image:not([hidden])");
       return image?.src.startsWith("blob:") && image.naturalWidth > 1 && image.naturalHeight > 1;
@@ -1037,6 +1052,16 @@ async function assertDomState(page, target) {
     if (previewAudit.leakedBase64 || previewAudit.leakedPath) {
       throw new Error("Step07 preview leaked Base64 or an internal path into the DOM");
     }
+    await page.locator('.step-card[data-stage-id="06"]').click();
+    if (await page.locator('[data-role="style-grid"]').isVisible()) {
+      throw new Error("Step07 images remained visible after selecting Step06");
+    }
+    const detailHeading = await page.locator('[data-role="pipeline-detail"] h2').textContent();
+    if (!detailHeading?.includes("06")) {
+      throw new Error("pipeline detail did not switch to the selected Step06 content");
+    }
+    await page.locator('.step-card[data-stage-id="07"]').click();
+    await assertVisible(page, '[data-role="style-grid"]');
   }
 }
 
@@ -1048,32 +1073,6 @@ async function assertVisible(page, selector) {
   if (!(await locator.first().isVisible())) {
     throw new Error(`DOM selector is not visible: ${selector}`);
   }
-}
-
-function captureScreenshot(targetId, viewport, url, screenshotPath) {
-  const args = [
-    "--headless",
-    "--disable-gpu",
-    "--disable-gpu-compositing",
-    "--disable-dev-shm-usage",
-    "--use-angle=swiftshader",
-    "--use-gl=swiftshader",
-    "--disable-features=UseSkiaRenderer,Vulkan,WebGPU,CanvasOopRasterization",
-    "--allow-file-access-from-files",
-    "--virtual-time-budget=1600",
-    `--window-size=${viewport.width},${viewport.height}`,
-    `--screenshot=${screenshotPath}`,
-    url,
-  ];
-  const failures = [];
-  for (const candidate of browsers) {
-    const result = spawnSync(candidate, args, { encoding: "utf8" });
-    if (!result.error && result.status === 0) {
-      return candidate;
-    }
-    failures.push(`${candidate}: ${result.error?.message ?? result.stderr}`);
-  }
-  throw new Error(`browser screenshot failed for ${targetId}: ${failures.join("\n")}`);
 }
 
 function inspectPng(buffer, viewport) {

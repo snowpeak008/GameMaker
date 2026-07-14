@@ -1,5 +1,7 @@
 import { enumLabel, t } from "../i18n.js";
 import { setModalVisible } from "../modal-focus.js";
+import { clear, el } from "../shared/dom.js";
+import { asArray, read } from "../shared/value.js";
 
 export const AI_CONFIG_CATEGORIES = [
   {
@@ -433,7 +435,6 @@ function renderEntryList(modal, model, rerender) {
     const selectButton = el("button", "ai-entry-select");
     selectButton.type = "button";
     selectButton.append(markRuntime(el("strong", "", entry.label || entry.id)));
-    selectButton.append(markRuntime(el("span", "", `${entry.id} / ${entry.configType}`)));
     selectButton.onclick = () => {
       const wasSelected = model.selectedEntryId === entry.id;
       if (!syncDialogForm(modal, model, status)) {
@@ -987,43 +988,6 @@ function setRuntimeText(element, text) {
 function markRuntime(element) {
   if (element) {
     element.dataset.contentOrigin = "runtime";
-  }
-  return element;
-}
-
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function clear(element) {
-  if (!element) {
-    return;
-  }
-  while (element.firstChild) {
-    element.firstChild.remove();
-  }
-}
-
-function el(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
   }
   return element;
 }

@@ -7,7 +7,10 @@ import {
 } from "./features/design.js";
 import { createPipelineApi, initPipelinePanel } from "./features/pipeline.js";
 import { createSettingsStyleApi, initSettingsStyleModals } from "./features/settings-style.js";
-import { createUtilityPanelApis, initUtilityPanels } from "./features/utility-panels.js";
+import {
+  createUtilityPanelApis,
+  createUtilityPanelsController,
+} from "./features/utility-panels.js";
 import {
   enumLabel,
   initializeLanguageMode,
@@ -48,7 +51,7 @@ export const DEFAULT_SHELL_STATE = {
   },
   startup: {
     validateDataIntegrity: true,
-    autoRestoreCurrentSave: true,
+    autoRestoreCurrentSave: false,
     releaseLockAtExit: true,
     pruneDraftsKeepCount: 0,
     startupStatus: "ready",
@@ -151,6 +154,80 @@ export async function listenForShutdownErrors(onError) {
   });
 }
 
+export function createShellRefreshScheduler(documentRef, refresh, options = {}) {
+  const windowRef = documentRef?.defaultView ?? globalThis;
+  const setTimer = options.setTimeout ?? windowRef?.setTimeout?.bind(windowRef) ?? globalThis.setTimeout;
+  const clearTimer =
+    options.clearTimeout ?? windowRef?.clearTimeout?.bind(windowRef) ?? globalThis.clearTimeout;
+  const intervalMs = Math.max(100, Number(options.intervalMs ?? 2500));
+  let timer = null;
+  let running = false;
+  let stopped = true;
+
+  const clearScheduled = () => {
+    if (timer !== null) {
+      clearTimer(timer);
+      timer = null;
+    }
+  };
+  const schedule = () => {
+    if (stopped || running || documentRef?.hidden) {
+      return;
+    }
+    clearScheduled();
+    timer = setTimer(() => {
+      timer = null;
+      void run();
+    }, intervalMs);
+  };
+  const run = async () => {
+    if (stopped || running || documentRef?.hidden) {
+      return;
+    }
+    running = true;
+    try {
+      await refresh();
+    } catch (error) {
+      options.onError?.(error);
+    } finally {
+      running = false;
+      schedule();
+    }
+  };
+  const onVisibilityChange = () => {
+    if (documentRef?.hidden) {
+      clearScheduled();
+    } else if (!stopped && !running) {
+      clearScheduled();
+      void run();
+    }
+  };
+
+  documentRef?.addEventListener?.("visibilitychange", onVisibilityChange);
+  return {
+    start() {
+      if (!stopped) {
+        return;
+      }
+      stopped = false;
+      if (options.immediate === false) {
+        schedule();
+      } else {
+        void run();
+      }
+    },
+    stop() {
+      stopped = true;
+      clearScheduled();
+      documentRef?.removeEventListener?.("visibilitychange", onVisibilityChange);
+    },
+    refreshNow() {
+      clearScheduled();
+      return run();
+    },
+  };
+}
+
 export async function initApp(documentRef = globalThis.document) {
   if (!documentRef) {
     return null;
@@ -159,12 +236,13 @@ export async function initApp(documentRef = globalThis.document) {
   initializeLanguageMode(documentRef, initialShellState?.uiLanguage);
   const model = createShellModel();
   let utilityApis = null;
+  let utilityPanelsController = null;
   for (const tab of documentRef.querySelectorAll(".task-tab")) {
     tab.addEventListener("click", () => {
       const route = model.switchRoute(tab.dataset.route);
       applyRoute(documentRef, route);
-      if (["patch", "package", "logs", "sdk"].includes(route) && utilityApis) {
-        initUtilityPanels(documentRef, utilityApis);
+      if (["patch", "package", "logs", "sdk"].includes(route) && utilityPanelsController) {
+        void utilityPanelsController.refresh(route);
       }
     });
   }
@@ -206,8 +284,11 @@ export async function initApp(documentRef = globalThis.document) {
       systemStatus: t("shell.shutdownSaveFailed", { error }),
     });
   });
-  void refreshShellState();
-  documentRef.defaultView?.setInterval?.(refreshShellState, 2500);
+  const shellRefreshScheduler = createShellRefreshScheduler(documentRef, refreshShellState);
+  shellRefreshScheduler.start();
+  documentRef.defaultView?.addEventListener?.("beforeunload", () => shellRefreshScheduler.stop(), {
+    once: true,
+  });
   const designApi = createDesignApi(invokeCommand);
   const designControllerPromise = initDesignWorkbench(documentRef, designApi);
   const aiApi = createAiInterviewApi(invokeCommand);
@@ -229,6 +310,7 @@ export async function initApp(documentRef = globalThis.document) {
   };
   pipelineControllerPromise = initPipelinePanel(documentRef, pipelineApi);
   utilityApis = createUtilityPanelApis(invokeCommand);
+  utilityPanelsController = createUtilityPanelsController(documentRef, utilityApis);
   utilityApis.save.currentState = async () => {
     const controller = await designControllerPromise;
     return controller?.latestView({ reload: true }) ?? null;
@@ -242,11 +324,11 @@ export async function initApp(documentRef = globalThis.document) {
       designController?.reload(),
       pipelineController?.reload(),
       initAiInterviewPanel(documentRef, aiApi),
-      initUtilityPanels(documentRef, utilityApis),
+      utilityPanelsController.refreshAll(),
       refreshShellState(),
     ]);
   };
-  initUtilityPanels(documentRef, utilityApis);
+  void utilityPanelsController.refreshAll();
   const openAiConfig = initAiConfigDialog(documentRef, createAiConfigApi(invokeCommand));
   const settingsStyle = initSettingsStyleModals(documentRef, createSettingsStyleApi(invokeCommand));
   applyInitialUrlState(documentRef, model, openAiConfig, settingsStyle);

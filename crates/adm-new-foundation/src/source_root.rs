@@ -319,3 +319,32 @@ fn project_root_not_found(start_path: &Path) -> AdmError {
         start_path.display()
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_root_rejects_a_non_rust_project_identity_before_loading_resources() {
+        let root = std::env::temp_dir()
+            .join(crate::new_stable_id("foreign-source-root").expect("temporary root identifier"));
+        fs::create_dir_all(&root).expect("temporary root");
+        fs::write(
+            root.join(ROOT_MARKER),
+            r#"{
+                "schemaVersion": 1,
+                "kind": "source-project-root",
+                "projectId": "autodesignmaker-python",
+                "workspaceManifest": "Cargo.toml",
+                "lockfiles": ["Cargo.lock", "web/package-lock.json"],
+                "resourceManifest": "knowledge/resource-manifest.json"
+            }"#,
+        )
+        .expect("foreign root marker");
+
+        let error = SourceProjectRoot::open(&root).expect_err("foreign root must be rejected");
+
+        assert!(error.message().contains("unexpected source project id"));
+        let _ = fs::remove_dir_all(root);
+    }
+}

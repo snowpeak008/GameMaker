@@ -1,5 +1,7 @@
 import { enumLabel, getLanguageMode, hasTranslation, t } from "../i18n.js";
 import { setModalVisible } from "../modal-focus.js";
+import { clear, el } from "../shared/dom.js";
+import { asArray, read } from "../shared/value.js";
 
 export const DESIGN_FILTERS = [
   { id: "all", labelKey: "design.filter.all" },
@@ -60,11 +62,7 @@ const QUALITY_VIOLATION_DEFINITIONS = [
 export function createDesignApi(invokeCommand) {
   return {
     async load() {
-      try {
-        return unwrapCommandResponse(await invokeCommand("load_design_workbench"));
-      } catch {
-        return null;
-      }
+      return unwrapCommandResponse(await invokeCommand("load_design_workbench"));
     },
     async updateNode(request) {
       return unwrapCommandResponse(await invokeCommand("update_node", { request }));
@@ -143,6 +141,7 @@ export function normalizeDesignView(input) {
   const domains = normalizeDomains(read(input, "domains"), nodes);
   return {
     projectName: localizeDefaultProjectName(read(input, "projectName", "project_name")),
+    loadError: String(read(input, "loadError", "load_error") ?? ""),
     profile: normalizeProfile(read(input, "profile")),
     domains,
     nodes,
@@ -158,6 +157,7 @@ export function normalizeDesignView(input) {
 export function createDesignModel(viewInput) {
   const view = normalizeDesignView(viewInput) ?? {
     projectName: t("design.defaultProjectName"),
+    loadError: "",
     profile: [],
     domains: [],
     nodes: [],
@@ -454,6 +454,7 @@ export class DesignWorkbenchController {
     this.renderApi = {
       ...api,
       applyView: (view) => this.render(view),
+      reloadView: () => this.reload(),
       commitProjectName: (name) => this.commitProjectName(name),
       trackMutation: (operation) => this.trackMutation(operation),
     };
@@ -470,8 +471,11 @@ export class DesignWorkbenchController {
   }
 
   async reload() {
-    const view = await this.api.load();
-    return this.render(view);
+    try {
+      return this.render(await this.api.load());
+    } catch (error) {
+      return this.render({ loadError: String(error?.message ?? error) });
+    }
   }
 
   commitProjectName(name) {
@@ -536,9 +540,20 @@ export function renderDesignWorkbench(documentRef, viewInput, api = {}) {
   }
   const model = createDesignModel(viewInput);
   const status = panel.querySelector('[data-role="design-status"]');
-  const setStatus = (message) => {
+  const setStatus = (message, options = {}) => {
     if (status) {
       status.textContent = t("design.status.prefix", { message });
+      if (options.retry && typeof api.reloadView === "function") {
+        const retry = documentRef.createElement("button");
+        retry.className = "status-retry-button";
+        retry.type = "button";
+        retry.textContent = t("design.action.retryLoad");
+        retry.onclick = async () => {
+          setStatus(t("design.status.retrying"));
+          await api.reloadView();
+        };
+        status.append(retry);
+      }
     }
   };
 
@@ -552,7 +567,11 @@ export function renderDesignWorkbench(documentRef, viewInput, api = {}) {
     renderGameplaySystems(panel.querySelector('[data-role="gameplay-systems"]'), model);
     renderNodes(panel.querySelector('[data-role="node-list"]'), model, dispatchUpdate, setStatus);
     renderResult(panel, model, activeResultTab(panel));
-    setStatus(t(viewInput ? "design.status.loaded" : "design.status.waiting"));
+    if (model.view.loadError) {
+      setStatus(t("design.status.loadFailed", { error: model.view.loadError }), { retry: true });
+    } else {
+      setStatus(t(viewInput ? "design.status.loaded" : "design.status.waiting"));
+    }
   };
 
   renderFilterOptions(panel, model.filterId);
@@ -2078,43 +2097,6 @@ function humanizeContentId(value) {
     .filter(Boolean)
     .map((word) => acronyms.get(word.toLowerCase()) ?? `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`)
     .join(" ");
-}
-
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function clear(element) {
-  if (!element) {
-    return;
-  }
-  while (element.firstChild) {
-    element.firstChild.remove();
-  }
-}
-
-function el(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
-  }
-  return element;
 }
 
 function projectEl(tag, className, text) {

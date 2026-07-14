@@ -2,6 +2,7 @@
 members = [
     "apps/adm-new-cli",
     "apps/desktop-tauri",
+    "apps/root-launcher",
     "crates/adm-new-foundation",
     "crates/adm-new-contracts",
     "crates/adm-new-governance",

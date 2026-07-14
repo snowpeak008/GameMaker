@@ -6,6 +6,7 @@ import {
   DEFAULT_SHELL_STATE,
   TASKS,
   createShellModel,
+  createShellRefreshScheduler,
   formatProgress,
   getShellState,
   listenForShutdownErrors,
@@ -47,6 +48,7 @@ import {
   buildMarkAiInaccurateRequest,
   buildSaveAiArchiveRequest,
   buildSubmitAiTurnRequest,
+  createAiInterviewApi,
   createAiInterviewController,
   createAiInterviewModel,
   normalizeAiBackgroundJobs,
@@ -118,6 +120,8 @@ import {
   buildSaveProjectRequest,
   buildUpdateSdkReviewStatusRequest,
   commandDiagnostics,
+  createUtilityPanelApis,
+  createUtilityPanelsController,
   filterLogEntries,
   formatSaveCommandError,
   formatLogJsonl,
@@ -153,15 +157,19 @@ import {
   openSourceProjectRoot,
   safeProjectJoin,
 } from "./project-root.mjs";
+import { clear, el } from "../src/shared/dom.js";
+import { asArray, read } from "../src/shared/value.js";
 
 const root = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const src = join(root, "src");
 const target = process.argv[2] ?? "all";
-const [html, css, pipelineJs, settingsStyleJs] = await Promise.all([
+const [html, css, pipelineJs, aiConfigJs, settingsStyleJs, uiGateJs] = await Promise.all([
   readFile(join(src, "index.html"), "utf8"),
   readFile(join(src, "styles.css"), "utf8"),
   readFile(join(src, "features", "pipeline.js"), "utf8"),
+  readFile(join(src, "features", "ai-config.js"), "utf8"),
   readFile(join(src, "features", "settings-style.js"), "utf8"),
+  readFile(join(root, "scripts", "ui-gate.mjs"), "utf8"),
 ]);
 
 if (target === "all" || target === "project-root") {
@@ -169,7 +177,7 @@ if (target === "all" || target === "project-root") {
 }
 
 if (target === "all" || target === "shell") {
-  await testShell(html, css);
+  await testShell(html, css, uiGateJs);
 }
 
 if (target === "all" || target === "design") {
@@ -177,7 +185,7 @@ if (target === "all" || target === "design") {
 }
 
 if (target === "all" || target === "ai-interview") {
-  testAiInterview(html, css);
+  await testAiInterview(html, css);
 }
 
 if (target === "all" || target === "pipeline") {
@@ -189,7 +197,7 @@ if (target === "all" || target === "utility-panels") {
 }
 
 if (target === "all" || target === "ai-config") {
-  testAiConfig(html, css);
+  testAiConfig(html, css, aiConfigJs);
 }
 
 if (target === "all" || target === "settings-style") {
@@ -279,7 +287,7 @@ async function writeProjectRootFixture(rootPath, markerOverrides = {}) {
   await writeFile(join(rootPath, ".project_root"), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
 }
 
-async function testShell(html, css) {
+async function testShell(html, css, uiGateJs) {
   assert(TASKS.length === 6, "shell must expose six task areas");
   for (const task of TASKS) {
     assert(html.includes(`data-route="${task.id}"`), `missing route button: ${task.id}`);
@@ -321,6 +329,16 @@ async function testShell(html, css) {
   }
   assert(html.includes('data-theme="adm-light"'), "desktop shell theme marker is required");
   assert(html.includes("bottom-status-bar"), "bottom status bar is required");
+  assert(css.includes(".secondary-button"), "dynamic secondary buttons need shared styling");
+  assert(css.includes("button:focus-visible"), "keyboard focus styling is required");
+  assert(css.includes("scrollbar-width: thin"), "task navigation must remain discoverable when narrow");
+  assert(css.includes("flex: 0 0 auto"), "compact retry actions must not collapse on narrow screens");
+  assert(
+    uiGateJs.includes("Playwright is required for the UI gate"),
+    "UI gate must fail closed when Playwright is unavailable",
+  );
+  assert(!uiGateJs.includes("spawnSync"), "UI gate must not use an unbounded system-browser fallback");
+  assert(uiGateJs.includes("setDefaultNavigationTimeout"), "UI gate navigation needs a timeout");
   assert(formatProgress(DEFAULT_SHELL_STATE.progress) === t("shell.progress", { passed: 0, total: 15 }), "progress format changed");
   assert(DEFAULT_SHELL_STATE.window.minWidth === 1180, "minimum desktop width should match Python shell");
   assert(DEFAULT_SHELL_STATE.window.minHeight === 720, "minimum desktop height should match Python shell");
@@ -343,6 +361,91 @@ async function testShell(html, css) {
   assert(model.activeRoute === "design", "default route should be design");
   assert(model.switchRoute("pipeline") === "pipeline", "route switch failed");
   assertThrows(() => model.switchRoute("missing"), "unknown route should throw");
+  assert(read({ snake_value: 4 }, "snakeValue", "snake_value") === 4, "shared read should accept snake case");
+  assert(asArray("not-an-array").length === 0, "shared array normalization should reject scalars");
+  const children = [
+    { remove: () => children.shift() },
+    { remove: () => children.shift() },
+  ];
+  clear({ get firstChild() { return children[0] ?? null; } });
+  assert(children.length === 0, "shared DOM clear should remove every child");
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    createElement: (tag) => ({ tag, className: "", textContent: "" }),
+  };
+  const sharedElement = el("button", "shared-button", "Action");
+  if (previousDocument === undefined) {
+    delete globalThis.document;
+  } else {
+    globalThis.document = previousDocument;
+  }
+  assert(
+    sharedElement.tag === "button" &&
+      sharedElement.className === "shared-button" &&
+      sharedElement.textContent === "Action",
+    "shared DOM element creation changed",
+  );
+
+  const visibilityListeners = new Map();
+  let scheduledRefresh = null;
+  let activeRefreshes = 0;
+  let maxActiveRefreshes = 0;
+  const refreshResolvers = [];
+  const schedulerDocument = {
+    hidden: false,
+    addEventListener: (event, listener) => visibilityListeners.set(event, listener),
+    removeEventListener: (event) => visibilityListeners.delete(event),
+  };
+  const scheduler = createShellRefreshScheduler(
+    schedulerDocument,
+    () => {
+      activeRefreshes += 1;
+      maxActiveRefreshes = Math.max(maxActiveRefreshes, activeRefreshes);
+      return new Promise((resolve) =>
+        refreshResolvers.push(() => {
+          activeRefreshes -= 1;
+          resolve();
+        }),
+      );
+    },
+    {
+      intervalMs: 100,
+      setTimeout: (callback) => {
+        scheduledRefresh = callback;
+        return callback;
+      },
+      clearTimeout: (callback) => {
+        if (scheduledRefresh === callback) {
+          scheduledRefresh = null;
+        }
+      },
+    },
+  );
+  scheduler.start();
+  assert(refreshResolvers.length === 1, "shell scheduler should refresh immediately");
+  visibilityListeners.get("visibilitychange")();
+  assert(refreshResolvers.length === 1, "shell scheduler must not overlap an active refresh");
+  refreshResolvers[0]();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert(typeof scheduledRefresh === "function", "shell scheduler should wait between refreshes");
+  const runScheduledRefresh = scheduledRefresh;
+  scheduledRefresh = null;
+  runScheduledRefresh();
+  assert(refreshResolvers.length === 2, "shell scheduler should run the next serial refresh");
+  schedulerDocument.hidden = true;
+  visibilityListeners.get("visibilitychange")();
+  refreshResolvers[1]();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert(scheduledRefresh === null, "hidden documents must pause shell refresh scheduling");
+  schedulerDocument.hidden = false;
+  visibilityListeners.get("visibilitychange")();
+  assert(refreshResolvers.length === 3, "visible documents should refresh immediately");
+  scheduler.stop();
+  refreshResolvers[2]();
+  await Promise.resolve();
+  assert(maxActiveRefreshes === 1, "shell refresh requests must remain non-overlapping");
 
   globalThis.__TAURI__ = {
     core: {
@@ -607,6 +710,14 @@ async function testDesign(html, css) {
   await designApi.deleteTemplate(buildDeleteTemplateRequest("custom_demo"));
   assert(commandCalls.map(([command]) => command).slice(1).join(",") === "list_templates,select_template,save_template,delete_template", "template API command sequence mismatch");
 
+  const failingDesignApi = createDesignApi(async () => {
+    throw new Error("design backend unavailable");
+  });
+  await assertRejects(
+    () => failingDesignApi.load(),
+    "design load failures must not be downgraded to an empty project",
+  );
+
   let authoritative = { ...sampleDesignView(), project_name: "First Model" };
   const renderedNames = [];
   const fakeDocument = {
@@ -635,9 +746,24 @@ async function testDesign(html, css) {
     buildSaveProjectRequest(controller.view).state.projectName === "Edited Project",
     "save request must not retain the first design model",
   );
+
+  let failedDesignModel = null;
+  const failedController = new DesignWorkbenchController(
+    fakeDocument,
+    { load: async () => Promise.reject(new Error("design load failed")) },
+    (_document, nextView) => {
+      failedDesignModel = createDesignModel(nextView);
+      return failedDesignModel;
+    },
+  );
+  await failedController.reload();
+  assert(
+    failedDesignModel.view.loadError === "design load failed",
+    "design controller must render an explicit load error model",
+  );
 }
 
-function testAiInterview(html, css) {
+async function testAiInterview(html, css) {
   for (const required of [
     'data-role="ai-interview-panel"',
     'data-role="ai-current-question"',
@@ -677,6 +803,15 @@ function testAiInterview(html, css) {
   assert(model.routeText.includes("mechanics"), "model should expose route overview");
   const running = createAiInterviewModel(sampleAiInterviewState({ status: "running", backendStage: "queued" }));
   assert(running.actionsDisabled, "running state should disable actions");
+  const failed = createAiInterviewModel({ lastError: "interview load failed" });
+  assert(failed.statusText.includes("interview load failed"), "AI load errors must be visible in status");
+  const failingInterviewApi = createAiInterviewApi(async () => {
+    throw new Error("interview backend unavailable");
+  });
+  await assertRejects(
+    () => failingInterviewApi.load(),
+    "AI interview load failures must not be downgraded to idle state",
+  );
   const commandViewState = normalizeAiInterviewState({
     state: sampleAiInterviewState({ status: "completed" }),
     stream_events: [{ stage: "calling_codex", turn_id: "turn-3", message: "calling", running: true }],
@@ -738,6 +873,18 @@ function testPipeline(html, css, pipelineJs) {
   ]) {
     assert(css.includes(required), `missing pipeline CSS rule: ${required}`);
   }
+  assert(
+    /\.pipeline-shell\s*\{[^}]*grid-template-columns:\s*330px\s+minmax\(0,\s*1fr\)/su.test(css),
+    "pipeline step column must be exactly 50% wider than the original 220px column",
+  );
+  assert(
+    /\.step-card\s*\{[^}]*min-height:\s*124px/su.test(css),
+    "pipeline step card must be exactly twice the original 62px minimum height",
+  );
+  assert(
+    pipelineJs.includes("const shouldShow = styleGridVisibleForStage(stage)"),
+    "Step07 images must be gated by the selected stage",
+  );
 
   const view = normalizePipelineView(samplePipelineView());
   assert(view.stages.length === 15, "pipeline stages should normalize full Step00-14 tree");
@@ -975,9 +1122,73 @@ async function testUtilityPanels(html, css) {
     formatSaveCommandError(saveLocked) === t("utility.save.error.locked"),
     "stable save errors should localize by code",
   );
+
+  const failingApis = createUtilityPanelApis(async () => {
+    throw new Error("utility backend unavailable");
+  });
+  await assertRejects(
+    () => failingApis.logs.read(),
+    "utility API load failures must reach the panel controller",
+  );
+
+  const calls = { patch: 0, package: 0, logs: 0, sdk: 0, context: 0, save: 0 };
+  const noPanelDocument = { querySelector: () => null };
+  const controller = createUtilityPanelsController(noPanelDocument, {
+    patch: { list: async () => (calls.patch += 1, []) },
+    package: { load: async () => (calls.package += 1, null) },
+    logs: { read: async () => (calls.logs += 1, []) },
+    sdk: {
+      list: async () => (calls.sdk += 1, []),
+      approvedContext: async () => (calls.context += 1, ""),
+    },
+    save: { list: async () => (calls.save += 1, null) },
+  });
+  await controller.refresh("logs");
+  assert(calls.logs === 1, "logs route must refresh the logs panel");
+  assert(
+    calls.patch + calls.package + calls.sdk + calls.context + calls.save === 0,
+    "single-panel refresh must not fan out to unrelated utility APIs",
+  );
+  const allUtilityValues = await controller.refreshAll();
+  for (const field of ["patches", "packageView", "logs", "sdks", "sdkContext", "saveIndex"]) {
+    assert(Object.hasOwn(allUtilityValues, field), `utility refreshAll result is missing ${field}`);
+  }
+  assert(
+    calls.patch === 1 &&
+      calls.package === 1 &&
+      calls.logs === 2 &&
+      calls.sdk === 1 &&
+      calls.context === 1 &&
+      calls.save === 1,
+    "utility refreshAll must load each target exactly once",
+  );
+
+  const pending = [];
+  const racingController = createUtilityPanelsController(noPanelDocument, {
+    logs: {
+      read: () => new Promise((resolve) => pending.push(resolve)),
+    },
+  });
+  const oldRefresh = racingController.refresh("logs");
+  const newRefresh = racingController.refresh("logs");
+  pending[1]([]);
+  const newResult = await newRefresh;
+  pending[0]([]);
+  const oldResult = await oldRefresh;
+  assert(!newResult.stale, "latest utility refresh must be accepted");
+  assert(oldResult.stale, "late utility refresh must not overwrite newer panel state");
+
+  const failedController = createUtilityPanelsController(noPanelDocument, {
+    package: { load: async () => Promise.reject(new Error("package read failed")) },
+  });
+  const failedResult = await failedController.refresh("package");
+  assert(
+    failedResult.value.__loadError === "package read failed",
+    "utility controller must preserve explicit load failures",
+  );
 }
 
-function testAiConfig(html, css) {
+function testAiConfig(html, css, aiConfigJs) {
   setAiConfigDescriptors(sampleAiConfigDescriptors());
   for (const required of [
     'data-role="ai-config-modal"',
@@ -1004,6 +1215,14 @@ function testAiConfig(html, css) {
   ]) {
     assert(css.includes(required), `missing AI config CSS rule: ${required}`);
   }
+  assert(
+    /\.ai-entry-active-action\s*\{[^}]*min-height:\s*30px/su.test(css),
+    "AI current-entry actions must use the compact height",
+  );
+  assert(
+    !aiConfigJs.includes("${entry.id} / ${entry.configType}"),
+    "AI entry list must not expose internal IDs or config types",
+  );
 
   const config = normalizeAiConfig(sampleAiConfig());
   assert(config.schemaVersion === 3, "AI config schema should normalize");

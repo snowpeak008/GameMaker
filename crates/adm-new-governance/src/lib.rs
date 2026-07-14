@@ -2870,6 +2870,9 @@ pub fn standalone_boundary_gate_report(repo_root: &Path) -> AdmResult<GateReport
         ));
     }
 
+    add_standalone_boundary_scan_rows(&mut report, repo_root)?;
+    add_user_data_first_run_rows(&mut report, repo_root)?;
+
     let nested = repo_root.join("apps").join("adm-new-cli").join("src");
     match find_repo_root(&nested) {
         Some(found) if same_path(&found, repo_root) => {
@@ -2882,30 +2885,772 @@ pub fn standalone_boundary_gate_report(repo_root: &Path) -> AdmResult<GateReport
         None => report.add_blocker("relocation_contract_root_not_found"),
     }
 
-    for relative_path in [
-        "crates/adm-new-governance/src/lib.rs",
-        "apps/adm-new-cli/src/main.rs",
-    ] {
-        let path = repo_root.join(relative_path);
-        if !path.is_file() {
+    Ok(report)
+}
+
+const STANDALONE_BOUNDARY_SCAN_ROOTS: &[&str] = &[
+    "Cargo.toml",
+    "Cargo.lock",
+    ".project_root",
+    RESOURCE_MANIFEST_PATH,
+    "pipeline/artifact_layer/registry.json",
+    "apps",
+    "crates",
+    "tools",
+    "web/package.json",
+    "web/package-lock.json",
+    "web/vite.config.ts",
+    "web/tsconfig.json",
+    "web/tsconfig.node.json",
+    "web/src",
+    "web/scripts",
+];
+
+const STANDALONE_BOUNDARY_SCAN_EXTENSIONS: &[&str] = &[
+    "cmd", "css", "html", "js", "json", "md", "ps1", "rs", "toml", "ts", "tsx", "yaml", "yml",
+];
+
+const STANDALONE_BOUNDARY_SKIP_DIRS: &[&str] = &[
+    ".git",
+    ".vite",
+    "dist",
+    "gates",
+    "node_modules",
+    "target",
+    "test-results",
+];
+
+#[derive(Debug, Clone)]
+struct StandaloneBoundaryPattern {
+    label: String,
+    text: String,
+}
+
+#[derive(Debug, Clone)]
+struct StandaloneBoundaryHit {
+    relative_path: String,
+    label: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TreeStats {
+    files: u64,
+    bytes: u64,
+}
+
+fn add_standalone_boundary_scan_rows(report: &mut GateReport, repo_root: &Path) -> AdmResult<()> {
+    let (file_count, hits) = scan_standalone_boundary_files(repo_root)?;
+    report.add_row(
+        "boundary_scan:root_count",
+        STANDALONE_BOUNDARY_SCAN_ROOTS.len().to_string(),
+    );
+    report.add_row(
+        "boundary_scan:extension_count",
+        STANDALONE_BOUNDARY_SCAN_EXTENSIONS.len().to_string(),
+    );
+    report.add_row(
+        "boundary_scan:skip_dirs",
+        STANDALONE_BOUNDARY_SKIP_DIRS.join(","),
+    );
+    report.add_row("boundary_scan:file_count", file_count.to_string());
+    report.add_row("boundary_scan:forbidden_hit_count", hits.len().to_string());
+    for hit in hits {
+        report.add_blocker(format!(
+            "standalone_forbidden_parent_dependency:{}:{}",
+            hit.relative_path, hit.label
+        ));
+    }
+    Ok(())
+}
+
+fn scan_standalone_boundary_files(
+    repo_root: &Path,
+) -> AdmResult<(usize, Vec<StandaloneBoundaryHit>)> {
+    let patterns = standalone_boundary_patterns();
+    let mut file_count = 0_usize;
+    let mut hits = Vec::new();
+    for relative_root in STANDALONE_BOUNDARY_SCAN_ROOTS {
+        let path = repo_root.join(relative_root);
+        if !path.exists() {
             continue;
         }
-        let source = fs::read_to_string(path)?;
-        let forbidden_patterns = [
-            ["repo_root.join(\"", "NEWrust", "\")"].concat(),
-            ["join(\"plan\")", ".join(\"NEWrust\")"].concat(),
-            ["containing plan", "/NEWrust"].concat(),
-        ];
-        for forbidden in forbidden_patterns {
-            if source.contains(&forbidden) {
-                report.add_blocker(format!(
-                    "standalone_parent_path_dependency:{relative_path}:{forbidden}"
-                ));
+        scan_standalone_boundary_path(repo_root, &path, &patterns, &mut file_count, &mut hits)?;
+    }
+    hits.sort_by(|left, right| {
+        left.relative_path
+            .cmp(&right.relative_path)
+            .then_with(|| left.label.cmp(&right.label))
+    });
+    Ok((file_count, hits))
+}
+
+fn scan_standalone_boundary_path(
+    repo_root: &Path,
+    path: &Path,
+    patterns: &[StandaloneBoundaryPattern],
+    file_count: &mut usize,
+    hits: &mut Vec<StandaloneBoundaryHit>,
+) -> AdmResult<()> {
+    let metadata = fs::metadata(path)?;
+    if metadata.is_dir() {
+        if should_skip_standalone_boundary_dir(path) {
+            return Ok(());
+        }
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            scan_standalone_boundary_path(repo_root, &entry.path(), patterns, file_count, hits)?;
+        }
+        return Ok(());
+    }
+
+    if !metadata.is_file() || !should_scan_standalone_boundary_file(path) {
+        return Ok(());
+    }
+    *file_count += 1;
+    let source = fs::read_to_string(path)?;
+    let relative_path = normalize_relative_path(repo_root, path);
+    for pattern in patterns {
+        if source.contains(&pattern.text) {
+            hits.push(StandaloneBoundaryHit {
+                relative_path: relative_path.clone(),
+                label: pattern.label.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn should_skip_standalone_boundary_dir(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| STANDALONE_BOUNDARY_SKIP_DIRS.contains(&name))
+        .unwrap_or(false)
+}
+
+fn should_scan_standalone_boundary_file(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if matches!(
+        name,
+        ".project_root"
+            | "Cargo.lock"
+            | "Cargo.toml"
+            | "package-lock.json"
+            | "package.json"
+            | "tsconfig.json"
+            | "tsconfig.node.json"
+            | "vite.config.ts"
+    ) {
+        return true;
+    }
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            STANDALONE_BOUNDARY_SCAN_EXTENSIONS
+                .iter()
+                .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+        })
+        .unwrap_or(false)
+}
+
+fn standalone_boundary_patterns() -> Vec<StandaloneBoundaryPattern> {
+    let domains = [
+        "knowledge",
+        "pipeline",
+        "saves",
+        "drafts",
+        "sandbox",
+        "settings",
+    ];
+    let mut patterns = Vec::new();
+    for domain in domains {
+        patterns.push(StandaloneBoundaryPattern {
+            label: format!("parent:{domain}:slash"),
+            text: ["..", "/", domain].concat(),
+        });
+        patterns.push(StandaloneBoundaryPattern {
+            label: format!("parent:{domain}:backslash"),
+            text: ["..", "\\", domain].concat(),
+        });
+        patterns.push(StandaloneBoundaryPattern {
+            label: format!("legacy-root:{domain}:slash"),
+            text: ["AutoDesignMaker", "/", domain].concat(),
+        });
+        patterns.push(StandaloneBoundaryPattern {
+            label: format!("legacy-root:{domain}:backslash"),
+            text: ["AutoDesignMaker", "\\", domain].concat(),
+        });
+    }
+    patterns.push(StandaloneBoundaryPattern {
+        label: "legacy-newrust-name-root".to_string(),
+        text: ["repo_root.join(\"", "NEW", "rust", "\")"].concat(),
+    });
+    patterns.push(StandaloneBoundaryPattern {
+        label: "legacy-plan-newrust-root".to_string(),
+        text: ["join(\"plan\")", ".join(\"", "NEW", "rust", "\")"].concat(),
+    });
+    patterns.push(StandaloneBoundaryPattern {
+        label: "legacy-parent-absolute-win".to_string(),
+        text: ["E:", "\\workwork", "\\CrewAi", "\\AutoDesignMaker"].concat(),
+    });
+    patterns.push(StandaloneBoundaryPattern {
+        label: "legacy-parent-absolute-slash".to_string(),
+        text: ["E:", "/workwork", "/CrewAi", "/AutoDesignMaker"].concat(),
+    });
+    patterns
+}
+
+fn add_user_data_first_run_rows(report: &mut GateReport, repo_root: &Path) -> AdmResult<()> {
+    let formal_root = repo_root
+        .join("dist")
+        .join("AutoDesignMaker-NEWrust-release");
+    let formal_manifest_path = formal_root.join("build-manifest.json");
+    report.add_row(
+        "formal_release:path",
+        normalize_relative_path(repo_root, &formal_root),
+    );
+    report.add_row(
+        "formal_release:build_manifest_present",
+        formal_manifest_path.is_file().to_string(),
+    );
+    if formal_manifest_path.is_file() {
+        let manifest = read_json_file(&formal_manifest_path)?;
+        let mode = string_value(&manifest, "user_data_mode");
+        let manifest_files = json_u64_value(&manifest, "user_data_files");
+        let manifest_bytes = json_u64_value(&manifest, "user_data_bytes");
+        let filesystem_stats = measure_optional_tree(&formal_root.join("user_data"))?;
+        let clean = mode == "clean_release"
+            && manifest_files == Some(0)
+            && manifest_bytes == Some(0)
+            && filesystem_stats.files == 0
+            && filesystem_stats.bytes == 0;
+        report.add_row("formal_release:user_data_mode", mode.clone());
+        report.add_row(
+            "formal_release:manifest_user_data_files",
+            manifest_files
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "missing".to_string()),
+        );
+        report.add_row(
+            "formal_release:manifest_user_data_bytes",
+            manifest_bytes
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "missing".to_string()),
+        );
+        report.add_row(
+            "formal_release:filesystem_user_data_files",
+            filesystem_stats.files.to_string(),
+        );
+        report.add_row(
+            "formal_release:filesystem_user_data_bytes",
+            filesystem_stats.bytes.to_string(),
+        );
+        report.add_row("formal_release_clean_first_run", clean.to_string());
+        if !clean {
+            report.add_blocker("formal_release_user_data_not_clean_first_run");
+        }
+    } else {
+        report.add_row("formal_release_clean_first_run", "not_built");
+    }
+
+    let local_trial = repo_root
+        .join("dist")
+        .join("AutoDesignMaker-NEWrust")
+        .join("user_data");
+    let local_stats = measure_optional_tree(&local_trial)?;
+    report.add_row("local_trial_user_data:protected", "true");
+    report.add_row(
+        "local_trial_user_data:path",
+        normalize_relative_path(repo_root, &local_trial),
+    );
+    report.add_row("local_trial_user_data:files", local_stats.files.to_string());
+    report.add_row("local_trial_user_data:bytes", local_stats.bytes.to_string());
+    Ok(())
+}
+
+fn json_u64_value(value: &Value, field: &str) -> Option<u64> {
+    value.get(field).and_then(Value::as_u64)
+}
+
+fn measure_optional_tree(root: &Path) -> AdmResult<TreeStats> {
+    if !root.exists() {
+        return Ok(TreeStats { files: 0, bytes: 0 });
+    }
+    measure_tree(root)
+}
+
+fn measure_tree(root: &Path) -> AdmResult<TreeStats> {
+    let metadata = fs::metadata(root)?;
+    if metadata.is_file() {
+        return Ok(TreeStats {
+            files: 1,
+            bytes: metadata.len(),
+        });
+    }
+    let mut stats = TreeStats { files: 0, bytes: 0 };
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = fs::metadata(&path)?;
+        if metadata.is_dir() {
+            let child = measure_tree(&path)?;
+            stats.files = stats
+                .files
+                .checked_add(child.files)
+                .ok_or_else(|| AdmError::new("tree file count overflow"))?;
+            stats.bytes = stats
+                .bytes
+                .checked_add(child.bytes)
+                .ok_or_else(|| AdmError::new("tree byte count overflow"))?;
+        } else if metadata.is_file() {
+            stats.files = stats
+                .files
+                .checked_add(1)
+                .ok_or_else(|| AdmError::new("tree file count overflow"))?;
+            stats.bytes = stats
+                .bytes
+                .checked_add(metadata.len())
+                .ok_or_else(|| AdmError::new("tree byte count overflow"))?;
+        }
+    }
+    Ok(stats)
+}
+
+fn normalize_relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+const DESIGN_SYNC_GROUPS: &[&str] = &[
+    "knowledge/design_data",
+    "knowledge/schemas",
+    "pipeline/artifact_layer",
+];
+
+const DESIGN_SYNC_SAMPLE_LIMIT: usize = 12;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesignSyncAuditReport {
+    pub status: String,
+    pub rust_root: String,
+    pub python_root: String,
+    pub python_source_mode: String,
+    pub group_count: usize,
+    pub difference_count: usize,
+    pub format_difference_count: usize,
+    pub blocker_count: usize,
+    pub blockers: Vec<String>,
+    pub groups: Vec<DesignSyncGroupReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesignSyncGroupReport {
+    pub group: String,
+    pub status: String,
+    pub rust_path: String,
+    pub python_path: String,
+    pub rust_exists: bool,
+    pub python_exists: bool,
+    pub rust_file_count: usize,
+    pub python_file_count: usize,
+    pub rust_bytes: u64,
+    pub python_bytes: u64,
+    pub rust_digest: String,
+    pub python_digest: String,
+    pub rust_semantic_digest: String,
+    pub python_semantic_digest: String,
+    pub identical_files: usize,
+    pub byte_identical_files: usize,
+    pub format_only_files: usize,
+    pub changed_files: usize,
+    pub missing_in_rust: usize,
+    pub rust_only: usize,
+    pub sample_differences: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DesignSyncTree {
+    exists: bool,
+    file_count: usize,
+    bytes: u64,
+    raw_digest: String,
+    semantic_digest: String,
+    files: BTreeMap<String, DesignSyncFile>,
+}
+
+#[derive(Debug, Clone)]
+struct DesignSyncFile {
+    raw_digest: String,
+    semantic_digest: String,
+}
+
+pub fn design_sync_audit_report(
+    rust_root: &Path,
+    python_root: &Path,
+) -> AdmResult<DesignSyncAuditReport> {
+    let mut blockers = Vec::new();
+    if !is_standalone_repo_root(rust_root) {
+        blockers.push("rust_root_not_standalone".to_string());
+    }
+    if !python_root.is_dir() {
+        blockers.push(format!("python_root_missing:{}", python_root.display()));
+    } else if !python_root.join("AI_README.md").is_file()
+        && !python_root.join("AGENTS.md").is_file()
+    {
+        blockers.push(format!(
+            "python_root_identity_unrecognized:{}",
+            python_root.display()
+        ));
+    }
+
+    let mut groups = Vec::new();
+    for group in DESIGN_SYNC_GROUPS {
+        groups.push(compare_design_sync_group(rust_root, python_root, group)?);
+    }
+    for group in &groups {
+        if !group.rust_exists {
+            blockers.push(format!("rust_design_group_missing:{}", group.group));
+        } else if group.rust_file_count == 0 {
+            blockers.push(format!("rust_design_group_empty:{}", group.group));
+        }
+        if !group.python_exists {
+            blockers.push(format!("python_design_group_missing:{}", group.group));
+        } else if group.python_file_count == 0 {
+            blockers.push(format!("python_design_group_empty:{}", group.group));
+        }
+    }
+    let difference_count = groups
+        .iter()
+        .map(|group| group.changed_files + group.missing_in_rust + group.rust_only)
+        .sum();
+    let format_difference_count = groups.iter().map(|group| group.format_only_files).sum();
+    let status = if !blockers.is_empty() {
+        "failed"
+    } else if difference_count == 0 {
+        "passed"
+    } else {
+        "attention_required"
+    };
+    Ok(DesignSyncAuditReport {
+        status: status.to_string(),
+        rust_root: rust_root.display().to_string(),
+        python_root: python_root.display().to_string(),
+        python_source_mode: "explicit_audit_only".to_string(),
+        group_count: groups.len(),
+        difference_count,
+        format_difference_count,
+        blocker_count: blockers.len(),
+        blockers,
+        groups,
+    })
+}
+
+pub fn render_design_sync_audit(report: &DesignSyncAuditReport) -> String {
+    let mut output = String::new();
+    output.push_str("# NEWrust Design Sync Audit\n");
+    output.push_str(&format!("status={}\n", report.status));
+    output.push_str(&format!("timestamp_unix={}\n", unix_timestamp()));
+    output.push_str(&format!("rust_root={}\n", report.rust_root));
+    output.push_str(&format!("python_root={}\n", report.python_root));
+    output.push_str(&format!(
+        "python_source_mode={}\n",
+        report.python_source_mode
+    ));
+    output.push_str(&format!("group_count={}\n", report.group_count));
+    output.push_str(&format!("difference_count={}\n", report.difference_count));
+    output.push_str(&format!(
+        "format_difference_count={}\n",
+        report.format_difference_count
+    ));
+    output.push_str(&format!("blocker_count={}\n", report.blocker_count));
+    for blocker in &report.blockers {
+        output.push_str(&format!("blocker={blocker}\n"));
+    }
+    for group in &report.groups {
+        output.push_str(&format!("group:{}:status={}\n", group.group, group.status));
+        output.push_str(&format!(
+            "group:{}:rust_exists={}\n",
+            group.group, group.rust_exists
+        ));
+        output.push_str(&format!(
+            "group:{}:python_exists={}\n",
+            group.group, group.python_exists
+        ));
+        output.push_str(&format!(
+            "group:{}:rust_file_count={}\n",
+            group.group, group.rust_file_count
+        ));
+        output.push_str(&format!(
+            "group:{}:python_file_count={}\n",
+            group.group, group.python_file_count
+        ));
+        output.push_str(&format!(
+            "group:{}:byte_identical_files={}\n",
+            group.group, group.byte_identical_files
+        ));
+        output.push_str(&format!(
+            "group:{}:format_only_files={}\n",
+            group.group, group.format_only_files
+        ));
+        output.push_str(&format!(
+            "group:{}:identical_files={}\n",
+            group.group, group.identical_files
+        ));
+        output.push_str(&format!(
+            "group:{}:changed_files={}\n",
+            group.group, group.changed_files
+        ));
+        output.push_str(&format!(
+            "group:{}:missing_in_rust={}\n",
+            group.group, group.missing_in_rust
+        ));
+        output.push_str(&format!(
+            "group:{}:rust_only={}\n",
+            group.group, group.rust_only
+        ));
+        output.push_str(&format!(
+            "group:{}:rust_digest={}\n",
+            group.group, group.rust_digest
+        ));
+        output.push_str(&format!(
+            "group:{}:python_digest={}\n",
+            group.group, group.python_digest
+        ));
+        output.push_str(&format!(
+            "group:{}:rust_semantic_digest={}\n",
+            group.group, group.rust_semantic_digest
+        ));
+        output.push_str(&format!(
+            "group:{}:python_semantic_digest={}\n",
+            group.group, group.python_semantic_digest
+        ));
+        for sample in &group.sample_differences {
+            output.push_str(&format!("group:{}:sample={sample}\n", group.group));
+        }
+    }
+    output
+}
+
+fn compare_design_sync_group(
+    rust_root: &Path,
+    python_root: &Path,
+    group: &str,
+) -> AdmResult<DesignSyncGroupReport> {
+    let rust_path = rust_root.join(group);
+    let python_path = python_root.join(group);
+    let rust_tree = collect_design_sync_tree(&rust_path)?;
+    let python_tree = collect_design_sync_tree(&python_path)?;
+    let mut identical_files = 0_usize;
+    let mut byte_identical_files = 0_usize;
+    let mut format_only_files = 0_usize;
+    let mut changed_files = 0_usize;
+    let mut missing_in_rust = 0_usize;
+    let mut rust_only = 0_usize;
+    let mut semantic_samples = Vec::new();
+    let mut format_samples = Vec::new();
+
+    for (relative, python_file) in &python_tree.files {
+        match rust_tree.files.get(relative) {
+            Some(rust_file) if rust_file.semantic_digest == python_file.semantic_digest => {
+                identical_files += 1;
+                if rust_file.raw_digest == python_file.raw_digest {
+                    byte_identical_files += 1;
+                } else {
+                    format_only_files += 1;
+                    push_design_sync_sample(&mut format_samples, format!("format_only:{relative}"));
+                }
+            }
+            Some(_) => {
+                changed_files += 1;
+                push_design_sync_sample(&mut semantic_samples, format!("changed:{relative}"));
+            }
+            None => {
+                missing_in_rust += 1;
+                push_design_sync_sample(
+                    &mut semantic_samples,
+                    format!("missing_in_rust:{relative}"),
+                );
             }
         }
     }
+    for relative in rust_tree.files.keys() {
+        if !python_tree.files.contains_key(relative) {
+            rust_only += 1;
+            push_design_sync_sample(&mut semantic_samples, format!("rust_only:{relative}"));
+        }
+    }
+    let mut sample_differences = semantic_samples;
+    for sample in format_samples {
+        push_design_sync_sample(&mut sample_differences, sample);
+    }
 
-    Ok(report)
+    let status = if !rust_tree.exists && !python_tree.exists {
+        "missing_both"
+    } else if !rust_tree.exists {
+        "rust_missing"
+    } else if !python_tree.exists {
+        "python_missing"
+    } else if changed_files == 0 && missing_in_rust == 0 && rust_only == 0 {
+        "passed"
+    } else {
+        "different"
+    };
+
+    Ok(DesignSyncGroupReport {
+        group: group.to_string(),
+        status: status.to_string(),
+        rust_path: rust_path.display().to_string(),
+        python_path: python_path.display().to_string(),
+        rust_exists: rust_tree.exists,
+        python_exists: python_tree.exists,
+        rust_file_count: rust_tree.file_count,
+        python_file_count: python_tree.file_count,
+        rust_bytes: rust_tree.bytes,
+        python_bytes: python_tree.bytes,
+        rust_digest: rust_tree.raw_digest,
+        python_digest: python_tree.raw_digest,
+        rust_semantic_digest: rust_tree.semantic_digest,
+        python_semantic_digest: python_tree.semantic_digest,
+        identical_files,
+        byte_identical_files,
+        format_only_files,
+        changed_files,
+        missing_in_rust,
+        rust_only,
+        sample_differences,
+    })
+}
+
+fn collect_design_sync_tree(root: &Path) -> AdmResult<DesignSyncTree> {
+    if !root.exists() {
+        return Ok(DesignSyncTree {
+            exists: false,
+            file_count: 0,
+            bytes: 0,
+            raw_digest: String::new(),
+            semantic_digest: String::new(),
+            files: BTreeMap::new(),
+        });
+    }
+    let mut files = BTreeMap::new();
+    let mut bytes = 0_u64;
+    collect_design_sync_files(root, root, &mut files, &mut bytes)?;
+    let raw_digest_input = files
+        .iter()
+        .map(|(relative, file)| format!("{relative}|{}", file.raw_digest))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let semantic_digest_input = files
+        .iter()
+        .map(|(relative, file)| format!("{relative}|{}", file.semantic_digest))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(DesignSyncTree {
+        exists: true,
+        file_count: files.len(),
+        bytes,
+        raw_digest: sha256_hex(raw_digest_input.as_bytes()),
+        semantic_digest: sha256_hex(semantic_digest_input.as_bytes()),
+        files,
+    })
+}
+
+fn collect_design_sync_files(
+    root: &Path,
+    current: &Path,
+    files: &mut BTreeMap<String, DesignSyncFile>,
+    total_bytes: &mut u64,
+) -> AdmResult<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = fs::metadata(&path)?;
+        if metadata.is_dir() {
+            collect_design_sync_files(root, &path, files, total_bytes)?;
+        } else if metadata.is_file() {
+            let content = fs::read(&path)?;
+            *total_bytes = total_bytes
+                .checked_add(
+                    u64::try_from(content.len())
+                        .map_err(|_| AdmError::new("design sync file size overflow"))?,
+                )
+                .ok_or_else(|| AdmError::new("design sync tree byte count overflow"))?;
+            files.insert(
+                normalize_relative_path(root, &path),
+                DesignSyncFile {
+                    raw_digest: sha256_hex(&content),
+                    semantic_digest: design_sync_semantic_digest(&path, &content),
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn design_sync_semantic_digest(path: &Path, content: &[u8]) -> String {
+    let Ok(text) = std::str::from_utf8(content) else {
+        return sha256_hex(content);
+    };
+    let normalized = normalize_design_sync_text(text);
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let semantic = match extension.as_str() {
+        "json" => canonical_json_text(&normalized).unwrap_or(normalized),
+        "jsonl" => canonical_jsonl_text(&normalized).unwrap_or(normalized),
+        _ => normalized,
+    };
+    sha256_hex(semantic.as_bytes())
+}
+
+fn normalize_design_sync_text(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .trim_end_matches('\n')
+        .to_string()
+}
+
+fn canonical_json_text(text: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    serde_json::to_string(&canonical_json_value(value)).ok()
+}
+
+fn canonical_jsonl_text(text: &str) -> Option<String> {
+    let mut lines = Vec::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
+        lines.push(serde_json::to_string(&canonical_json_value(value)).ok()?);
+    }
+    Some(lines.join("\n"))
+}
+
+fn canonical_json_value(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(values) => {
+            serde_json::Value::Array(values.into_iter().map(canonical_json_value).collect())
+        }
+        serde_json::Value::Object(values) => {
+            let mut entries = values.into_iter().collect::<Vec<_>>();
+            entries.sort_by(|left, right| left.0.cmp(&right.0));
+            let values = entries
+                .into_iter()
+                .map(|(key, value)| (key, canonical_json_value(value)))
+                .collect();
+            serde_json::Value::Object(values)
+        }
+        value => value,
+    }
+}
+
+fn push_design_sync_sample(samples: &mut Vec<String>, sample: String) {
+    if samples.len() < DESIGN_SYNC_SAMPLE_LIMIT {
+        samples.push(sample);
+    }
 }
 
 pub fn release_gate_report(repo_root: &Path) -> AdmResult<GateReport> {
@@ -5328,6 +6073,182 @@ mod tests {
         let repo_root = find_repo_root(&cwd).unwrap();
         let report = standalone_boundary_gate_report(&repo_root).unwrap();
         assert!(report.passed(), "{}", report.render());
+    }
+
+    #[test]
+    fn standalone_boundary_gate_detects_parent_resource_dependency() {
+        let root =
+            std::env::temp_dir().join(format!("standalone_boundary_hit_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        write_standalone_root_fixture(&root);
+        let source_dir = root.join("apps/demo/src");
+        fs::create_dir_all(&source_dir).unwrap();
+        let forbidden = ["..", "/", "knowledge"].concat();
+        fs::write(
+            source_dir.join("main.rs"),
+            format!("fn main() {{ let _path = {forbidden:?}; }}\n"),
+        )
+        .unwrap();
+
+        let report = standalone_boundary_gate_report(&root).unwrap();
+        let rendered = report.render();
+        assert!(
+            rendered.contains("standalone_forbidden_parent_dependency"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("parent:knowledge:slash"), "{rendered}");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn standalone_boundary_gate_blocks_dirty_formal_release_user_data() {
+        let root = std::env::temp_dir().join(format!(
+            "standalone_release_userdata_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        write_standalone_root_fixture(&root);
+        let release_root = root.join("dist/AutoDesignMaker-NEWrust-release");
+        fs::create_dir_all(&release_root).unwrap();
+        fs::write(
+            release_root.join("build-manifest.json"),
+            r#"{"user_data_mode":"clean_release","user_data_files":1,"user_data_bytes":0}"#,
+        )
+        .unwrap();
+
+        let report = standalone_boundary_gate_report(&root).unwrap();
+        let rendered = report.render();
+        assert!(
+            rendered.contains("formal_release_user_data_not_clean_first_run"),
+            "{rendered}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn design_sync_audit_reports_identical_and_changed_trees() {
+        let root = std::env::temp_dir().join(format!("design_sync_audit_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let rust_root = root.join("rust");
+        let python_root = root.join("python");
+        write_standalone_root_fixture(&rust_root);
+        fs::create_dir_all(&python_root).unwrap();
+        fs::write(python_root.join("AI_README.md"), "# fixture\n").unwrap();
+
+        for group in DESIGN_SYNC_GROUPS {
+            fs::create_dir_all(rust_root.join(group)).unwrap();
+            fs::create_dir_all(python_root.join(group)).unwrap();
+            fs::write(rust_root.join(group).join("shared.json"), "{\"value\":1}\n").unwrap();
+            fs::write(
+                python_root.join(group).join("shared.json"),
+                "{\"value\":1}\n",
+            )
+            .unwrap();
+        }
+
+        let identical = design_sync_audit_report(&rust_root, &python_root).unwrap();
+        assert_eq!(identical.status, "passed");
+        assert_eq!(identical.difference_count, 0);
+        assert_eq!(identical.format_difference_count, 0);
+
+        fs::write(
+            rust_root.join("knowledge/design_data").join("shared.json"),
+            "{\r\n  \"value\": 1\r\n}\r\n",
+        )
+        .unwrap();
+        let format_only = design_sync_audit_report(&rust_root, &python_root).unwrap();
+        let format_only_design_data = format_only
+            .groups
+            .iter()
+            .find(|group| group.group == "knowledge/design_data")
+            .unwrap();
+        assert_eq!(format_only.status, "passed");
+        assert_eq!(format_only.difference_count, 0);
+        assert_eq!(format_only.format_difference_count, 1);
+        assert_eq!(format_only_design_data.identical_files, 1);
+        assert_eq!(format_only_design_data.byte_identical_files, 0);
+        assert_eq!(format_only_design_data.format_only_files, 1);
+        assert_eq!(
+            format_only_design_data.rust_semantic_digest,
+            format_only_design_data.python_semantic_digest
+        );
+
+        fs::write(
+            python_root
+                .join("knowledge/design_data")
+                .join("shared.json"),
+            "{\"value\":2}\n",
+        )
+        .unwrap();
+        fs::write(
+            python_root
+                .join("knowledge/design_data")
+                .join("python_only.json"),
+            "{\"value\":3}\n",
+        )
+        .unwrap();
+        fs::write(
+            rust_root
+                .join("knowledge/design_data")
+                .join("rust_only.json"),
+            "{\"value\":4}\n",
+        )
+        .unwrap();
+
+        let changed = design_sync_audit_report(&rust_root, &python_root).unwrap();
+        let design_data = changed
+            .groups
+            .iter()
+            .find(|group| group.group == "knowledge/design_data")
+            .unwrap();
+        assert_eq!(changed.status, "attention_required");
+        assert_eq!(changed.difference_count, 3);
+        assert_eq!(design_data.changed_files, 1);
+        assert_eq!(design_data.missing_in_rust, 1);
+        assert_eq!(design_data.rust_only, 1);
+        assert!(
+            design_data
+                .sample_differences
+                .iter()
+                .any(|sample| sample.contains("changed:shared.json"))
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn design_sync_audit_fails_when_a_required_group_is_missing_or_empty_on_both_sides() {
+        let root =
+            std::env::temp_dir().join(format!("design_sync_required_group_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let rust_root = root.join("rust");
+        let python_root = root.join("python");
+        write_standalone_root_fixture(&rust_root);
+        fs::create_dir_all(&python_root).unwrap();
+        fs::write(python_root.join("AI_README.md"), "# fixture\n").unwrap();
+
+        fs::create_dir_all(rust_root.join("knowledge/design_data")).unwrap();
+        fs::create_dir_all(python_root.join("knowledge/design_data")).unwrap();
+        for group in ["knowledge/schemas", "pipeline/artifact_layer"] {
+            fs::create_dir_all(rust_root.join(group)).unwrap();
+            fs::create_dir_all(python_root.join(group)).unwrap();
+            fs::write(rust_root.join(group).join("shared.json"), "{}\n").unwrap();
+            fs::write(python_root.join(group).join("shared.json"), "{}\n").unwrap();
+        }
+
+        let report = design_sync_audit_report(&rust_root, &python_root).unwrap();
+
+        assert_eq!(report.status, "failed");
+        assert!(
+            report
+                .blockers
+                .contains(&"rust_design_group_empty:knowledge/design_data".to_string())
+        );
+        assert!(
+            report
+                .blockers
+                .contains(&"python_design_group_empty:knowledge/design_data".to_string())
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

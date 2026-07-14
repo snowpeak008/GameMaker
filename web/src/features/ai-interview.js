@@ -1,4 +1,6 @@
 import { enumLabel, t } from "../i18n.js";
+import { clear, el } from "../shared/dom.js";
+import { asArray, read } from "../shared/value.js";
 
 export const DEFAULT_AI_INTERVIEW_STATE = {
   schemaVersion: "1.0",
@@ -22,11 +24,7 @@ export const DEFAULT_AI_INTERVIEW_STATE = {
 export function createAiInterviewApi(invokeCommand) {
   return {
     async load() {
-      try {
-        return unwrapCommandResponse(await invokeCommand("load_ai_interview"));
-      } catch {
-        return null;
-      }
+      return unwrapCommandResponse(await invokeCommand("load_ai_interview"));
     },
     async submitTurn(request) {
       return unwrapCommandResponse(await invokeCommand("submit_ai_turn", { request }));
@@ -163,7 +161,17 @@ export async function initAiInterviewPanel(documentRef, api) {
   if (!documentRef) {
     return null;
   }
-  const state = await api.load();
+  let state;
+  try {
+    state = await api.load();
+  } catch (error) {
+    state = {
+      ...DEFAULT_AI_INTERVIEW_STATE,
+      status: "failed",
+      backendStage: "failed",
+      lastError: String(error?.message ?? error),
+    };
+  }
   return renderAiInterviewPanel(documentRef, state, api);
 }
 
@@ -388,32 +396,6 @@ function unwrapCommandResponse(response) {
   return response ?? null;
 }
 
-function read(object, camelKey, snakeKey = camelKey) {
-  if (!object || typeof object !== "object") {
-    return undefined;
-  }
-  if (Object.hasOwn(object, camelKey)) {
-    return object[camelKey];
-  }
-  if (Object.hasOwn(object, snakeKey)) {
-    return object[snakeKey];
-  }
-  return undefined;
-}
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function clear(element) {
-  if (!element) {
-    return;
-  }
-  while (element.firstChild) {
-    element.firstChild.remove();
-  }
-}
-
 function statusHasRuntimeContent(state) {
   return Boolean(
     state.lastError ||
@@ -437,15 +419,4 @@ function markRuntimeWhen(element, condition) {
     return element;
   }
   return condition ? markRuntime(element) : element;
-}
-
-function el(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
-  }
-  return element;
 }

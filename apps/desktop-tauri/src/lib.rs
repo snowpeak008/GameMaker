@@ -2,6 +2,7 @@
 
 pub mod commands;
 mod design_specs;
+mod draft_retention;
 pub mod runtime;
 
 pub const APP_NAME: &str = "AutoDesignMaker NEWrust";
@@ -111,7 +112,7 @@ pub fn default_shell_config() -> DesktopShellConfig {
         startup: StartupPolicy {
             pycache_prefix: ".cache/pycache".to_string(),
             validate_data_integrity: true,
-            auto_restore_current_save: true,
+            auto_restore_current_save: false,
             release_lock_at_exit: true,
             prune_drafts_keep_count: 0,
             locked_archive_status: ShellStatus {
@@ -455,7 +456,7 @@ mod tests {
         assert_eq!(config.window.min_width, 1180);
         assert_eq!(config.window.min_height, 720);
         assert!(config.startup.validate_data_integrity);
-        assert!(config.startup.auto_restore_current_save);
+        assert!(!config.startup.auto_restore_current_save);
         assert!(config.startup.release_lock_at_exit);
         assert_eq!(config.startup.prune_drafts_keep_count, 0);
         assert!(
