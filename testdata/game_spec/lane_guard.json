@@ -1,0 +1,215 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "lane_guard_sample",
+    "revision": 1
+  },
+  "intent": {
+    "title": "Lane Guard Sample",
+    "summary": "Read incoming pressure and build a stable defense with limited energy.",
+    "experiencePromises": {
+      "read_and_counter": {
+        "statement": "Every incoming threat has a readable counter opportunity.",
+        "priority": "primary"
+      }
+    },
+    "audiences": ["strategy players"],
+    "targetPlatforms": ["desktop"],
+    "successMetrics": ["The first scenario is understandable without hidden rules."],
+    "scope": {
+      "mustHave": ["placement", "pressure waves", "energy decisions"],
+      "wontHave": ["network play"],
+      "maximumSessionMinutes": 20
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "lane", "dimensionality": "two_d" },
+    "time": { "progression": "realtime", "simultaneity": "simultaneous" },
+    "control": { "cardinality": "many", "directness": "indirect" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "partial", "uncertainty": "mixed" },
+    "progression": { "persistence": "persistent", "structure": "linear" },
+    "content": { "generation": "authored", "mutability": "runtime_mutable" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "player_cursor": {
+      "summary": "Selects a lane position and requests placement.",
+      "components": ["position"],
+      "tags": ["player_controlled"]
+    },
+    "defender": {
+      "summary": "A placed unit that protects its lane.",
+      "components": ["health", "position"],
+      "tags": ["placeable"]
+    },
+    "incoming_unit": {
+      "summary": "A pressure unit moving toward the protected boundary.",
+      "components": ["health", "position"],
+      "tags": ["hostile"]
+    }
+  },
+  "components": {
+    "health": {
+      "summary": "Current durability.",
+      "properties": {
+        "current": { "valueKind": "integer", "required": true, "default": 100 }
+      }
+    },
+    "position": {
+      "summary": "Logical lane and slot location.",
+      "properties": {
+        "lane_index": { "valueKind": "integer", "required": true, "default": 0 },
+        "slot_index": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    }
+  },
+  "relationships": {
+    "defender_opposes_incoming": {
+      "summary": "Placed defenders counter incoming pressure.",
+      "source": { "kind": "entity", "id": "defender" },
+      "target": { "kind": "entity", "id": "incoming_unit" },
+      "relation": "opposes",
+      "cardinality": "many_to_many"
+    }
+  },
+  "actions": {
+    "place_defender": {
+      "summary": "Spend energy to place a defender in an open slot.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "defender" }],
+      "inputs": [{ "channel": "pointer", "command": "place" }],
+      "preconditions": [
+        {
+          "description": "Placement energy is available.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "greater_or_equal",
+            "value": 50
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "change_resource", "resource": "energy", "amount": -50 },
+        { "kind": "create_entity", "entity": "defender", "quantity": 1 }
+      ],
+      "feedback": [{ "channel": "visual", "message": "Confirm the occupied slot." }],
+      "timing": { "cooldownMs": 250 }
+    }
+  },
+  "stateMachines": {
+    "encounter_flow": {
+      "summary": "Controls preparation, active pressure and resolution.",
+      "initialState": "preparation",
+      "states": {
+        "preparation": { "summary": "The player can prepare the board." },
+        "active": { "summary": "Pressure advances continuously." },
+        "resolved": { "summary": "The encounter result is final.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "begin_pressure",
+          "from": "preparation",
+          "to": "active",
+          "trigger": { "source": "timer" }
+        }
+      ]
+    }
+  },
+  "resources": {
+    "energy": {
+      "summary": "Budget used for placement decisions.",
+      "unit": "points",
+      "initial": 100,
+      "minimum": 0,
+      "maximum": 999,
+      "sinkActions": ["place_defender"]
+    }
+  },
+  "spaces": {
+    "playfield": {
+      "summary": "Parallel lanes divided into placement slots.",
+      "topology": "lane",
+      "regions": {
+        "protected_edge": { "summary": "Boundary that must remain secure.", "tags": ["goal"] },
+        "entry_edge": { "summary": "Pressure enters here.", "tags": ["spawn"] }
+      },
+      "connections": [{ "from": "entry_edge", "to": "protected_edge" }]
+    }
+  },
+  "time": {
+    "progression": "realtime",
+    "fixedStepHz": 30,
+    "pausable": true,
+    "phases": {
+      "preparation": { "summary": "Planning window." },
+      "pressure": { "summary": "Active simulation window." }
+    }
+  },
+  "interactions": {
+    "placement_input": {
+      "summary": "Pointer placement request.",
+      "direction": "input",
+      "modality": "pointer",
+      "sourceActions": ["place_defender"]
+    }
+  },
+  "content": {
+    "encounters": {
+      "summary": "Authored pressure schedules.",
+      "generation": "authored",
+      "itemKind": "encounter",
+      "sourceRefs": [{ "kind": "state_machine", "id": "encounter_flow" }]
+    }
+  },
+  "presentation": {
+    "pressure_readability": {
+      "summary": "Keep lanes and incoming pressure readable.",
+      "medium": "visual",
+      "constraints": { "laneSeparation": "high", "threatSilhouette": "distinct" },
+      "sourceRefs": [{ "kind": "intent", "id": "read_and_counter" }]
+    }
+  },
+  "technical": {
+    "platforms": ["windows"],
+    "performanceBudgets": { "activeEntities": 300, "frameTimeMicros": 16667 },
+    "saveRequirements": ["Persist unlocked encounters."],
+    "accessibilityRequirements": ["Do not rely on color alone for threat classes."]
+  },
+  "acceptanceScenarios": {
+    "place_when_funded": {
+      "summary": "A funded placement consumes energy and creates a defender.",
+      "given": [
+        {
+          "description": "Energy is at least fifty points.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "greater_or_equal",
+            "value": 50
+          }
+        }
+      ],
+      "when": [
+        {
+          "action": "place_defender",
+          "actor": { "kind": "entity", "id": "player_cursor" },
+          "targets": [{ "kind": "entity", "id": "defender" }]
+        }
+      ],
+      "then": [{ "description": "The placement effects are observable.", "expression": { "kind": "always" } }]
+    }
+  },
+  "traceLinks": {
+    "promise_to_placement": {
+      "source": { "kind": "intent", "id": "read_and_counter" },
+      "target": { "kind": "scenario", "id": "place_when_funded" },
+      "relation": "verifies",
+      "rationale": "The scenario verifies a readable counter decision."
+    }
+  },
+  "extensions": {}
+}

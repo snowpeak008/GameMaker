@@ -1,5 +1,32 @@
 [
   {
+    "id": "2026-07-15-002",
+    "date": "2026-07-15",
+    "summary": "Published the independent Rust baseline as GameMaker v0.1.0, froze the reviewed generic GameSpec compiler plan, and completed the isolated A01 domain foundation",
+    "changed_files": [
+      "NEWrust/Cargo.toml",
+      "NEWrust/Cargo.lock",
+      "NEWrust/crates/adm-new-game-spec/",
+      "NEWrust/testdata/game_spec/",
+      "NEWrust/plan/2026-07-15_universal_game_spec_compiler.md",
+      "NEWrust/plan/dev/",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/decisions/architecture.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-15-002.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-15-002.md",
+      "NEWrust/plan/2026-07-15_universal_game_spec_compiler.md",
+      "NEWrust/crates/adm-new-game-spec/"
+    ],
+    "next_tasks": [
+      "Execute A02 deterministic reference and invariant validation",
+      "Add canonical JSON and stable semantic content hashing",
+      "Do not connect GameSpec to project state or the pipeline until the A02 stop gate passes"
+    ]
+  },
+  {
     "id": "2026-07-15-001",
     "date": "2026-07-15",
     "summary": "Redesigned NEWrust around a generic capability-composed Game IR, deterministic single-writer compilation, and bounded non-authoritative AI proposals; PvZ remains only one validation fixture",

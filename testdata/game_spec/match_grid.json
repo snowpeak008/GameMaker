@@ -1,0 +1,175 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "match_grid_sample",
+    "revision": 1
+  },
+  "intent": {
+    "title": "Match Grid Sample",
+    "summary": "Create short tactical chains by exchanging adjacent symbols.",
+    "experiencePromises": {
+      "clear_chain_feedback": {
+        "statement": "Each exchange clearly explains the resulting chain and score change.",
+        "priority": "primary"
+      }
+    },
+    "audiences": ["casual puzzle players"],
+    "targetPlatforms": ["mobile"],
+    "scope": {
+      "mustHave": ["adjacent exchange", "chain resolution", "move limit"],
+      "wontHave": ["realtime combat"],
+      "maximumSessionMinutes": 8
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "grid", "dimensionality": "two_d" },
+    "time": { "progression": "event_driven", "simultaneity": "sequential" },
+    "control": { "cardinality": "single", "directness": "direct" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "complete", "uncertainty": "randomness" },
+    "progression": { "persistence": "persistent", "structure": "linear" },
+    "content": { "generation": "mixed", "mutability": "runtime_mutable" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "board": {
+      "summary": "Owns the cells and resolution state.",
+      "components": ["board_state"],
+      "tags": ["play_space"]
+    },
+    "symbol": {
+      "summary": "A movable item with a category and grid position.",
+      "components": ["grid_position", "symbol_kind"],
+      "tags": ["movable"]
+    }
+  },
+  "components": {
+    "board_state": {
+      "summary": "Resolution and remaining move data.",
+      "properties": {
+        "remaining_moves": { "valueKind": "integer", "required": true, "default": 20 }
+      }
+    },
+    "grid_position": {
+      "summary": "Column and row coordinates.",
+      "properties": {
+        "column": { "valueKind": "integer", "required": true, "default": 0 },
+        "row": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    },
+    "symbol_kind": {
+      "summary": "Match category.",
+      "properties": {
+        "kind": { "valueKind": "identifier", "required": true }
+      }
+    }
+  },
+  "actions": {
+    "exchange_symbols": {
+      "summary": "Exchange two adjacent symbols and resolve resulting chains.",
+      "actors": [{ "kind": "entity", "id": "board" }],
+      "targets": [{ "kind": "entity", "id": "symbol" }],
+      "inputs": [{ "channel": "touch", "command": "swipe" }],
+      "preconditions": [{ "description": "The selected symbols are adjacent.", "expression": { "kind": "always" } }],
+      "effects": [
+        {
+          "kind": "extension",
+          "namespace": "sample.grid_rules",
+          "payload": { "operation": "exchange_then_resolve" }
+        },
+        { "kind": "change_resource", "resource": "moves", "amount": -1 }
+      ],
+      "feedback": [{ "channel": "visual", "message": "Animate exchange and chain order." }],
+      "timing": { "durationMs": 350 }
+    }
+  },
+  "resources": {
+    "moves": {
+      "summary": "Remaining exchanges in the current level.",
+      "unit": "moves",
+      "initial": 20,
+      "minimum": 0,
+      "maximum": 20,
+      "sinkActions": ["exchange_symbols"]
+    }
+  },
+  "spaces": {
+    "symbol_grid": {
+      "summary": "Rectangular cell grid.",
+      "topology": "grid",
+      "regions": {
+        "play_area": { "summary": "Cells that accept symbols.", "tags": ["interactive"] }
+      }
+    }
+  },
+  "time": {
+    "progression": "event_driven",
+    "pausable": true,
+    "phases": {
+      "input": { "summary": "Wait for an exchange." },
+      "resolve": { "summary": "Resolve chains without additional input." }
+    }
+  },
+  "interactions": {
+    "exchange_input": {
+      "summary": "Swipe between adjacent cells.",
+      "direction": "input",
+      "modality": "touch",
+      "sourceActions": ["exchange_symbols"]
+    }
+  },
+  "content": {
+    "levels": {
+      "summary": "Authored goals with generated initial boards.",
+      "generation": "mixed",
+      "itemKind": "level",
+      "sourceRefs": [{ "kind": "space", "id": "symbol_grid" }]
+    }
+  },
+  "presentation": {
+    "chain_feedback": {
+      "summary": "Show the exact order and value of each resolved chain.",
+      "medium": "visual_audio",
+      "constraints": { "maximumConcurrentBursts": 4 },
+      "sourceRefs": [{ "kind": "intent", "id": "clear_chain_feedback" }]
+    }
+  },
+  "technical": {
+    "platforms": ["android", "ios"],
+    "performanceBudgets": { "frameTimeMicros": 16667 },
+    "saveRequirements": ["Persist level progress."],
+    "accessibilityRequirements": ["Symbols require shape cues in addition to color."]
+  },
+  "acceptanceScenarios": {
+    "exchange_consumes_move": {
+      "summary": "A valid exchange resolves and consumes one move.",
+      "given": [{ "description": "At least one move remains.", "expression": { "kind": "always" } }],
+      "when": [
+        {
+          "action": "exchange_symbols",
+          "actor": { "kind": "entity", "id": "board" },
+          "targets": [
+            { "kind": "entity", "id": "symbol" },
+            { "kind": "entity", "id": "symbol" }
+          ]
+        }
+      ],
+      "then": [{ "description": "The board is stable before accepting new input.", "expression": { "kind": "always" } }]
+    }
+  },
+  "traceLinks": {
+    "feedback_to_exchange": {
+      "source": { "kind": "intent", "id": "clear_chain_feedback" },
+      "target": { "kind": "action", "id": "exchange_symbols" },
+      "relation": "refines",
+      "rationale": "The action owns ordered chain feedback."
+    }
+  },
+  "extensions": {
+    "grid_rules": {
+      "namespace": "sample.grid_rules",
+      "version": "1.0.0",
+      "payload": { "minimumChain": 3, "refill": true }
+    }
+  }
+}

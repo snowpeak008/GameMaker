@@ -21,6 +21,11 @@
     "apps/desktop-tauri/src/draft_retention.rs",
     "apps/adm-new-cli/src/main.rs",
     "crates/adm-new-foundation/src/source_root.rs",
+    "crates/adm-new-game-spec/Cargo.toml",
+    "crates/adm-new-game-spec/src/lib.rs",
+    "crates/adm-new-game-spec/src/id.rs",
+    "crates/adm-new-game-spec/src/capability.rs",
+    "crates/adm-new-game-spec/src/spec.rs",
     "crates/adm-new-governance/src/lib.rs",
     "crates/adm-new-contracts/src/project.rs",
     "crates/adm-new-contracts/src/save.rs",
@@ -45,6 +50,7 @@
     "tools/clean-generated.ps1",
     "tools/memory/README.md",
     "tools/memory/Update-MemoryFreshness.ps1",
-    "tools/memory/Test-MemoryFreshness.ps1"
+    "tools/memory/Test-MemoryFreshness.ps1",
+    "plan/2026-07-15_universal_game_spec_compiler.md"
   ]
 }

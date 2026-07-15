@@ -8,6 +8,21 @@
 ## 上次会话摘要
 
 **Date**: 2026-07-15
+**ID**: 2026-07-15-002
+**Summary**: Published the independent Rust baseline as GameMaker v0.1.0, froze the reviewed generic GameSpec/compiler plan, and completed A01 with a strict engine-neutral domain crate plus four structurally distinct fixtures.
+
+**Completed**:
+- [x] Pushed commit `1a74408680cc73f07440228068139218546fc458` and annotated tag `v0.1.0` to `snowpeak008/GameMaker`.
+- [x] Passed all 21 clean-clone/relocation/release checks, including portable EXE smoke, integrity, anti-fake scan, UI baselines and static CRT verification.
+- [x] Wrote and reviewed the overall plan plus A01-A10 ordered atomic plans; added project-scoped shadow migration and strict AI candidate-patch boundaries.
+- [x] Added `adm-new-game-spec`, validated IDs and typed references, strict serde contracts, four cross-structure fixtures, and six focused tests.
+
+**Next**:
+- [ ] Execute A02 deterministic validation, canonicalization and content hashing before connecting the new model to current project state.
+
+---
+
+**Date**: 2026-07-15
 **ID**: 2026-07-15-001
 **Summary**: Reframed the NEWrust redesign as a generic, capability-composed game specification compiler with a single canonical state and deterministic gates; PvZ is only one validation fixture and multi-role AI workflows are excluded.
 

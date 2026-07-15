@@ -1,0 +1,226 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "turn_tactics_sample",
+    "revision": 1
+  },
+  "intent": {
+    "title": "Turn Tactics Sample",
+    "summary": "Coordinate a small squad under visible positional constraints.",
+    "experiencePromises": {
+      "predictable_positioning": {
+        "statement": "Movement and attack outcomes are previewable before commitment.",
+        "priority": "primary"
+      }
+    },
+    "audiences": ["tactics players"],
+    "targetPlatforms": ["desktop"],
+    "scope": {
+      "mustHave": ["turn order", "action points", "grid movement", "outcome preview"],
+      "wontHave": ["realtime input"],
+      "maximumSessionMinutes": 45
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "grid", "dimensionality": "two_d" },
+    "time": { "progression": "turn_based", "simultaneity": "sequential" },
+    "control": { "cardinality": "squad", "directness": "command" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "complete", "uncertainty": "execution" },
+    "progression": { "persistence": "session_only", "structure": "branching" },
+    "content": { "generation": "authored", "mutability": "runtime_mutable" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "commander": {
+      "summary": "Issues commands to the active squad unit.",
+      "components": [],
+      "tags": ["player_controlled"]
+    },
+    "squad_unit": {
+      "summary": "A controllable unit with position, health and action points.",
+      "components": ["grid_position", "health", "turn_budget"],
+      "tags": ["ally"]
+    },
+    "opposing_unit": {
+      "summary": "An opposing unit governed by the same spatial rules.",
+      "components": ["grid_position", "health", "turn_budget"],
+      "tags": ["hostile"]
+    }
+  },
+  "components": {
+    "grid_position": {
+      "summary": "Current tactical cell.",
+      "properties": {
+        "column": { "valueKind": "integer", "required": true, "default": 0 },
+        "row": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    },
+    "health": {
+      "summary": "Current durability.",
+      "properties": {
+        "current": { "valueKind": "integer", "required": true, "default": 10 }
+      }
+    },
+    "turn_budget": {
+      "summary": "Action points available this turn.",
+      "properties": {
+        "current": { "valueKind": "integer", "required": true, "default": 2 }
+      }
+    }
+  },
+  "relationships": {
+    "commander_controls_squad": {
+      "summary": "The commander issues commands to squad units.",
+      "source": { "kind": "entity", "id": "commander" },
+      "target": { "kind": "entity", "id": "squad_unit" },
+      "relation": "supports",
+      "cardinality": "one_to_many"
+    }
+  },
+  "actions": {
+    "move_unit": {
+      "summary": "Spend one action point to move the active unit to a reachable cell.",
+      "actors": [{ "kind": "entity", "id": "squad_unit" }],
+      "targets": [{ "kind": "entity", "id": "squad_unit" }],
+      "inputs": [{ "channel": "pointer", "command": "confirm_cell" }],
+      "preconditions": [
+        {
+          "description": "At least one action point remains.",
+          "reads": [{ "kind": "resource", "id": "action_points" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "action_points" },
+            "operator": "greater_or_equal",
+            "value": 1
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "change_resource", "resource": "action_points", "amount": -1 },
+        {
+          "kind": "set_value",
+          "target": { "kind": "component", "id": "grid_position" },
+          "value": { "column": 1, "row": 1 }
+        }
+      ],
+      "feedback": [{ "channel": "visual", "message": "Preview path and final cell before commit." }],
+      "timing": { "durationMs": 500 }
+    },
+    "end_turn": {
+      "summary": "Finish the active side and advance turn ownership.",
+      "actors": [{ "kind": "entity", "id": "commander" }],
+      "inputs": [{ "channel": "button", "command": "end_turn" }],
+      "effects": [{ "kind": "transition_state", "stateMachine": "turn_cycle", "targetState": "opposition_turn" }],
+      "feedback": [{ "channel": "ui", "message": "Show the next active side." }],
+      "timing": {}
+    }
+  },
+  "stateMachines": {
+    "turn_cycle": {
+      "summary": "Alternates active sides until the encounter resolves.",
+      "initialState": "squad_turn",
+      "states": {
+        "squad_turn": { "summary": "Squad units may spend action points." },
+        "opposition_turn": { "summary": "Opposing units execute commands." },
+        "resolved": { "summary": "Victory or defeat is final.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "finish_squad_turn",
+          "from": "squad_turn",
+          "to": "opposition_turn",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "end_turn" } }
+        },
+        {
+          "transitionId": "finish_opposition_turn",
+          "from": "opposition_turn",
+          "to": "squad_turn",
+          "trigger": { "source": "system" }
+        }
+      ]
+    }
+  },
+  "resources": {
+    "action_points": {
+      "summary": "Per-turn command budget for the active unit.",
+      "unit": "points",
+      "initial": 2,
+      "minimum": 0,
+      "maximum": 2,
+      "sinkActions": ["move_unit"]
+    }
+  },
+  "spaces": {
+    "tactical_grid": {
+      "summary": "Cells with occupancy and traversal constraints.",
+      "topology": "grid",
+      "regions": {
+        "deployment_zone": { "summary": "Initial squad cells.", "tags": ["spawn"] },
+        "objective_zone": { "summary": "Cells required for the objective.", "tags": ["goal"] }
+      },
+      "connections": [{ "from": "deployment_zone", "to": "objective_zone", "bidirectional": true }]
+    }
+  },
+  "time": {
+    "progression": "turn_based",
+    "pausable": true,
+    "phases": {
+      "command": { "summary": "Preview and commit unit actions." },
+      "resolution": { "summary": "Apply committed outcomes." }
+    }
+  },
+  "interactions": {
+    "command_input": {
+      "summary": "Select a unit and confirm a target cell.",
+      "direction": "input",
+      "modality": "pointer",
+      "sourceActions": ["move_unit", "end_turn"]
+    }
+  },
+  "content": {
+    "encounters": {
+      "summary": "Authored tactical layouts and objectives.",
+      "generation": "authored",
+      "itemKind": "encounter",
+      "sourceRefs": [{ "kind": "space", "id": "tactical_grid" }]
+    }
+  },
+  "presentation": {
+    "outcome_preview": {
+      "summary": "Preview paths, costs and target outcomes before commitment.",
+      "medium": "visual_ui",
+      "constraints": { "pathContrast": "high", "costAlwaysVisible": true },
+      "sourceRefs": [{ "kind": "intent", "id": "predictable_positioning" }]
+    }
+  },
+  "technical": {
+    "platforms": ["windows"],
+    "performanceBudgets": { "activeUnits": 64, "frameTimeMicros": 16667 },
+    "saveRequirements": ["Persist the full turn state at safe checkpoints."],
+    "accessibilityRequirements": ["Preview cells require shape cues in addition to color."]
+  },
+  "acceptanceScenarios": {
+    "move_spends_one_point": {
+      "summary": "A valid move reaches the previewed cell and spends one action point.",
+      "given": [{ "description": "The squad turn is active and a reachable cell is selected.", "expression": { "kind": "always" } }],
+      "when": [
+        {
+          "action": "move_unit",
+          "actor": { "kind": "entity", "id": "squad_unit" },
+          "targets": [{ "kind": "entity", "id": "squad_unit" }]
+        }
+      ],
+      "then": [{ "description": "The unit occupies the previewed cell with one fewer point.", "expression": { "kind": "always" } }]
+    }
+  },
+  "traceLinks": {
+    "preview_to_move": {
+      "source": { "kind": "intent", "id": "predictable_positioning" },
+      "target": { "kind": "action", "id": "move_unit" },
+      "relation": "refines",
+      "rationale": "The move action owns preview and commitment semantics."
+    }
+  },
+  "extensions": {}
+}

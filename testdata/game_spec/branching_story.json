@@ -1,0 +1,185 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "branching_story_sample",
+    "revision": 1
+  },
+  "intent": {
+    "title": "Branching Story Sample",
+    "summary": "Make consequential choices while investigating a disputed event.",
+    "experiencePromises": {
+      "visible_consequences": {
+        "statement": "Choices change later scenes in explainable ways.",
+        "priority": "primary"
+      }
+    },
+    "audiences": ["narrative players"],
+    "targetPlatforms": ["desktop", "mobile"],
+    "scope": {
+      "mustHave": ["branching choices", "persistent variables", "multiple endings"],
+      "wontHave": ["spatial combat"],
+      "maximumSessionMinutes": 90
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "graph", "dimensionality": "abstract" },
+    "time": { "progression": "event_driven", "simultaneity": "sequential" },
+    "control": { "cardinality": "single", "directness": "direct" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "partial", "uncertainty": "hidden_state" },
+    "progression": { "persistence": "persistent", "structure": "branching" },
+    "content": { "generation": "authored", "mutability": "static" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "protagonist": {
+      "summary": "The viewpoint character making choices.",
+      "components": ["story_variables"],
+      "tags": ["player_controlled"]
+    },
+    "witness": {
+      "summary": "A character whose trust changes available information.",
+      "components": ["story_variables"],
+      "tags": ["speaker"]
+    }
+  },
+  "components": {
+    "story_variables": {
+      "summary": "Persistent values used by branch conditions.",
+      "properties": {
+        "trust": {
+          "valueKind": "integer",
+          "required": true,
+          "default": 0,
+          "constraints": { "minimum": -5, "maximum": 5 }
+        }
+      }
+    }
+  },
+  "relationships": {
+    "protagonist_questions_witness": {
+      "summary": "The protagonist requests information from the witness.",
+      "source": { "kind": "entity", "id": "protagonist" },
+      "target": { "kind": "entity", "id": "witness" },
+      "relation": "targets",
+      "cardinality": "one_to_one"
+    }
+  },
+  "actions": {
+    "choose_reply": {
+      "summary": "Commit to one available reply and apply its consequences.",
+      "actors": [{ "kind": "entity", "id": "protagonist" }],
+      "targets": [{ "kind": "entity", "id": "witness" }],
+      "inputs": [{ "channel": "choice_list", "command": "select_reply" }],
+      "preconditions": [{ "description": "The reply is visible under current branch conditions.", "expression": { "kind": "always" } }],
+      "effects": [
+        {
+          "kind": "set_value",
+          "target": { "kind": "component", "id": "story_variables", "path": "trust" },
+          "value": 1
+        },
+        { "kind": "emit_event", "event": "reply_committed" }
+      ],
+      "feedback": [{ "channel": "text", "message": "Show the selected reply and immediate reaction." }],
+      "timing": {}
+    }
+  },
+  "stateMachines": {
+    "story_flow": {
+      "summary": "Moves through authored scenes and endings.",
+      "initialState": "arrival",
+      "states": {
+        "arrival": { "summary": "Introduce the disputed event." },
+        "interview": { "summary": "Collect and challenge testimony." },
+        "reconciliation": { "summary": "Resolve the dispute through trust.", "terminal": true },
+        "separation": { "summary": "End without agreement.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "begin_interview",
+          "from": "arrival",
+          "to": "interview",
+          "trigger": { "source": "input" }
+        }
+      ]
+    }
+  },
+  "spaces": {
+    "scene_graph": {
+      "summary": "Directed graph of authored scenes.",
+      "topology": "graph",
+      "regions": {
+        "arrival": { "summary": "Opening scene." },
+        "interview": { "summary": "Questioning scene." },
+        "reconciliation": { "summary": "Trust-positive ending.", "tags": ["ending"] },
+        "separation": { "summary": "Trust-negative ending.", "tags": ["ending"] }
+      },
+      "connections": [
+        { "from": "arrival", "to": "interview" },
+        { "from": "interview", "to": "reconciliation" },
+        { "from": "interview", "to": "separation" }
+      ]
+    }
+  },
+  "time": {
+    "progression": "event_driven",
+    "pausable": true,
+    "phases": {
+      "scene": { "summary": "Present authored content." },
+      "choice": { "summary": "Wait for a committed reply." }
+    }
+  },
+  "interactions": {
+    "reply_choice": {
+      "summary": "Choose one contextual reply.",
+      "direction": "input",
+      "modality": "choice_list",
+      "sourceActions": ["choose_reply"]
+    }
+  },
+  "content": {
+    "scenes": {
+      "summary": "Authored dialogue scenes and conditions.",
+      "generation": "authored",
+      "itemKind": "scene",
+      "sourceRefs": [{ "kind": "state_machine", "id": "story_flow" }]
+    }
+  },
+  "presentation": {
+    "choice_consequences": {
+      "summary": "Use reaction text and later callbacks to expose consequences.",
+      "medium": "text_audio",
+      "constraints": { "choiceCountMaximum": 4 },
+      "sourceRefs": [{ "kind": "intent", "id": "visible_consequences" }]
+    }
+  },
+  "technical": {
+    "platforms": ["windows", "android", "ios"],
+    "performanceBudgets": { "loadedScenes": 8 },
+    "saveRequirements": ["Persist branch variables and the current scene."],
+    "accessibilityRequirements": ["All spoken lines require text alternatives."]
+  },
+  "acceptanceScenarios": {
+    "reply_changes_later_scene": {
+      "summary": "A committed reply changes a later available scene.",
+      "given": [{ "description": "The interview scene is active.", "expression": { "kind": "always" } }],
+      "when": [
+        {
+          "action": "choose_reply",
+          "actor": { "kind": "entity", "id": "protagonist" },
+          "targets": [{ "kind": "entity", "id": "witness" }]
+        }
+      ],
+      "then": [{ "description": "A later scene observes the updated trust value.", "expression": { "kind": "always" } }]
+    }
+  },
+  "traceLinks": {
+    "consequence_to_scenario": {
+      "source": { "kind": "intent", "id": "visible_consequences" },
+      "target": { "kind": "scenario", "id": "reply_changes_later_scene" },
+      "relation": "verifies",
+      "rationale": "The scenario requires a delayed but explainable consequence."
+    }
+  },
+  "extensions": {}
+}

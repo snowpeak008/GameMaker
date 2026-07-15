@@ -4,6 +4,7 @@ members = [
     "apps/desktop-tauri",
     "apps/root-launcher",
     "crates/adm-new-foundation",
+    "crates/adm-new-game-spec",
     "crates/adm-new-contracts",
     "crates/adm-new-governance",
     "crates/adm-new-config",

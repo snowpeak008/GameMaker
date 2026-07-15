@@ -118,6 +118,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "adm-new-game-spec"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "adm-new-governance"
 version = "0.1.0"
 dependencies = [
