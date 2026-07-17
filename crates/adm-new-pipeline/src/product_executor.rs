@@ -1,8 +1,14 @@
 use std::collections::BTreeSet;
+use std::collections::{BTreeMap as StdBTreeMap, BTreeSet as StdBTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+use adm_new_change_kernel::{
+    ChangeEvidence, ChangeFailureCategory, ChangeOutcome, CommandPurpose, EvidenceStatus,
+    SideEffectState, WORKSPACE_CHANGE_SET_SCHEMA_VERSION, WorkspaceFileExpectation,
+    WorkspaceFilePayload, WorkspaceOperation, WorkspaceRelativePath, WorkspaceTransactionResult,
+};
 use adm_new_contracts::ArtifactLocale;
 use adm_new_contracts::artifact::ArtifactRegistry;
 use adm_new_contracts::pipeline::{
@@ -12,18 +18,25 @@ use adm_new_contracts::pipeline::{
 use adm_new_contracts::project::ProjectState;
 use adm_new_design::DesignEngineService;
 use adm_new_design::data_loader::DesignDataLoader;
+use adm_new_design::game_spec_projection::project_state_to_game_spec;
 use adm_new_design::handoff::export_concept_package_from_state_with_locale;
-use adm_new_foundation::io::{read_json, write_json};
+use adm_new_foundation::io::{self, read_json, write_json};
 use adm_new_foundation::paths::ProjectPaths;
-use adm_new_foundation::{AdmError, AdmResult, sanitize_identifier};
-use serde::de::DeserializeOwned;
+use adm_new_foundation::{AdmError, AdmResult, sanitize_identifier, sha256_hex};
+use adm_new_game_spec::{GameSpec, ProductEnvelope, canonicalize_game_spec, parse_game_spec};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use crate::StageExecutor;
 use crate::design_flow::design_engine_from_data;
+use crate::game_spec_v2_steps::{Step00_06Compiler, StepGateStatus};
 use crate::generation::{GenerationService, StageOutputGenerator};
 use crate::stage_result::{failed_stage_result_with_locale, stage_result_from_generation};
-use crate::stages::{step00_02, step03_06, step07, step08_14};
+use crate::stages::step11_v2::WorkspaceTaskAgent;
+use crate::stages::{
+    step00_02, step03_06, step07, step07_v2, step08_10_v2, step08_14, step11_v2, step12_v2,
+    step13_v2, step14_v2,
+};
 use crate::style_image::{
     StyleImageGenerator, reconcile_unbound_style_image_record, style_image_cache_key,
 };
@@ -41,7 +54,10 @@ pub struct ProductPipelineExecutor {
     artifact_root: PathBuf,
     design_data_dir: Option<PathBuf>,
     style_image_generator: Option<Arc<dyn StyleImageGenerator>>,
+    vlm_review_service: Option<Arc<dyn step07_v2::VlmReviewService>>,
     work_unit_executor: Option<Arc<dyn WorkUnitExecutor>>,
+    workspace_task_agent: Option<Arc<dyn WorkspaceTaskAgent>>,
+    workspace_task_agent_required: bool,
     work_unit_journal_root: PathBuf,
     work_unit_stop_token: WorkUnitStopToken,
     artifact_locale: ArtifactLocale,
@@ -50,6 +66,19 @@ pub struct ProductPipelineExecutor {
     allow_missing_design_data_for_tests: bool,
     unity_project_path: Option<PathBuf>,
     unity_editor_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Step12AssetConfirmationApproval {
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    approved_asset_ids: Vec<String>,
+    #[serde(default)]
+    sample_count: usize,
+    #[serde(default)]
+    explicit_auto_accept: bool,
 }
 
 impl ProductPipelineExecutor {
@@ -100,7 +129,10 @@ impl ProductPipelineExecutor {
             artifact_root: paths.artifacts_dir.clone(),
             design_data_dir,
             style_image_generator: None,
+            vlm_review_service: None,
             work_unit_executor: None,
+            workspace_task_agent: None,
+            workspace_task_agent_required: false,
             work_unit_journal_root: paths.checkpoints_dir.join("work_units"),
             work_unit_stop_token: WorkUnitStopToken::default(),
             artifact_locale: ArtifactLocale::default(),
@@ -117,8 +149,26 @@ impl ProductPipelineExecutor {
         self
     }
 
+    pub fn with_vlm_review_service(
+        mut self,
+        service: Arc<dyn step07_v2::VlmReviewService>,
+    ) -> Self {
+        self.vlm_review_service = Some(service);
+        self
+    }
+
     pub fn with_work_unit_executor(mut self, executor: Arc<dyn WorkUnitExecutor>) -> Self {
         self.work_unit_executor = Some(executor);
+        self
+    }
+
+    pub fn with_workspace_task_agent(mut self, agent: Arc<dyn WorkspaceTaskAgent>) -> Self {
+        self.workspace_task_agent = Some(agent);
+        self
+    }
+
+    pub fn require_workspace_task_agent(mut self) -> Self {
+        self.workspace_task_agent_required = true;
         self
     }
 
@@ -200,6 +250,11 @@ impl ProductPipelineExecutor {
         if !matches!(step, 11 | 12) {
             return Err(AdmError::new(
                 "only Step07, Step11 and Step12 have resumable internal work units",
+            ));
+        }
+        if self.game_spec_v2_enabled() {
+            return Err(AdmError::new(
+                "GameSpec v2 Step11/12 checkpoint reconciliation is not compatible with legacy work-unit journals",
             ));
         }
         let executor = self.work_unit_executor.as_deref().ok_or_else(|| {
@@ -301,6 +356,26 @@ impl ProductPipelineExecutor {
 
     /// Persists a real Step07 approval. Rerunning Step07 materializes the application contract.
     pub fn confirm_style(&self, selected_style_id: &str, notes: &str) -> AdmResult<PathBuf> {
+        if self.game_spec_v2_enabled() {
+            let stage_dir = self.artifact_root.join("stage_07");
+            if selected_style_id.trim() != "v2_anchor_set" {
+                return Err(AdmError::new(format!(
+                    "GameSpec v2 Step07 confirms the complete anchor set; expected v2_anchor_set, got {selected_style_id}"
+                )));
+            }
+            let anchors =
+                step07_v2::confirm_style_anchors_attended(&stage_dir, "user", notes, "attended")?;
+            let compatibility = json!({
+                "schema_version": "step07_v2_style_confirmation_compat.v1",
+                "status": anchors.status,
+                "selected_style_id": selected_style_id,
+                "confirmation_mode": anchors.confirmation_mode,
+                "reviewer": anchors.reviewer,
+                "notes": anchors.notes,
+                "anchor_count": anchors.anchors.len(),
+            });
+            return write_json(&stage_dir.join("style_confirmation.json"), &compatibility);
+        }
         let stage_dir = self.artifact_root.join("stage_07");
         let document = read_json(&stage_dir.join("style_options.json"), json!({}));
         let options = document
@@ -320,6 +395,412 @@ impl ProductPipelineExecutor {
                 ))
             })?;
         step07::write_style_confirmation(&stage_dir, option, notes, "approved", "manual")
+    }
+
+    fn game_spec_v2_enabled(&self) -> bool {
+        let paths = ProjectPaths::new(&self.root, &self.session_id);
+        [
+            paths.draft_dir.join("project_config.json"),
+            paths.project_settings_file,
+        ]
+        .into_iter()
+        .map(|path| read_json(&path, json!({})))
+        .any(|value| {
+            bool_at_path(&value, &["game_spec_v2", "enabled"])
+                || bool_at_path(&value, &["gameSpecV2", "enabled"])
+                || bool_at_path(&value, &["game_spec_v2_enabled"])
+                || bool_at_path(&value, &["gameSpecV2Enabled"])
+                || bool_at_path(&value, &["features", "game_spec_v2"])
+                || bool_at_path(&value, &["features", "gameSpecV2"])
+                || value
+                    .get("game_spec_v2")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        })
+    }
+
+    fn load_or_project_game_spec_v2(&self) -> AdmResult<GameSpec> {
+        let paths = ProjectPaths::new(&self.root, &self.session_id);
+        for candidate in [
+            self.artifact_root.join("stage_06/r1_frozen_game_spec.json"),
+            self.artifact_root
+                .join("stage_06/game_spec_v2_shadow/game_spec.json"),
+            self.artifact_root
+                .join("stage_d4/game_spec_v2_shadow/game_spec.json"),
+            self.root.join(".game_spec_v2_migration/game_spec.json"),
+            paths
+                .draft_dir
+                .join(".game_spec_v2_migration/game_spec.json"),
+        ] {
+            if candidate.is_file() {
+                return parse_game_spec_file(&candidate);
+            }
+        }
+        let autosave_path = paths.draft_dir.join("autosave_state.json");
+        if autosave_path.is_file() {
+            let state: ProjectState =
+                serde_json::from_slice(&fs::read(&autosave_path)?).map_err(|error| {
+                    AdmError::new(format!("autosave ProjectState is invalid: {error}"))
+                })?;
+            let engine = self.load_design_engine()?;
+            let projection = project_state_to_game_spec(&engine, &state)?;
+            let compiler = self.game_spec_v2_step00_06_compiler()?;
+            let run = compiler.compile_spec(projection.spec.clone());
+            let stage06_dir = self.artifact_root.join("stage_06");
+            compiler.write_outputs(&stage06_dir, &run)?;
+            if run.status == StepGateStatus::Passed {
+                return Ok(projection.spec);
+            }
+            return Err(AdmError::new(
+                "projected GameSpec v2 did not pass Step00-06 freeze gates",
+            ));
+        }
+        Err(AdmError::new(
+            "game_spec_v2 is enabled but no frozen GameSpec was found",
+        ))
+    }
+
+    fn game_spec_v2_step00_06_compiler(&self) -> AdmResult<Step00_06Compiler> {
+        let supported_envelope = ProductEnvelope {
+            scene_scale: adm_new_game_spec::ProductionScale::Medium,
+            system_complexity: adm_new_game_spec::ProductionScale::Medium,
+            asset_scale: adm_new_game_spec::ProductionScale::Medium,
+            content_volume: adm_new_game_spec::ProductionScale::Medium,
+        };
+        let local = self.root.join("knowledge/design_data");
+        let data_dir = self
+            .design_data_dir
+            .clone()
+            .into_iter()
+            .chain(std::iter::once(local))
+            .find(|path| path.join("domains").is_dir());
+        let Some(data_dir) = data_dir else {
+            return Err(AdmError::new(format!(
+                "GameSpec v2 Step02 decision graph domains are missing: expected an explicit resource root or {}",
+                self.root.join("knowledge/design_data/domains").display()
+            )));
+        };
+        Step00_06Compiler::from_design_data_dir(supported_envelope, &self.root, data_dir)
+    }
+
+    fn execute_game_spec_v2_step(
+        &self,
+        step_number: u32,
+        service: &GenerationService,
+    ) -> PipelineStageResult {
+        let stage_dir = service.stage_dir(step_number);
+        let generation = self
+            .run_game_spec_v2_step(step_number, &stage_dir)
+            .and_then(|(raw_status, output, blockers)| {
+                let report = game_spec_v2_validation_report(
+                    step_number,
+                    self.artifact_locale,
+                    raw_status,
+                    output,
+                    blockers,
+                );
+                write_json(&stage_dir.join("game_spec_v2_stage_report.json"), &report)?;
+                write_json(&stage_dir.join("validation_report.json"), &report)?;
+                service.refresh_indexes(step_number)?;
+                Ok(report)
+            });
+        stage_result_from_generation(step_number, generation, &self.artifact_root, &stage_dir)
+    }
+
+    fn run_game_spec_v2_step(
+        &self,
+        step_number: u32,
+        stage_dir: &Path,
+    ) -> AdmResult<(String, Value, Vec<String>)> {
+        fs::create_dir_all(stage_dir)?;
+        let spec = self.load_or_project_game_spec_v2()?;
+        match step_number {
+            7 => {
+                let vlm = self.v2_vlm_review_service()?;
+                let output =
+                    step07_v2::compile_step07_art_direction_with_vlm(&spec, stage_dir, &*vlm)?;
+                let blockers = output
+                    .vlm_review_report
+                    .as_ref()
+                    .map(|report| report.blocking_issues.clone())
+                    .unwrap_or_default();
+                Ok((output.status.clone(), json_value(output)?, blockers))
+            }
+            8..=10 => {
+                let anchors = self.v2_style_anchors()?;
+                let output = step08_10_v2::compile_step08_10(&spec, &anchors, stage_dir)?;
+                let blockers = if output.status == "success" {
+                    Vec::new()
+                } else {
+                    output.task_graph.validation.issues.clone()
+                };
+                Ok((output.status.clone(), json_value(output)?, blockers))
+            }
+            11 => {
+                let compiled = self.v2_compile_step08_10()?;
+                let mut state = step11_v2::Step11ExecutionState::new(
+                    compiled.task_graph.source_game_spec_hash.clone(),
+                );
+                let agent: Arc<dyn WorkspaceTaskAgent> = if let Some(agent) =
+                    self.workspace_task_agent.clone()
+                {
+                    agent
+                } else if self.workspace_task_agent_required {
+                    return Err(AdmError::new(
+                        "GameSpec v2 Step11 requires a configured WorkspaceTaskAgent; local filesystem fallback is disabled for product runs",
+                    ));
+                } else {
+                    Arc::new(FilesystemWorkspaceTaskAgent {
+                        workspace_root: ProjectPaths::new(&self.root, &self.session_id)
+                            .workspace_dir
+                            .join("game_spec_v2"),
+                    })
+                };
+                let output = step11_v2::Step11ExecutionEngine::new(
+                    agent,
+                    step11_v2::Step11ExecutionBudget::default(),
+                )
+                .run(
+                    &compiled.task_graph,
+                    &mut state,
+                    &step11_v2::Step11StopToken::from_shared(
+                        self.work_unit_stop_token.shared_flag(),
+                    ),
+                )?;
+                let blockers = output
+                    .correction_queue
+                    .iter()
+                    .filter(|item| !item.resolved)
+                    .map(|item| format!("{}:{}", item.task_id, item.reason))
+                    .collect::<Vec<_>>();
+                io::write_json_serializable(
+                    &stage_dir.join("step11_execution_report.json"),
+                    &output,
+                )?;
+                Ok((
+                    format!("{:?}", output.status).to_ascii_lowercase(),
+                    json_value(output)?,
+                    blockers,
+                ))
+            }
+            12 => {
+                let anchors = self.v2_style_anchors()?;
+                let compiled = self.v2_compile_step08_10()?;
+                let policy =
+                    self.v2_asset_production_policy(stage_dir, &compiled.asset_manifest)?;
+                let vlm = self.v2_vlm_review_service()?;
+                let workspace_target = self.v2_workspace_target_root();
+                let bindings = step12_v2::discover_asset_bindings_from_workspace(
+                    &compiled.asset_manifest,
+                    &workspace_target,
+                )?;
+                let loader = step12_v2::WorkspaceReferenceAssetLoader::new(&workspace_target);
+                let output = step12_v2::run_step12_asset_production_with_vlm(
+                    &compiled.asset_manifest,
+                    &anchors,
+                    stage_dir,
+                    &policy,
+                    &bindings,
+                    &loader,
+                    &*vlm,
+                )?;
+                let blockers = output
+                    .correction_queue
+                    .iter()
+                    .map(|item| format!("{}:{}", item.asset_id, item.reason))
+                    .collect::<Vec<_>>();
+                Ok((
+                    format!("{:?}", output.status).to_ascii_lowercase(),
+                    json_value(output)?,
+                    blockers,
+                ))
+            }
+            13 => {
+                let step11 = read_json_typed::<step11_v2::Step11ExecutionReport>(
+                    &self
+                        .artifact_root
+                        .join("stage_11/step11_execution_report.json"),
+                )?;
+                let step12 = read_json_typed::<step12_v2::Step12AssetProductionOutput>(
+                    &self
+                        .artifact_root
+                        .join("stage_12/step12_asset_production_output.json"),
+                )?;
+                let evidence_path = stage_dir.join("scenario_execution_evidence.json");
+                let policy = if evidence_path.is_file() {
+                    let evidence =
+                        read_json_typed::<step13_v2::Step13ExecutionEvidence>(&evidence_path)?;
+                    step13_v2::Step13ValidationPolicy::from_execution_evidence(evidence)
+                } else {
+                    step13_v2::Step13ValidationPolicy::strict_unattended()
+                };
+                let output = step13_v2::run_step13_acceptance_validation(
+                    &spec, &step11, &step12, &policy, stage_dir,
+                )?;
+                let blockers = output
+                    .scenario_results
+                    .iter()
+                    .filter_map(|result| {
+                        result
+                            .failure_reason
+                            .as_ref()
+                            .map(|reason| format!("{}:{reason}", result.scenario_id))
+                    })
+                    .collect::<Vec<_>>();
+                Ok((
+                    format!("{:?}", output.status).to_ascii_lowercase(),
+                    json_value(output)?,
+                    blockers,
+                ))
+            }
+            14 => {
+                let step13 = read_json_typed::<step13_v2::Step13AcceptanceOutput>(
+                    &self
+                        .artifact_root
+                        .join("stage_13/step13_acceptance_output.json"),
+                )?;
+                let derivation =
+                    step14_v2::derive_r1_gate_evidence_from_sources(&self.root, stage_dir);
+                let evidence_path = io::write_json_serializable(
+                    &stage_dir.join("r1_gate_evidence.json"),
+                    &derivation.evidence,
+                )?;
+                let source_report_path = io::write_json_serializable(
+                    &stage_dir.join(step14_v2::R1_GATE_EVIDENCE_SOURCE_REPORT_FILE),
+                    &derivation.report,
+                )?;
+                let mut output = step14_v2::run_step14_r1_packaging_gate(
+                    &spec,
+                    &step13,
+                    &derivation.evidence,
+                    stage_dir,
+                )?;
+                output.output_paths.insert(
+                    "r1GateEvidence".to_string(),
+                    evidence_path.to_string_lossy().replace('\\', "/"),
+                );
+                output.output_paths.insert(
+                    "r1GateEvidenceSourceReport".to_string(),
+                    source_report_path.to_string_lossy().replace('\\', "/"),
+                );
+                for blocker in derivation.report.blockers {
+                    if !output.blockers.contains(&blocker) {
+                        output.blockers.push(blocker);
+                    }
+                }
+                if !output.blockers.is_empty() {
+                    output.status = step14_v2::R1GateStatus::Blocked;
+                    output.release_manifest.status = step14_v2::R1GateStatus::Blocked;
+                }
+                io::write_json_serializable(
+                    &stage_dir.join("r1_release_manifest.json"),
+                    &output.release_manifest,
+                )?;
+                io::write_json_serializable(
+                    &stage_dir.join("step14_r1_packaging_output.json"),
+                    &output,
+                )?;
+                Ok((
+                    format!("{:?}", output.status).to_ascii_lowercase(),
+                    json_value(&output)?,
+                    output.blockers,
+                ))
+            }
+            _ => Err(AdmError::new(format!(
+                "game_spec_v2 has no product route for stage {step_number:02}"
+            ))),
+        }
+    }
+
+    fn v2_style_anchors(&self) -> AdmResult<Vec<step07_v2::StyleAnchorCandidate>> {
+        let anchor_set = read_json_typed::<step07_v2::StyleAnchorSet>(
+            &self.artifact_root.join("stage_07/style_anchor_set.json"),
+        )?;
+        if anchor_set.status != "approved" {
+            return Err(AdmError::new("Step07 v2 style anchors are not approved"));
+        }
+        Ok(anchor_set.anchors)
+    }
+
+    fn v2_vlm_review_service(&self) -> AdmResult<Arc<dyn step07_v2::VlmReviewService>> {
+        if let Some(service) = self.vlm_review_service.clone() {
+            return Ok(service);
+        }
+        Ok(Arc::new(
+            step07_v2::CachedVlmReviewService::with_cache_file(
+                "vlm_unconfigured",
+                self.artifact_root.join("vlm_review_cache/reviews.json"),
+            )?,
+        ))
+    }
+
+    fn v2_workspace_target_root(&self) -> PathBuf {
+        ProjectPaths::new(&self.root, &self.session_id)
+            .workspace_dir
+            .join("game_spec_v2/target")
+    }
+
+    fn v2_compile_step08_10(&self) -> AdmResult<step08_10_v2::Step08_10Compilation> {
+        let stage10_dir = self.artifact_root.join("stage_10");
+        let existing = stage10_dir.join("step08_10_compilation.json");
+        let spec = self.load_or_project_game_spec_v2()?;
+        let source_hash = game_spec_content_hash(&spec)?;
+        if existing.is_file() {
+            let compiled = read_json_typed::<step08_10_v2::Step08_10Compilation>(&existing)?;
+            validate_frozen_step08_10_hashes(&compiled, &source_hash)?;
+            return Ok(compiled);
+        }
+        let anchors = self.v2_style_anchors()?;
+        let compiled = step08_10_v2::compile_step08_10(&spec, &anchors, &stage10_dir)?;
+        validate_frozen_step08_10_hashes(&compiled, &source_hash)?;
+        Ok(compiled)
+    }
+
+    fn v2_asset_production_policy(
+        &self,
+        stage_dir: &Path,
+        manifest: &step08_10_v2::FrozenAssetManifest,
+    ) -> AdmResult<step12_v2::AssetProductionPolicy> {
+        let approval_path = stage_dir.join("asset_confirmation_approval.json");
+        if !approval_path.is_file() {
+            return Ok(step12_v2::AssetProductionPolicy::attended_pending());
+        }
+        let approval = read_json_typed::<Step12AssetConfirmationApproval>(&approval_path)?;
+        let manifest_ids = manifest
+            .items
+            .iter()
+            .map(|item| item.asset_id.as_str())
+            .collect::<StdBTreeSet<_>>();
+        for asset_id in &approval.approved_asset_ids {
+            if !manifest_ids.contains(asset_id.as_str()) {
+                return Err(AdmError::new(format!(
+                    "Step12 asset confirmation references unknown asset: {asset_id}"
+                )));
+            }
+        }
+        match approval.mode.as_str() {
+            "attended" => Ok(step12_v2::AssetProductionPolicy {
+                strategy: step12_v2::ConfirmationStrategy::Attended,
+                approved_asset_ids: approval.approved_asset_ids.into_iter().collect(),
+                sample_count: 0,
+                style_distance_threshold: 115.0,
+            }),
+            "sample" => Ok(step12_v2::AssetProductionPolicy::sample(
+                approval.sample_count.max(1),
+                approval.approved_asset_ids,
+            )),
+            "auto_accept" if approval.explicit_auto_accept => {
+                Ok(step12_v2::AssetProductionPolicy::attended_approved(
+                    manifest.items.iter().map(|item| item.asset_id.clone()),
+                ))
+            }
+            "auto_accept" => Err(AdmError::new(
+                "Step12 auto_accept requires explicitAutoAccept=true",
+            )),
+            other => Err(AdmError::new(format!(
+                "unsupported Step12 asset confirmation mode: {other}"
+            ))),
+        }
     }
 
     fn load_design_engine(&self) -> AdmResult<DesignEngineService> {
@@ -357,6 +838,9 @@ impl ProductPipelineExecutor {
         };
         if self.protocol_gate_required && self.protocol_root.is_none() {
             return self.protocol_resources_unavailable_result(step_number, &service);
+        }
+        if (7..=14).contains(&step_number) && self.game_spec_v2_enabled() {
+            return self.execute_game_spec_v2_step(step_number, &service);
         }
         if let Some(result) = self.upstream_locale_mismatch_result(step_number, &service) {
             return result;
@@ -944,6 +1428,511 @@ impl StageOutputGenerator for UnityContextStageOutputGenerator {
     }
 }
 
+#[derive(Debug, Clone)]
+struct FilesystemWorkspaceTaskAgent {
+    workspace_root: PathBuf,
+}
+
+impl WorkspaceTaskAgent for FilesystemWorkspaceTaskAgent {
+    fn execute_task(
+        &self,
+        task: &step08_10_v2::TrustedDevelopmentTask,
+        attempt: u32,
+        _previous_failure: Option<&step11_v2::Step11FailureEvidence>,
+    ) -> AdmResult<WorkspaceTransactionResult> {
+        let contract = &task.workspace_contract;
+        let contract_hash = contract.contract_hash().map_err(|error| {
+            AdmError::new(format!("failed to hash WorkspaceChangeSet: {error}"))
+        })?;
+        let report = contract.validate();
+        if !report.is_valid() {
+            return Ok(workspace_rejected_result(
+                contract,
+                &contract_hash,
+                ChangeFailureCategory::Input,
+                "contract validation failed",
+                StdBTreeSet::new(),
+                StdBTreeSet::new(),
+            ));
+        }
+        if !contract
+            .command_permissions
+            .iter()
+            .any(|command| command.purpose == CommandPurpose::Compile)
+            || !contract
+                .command_permissions
+                .iter()
+                .any(|command| command.purpose == CommandPurpose::Test)
+        {
+            return Ok(workspace_rejected_result(
+                contract,
+                &contract_hash,
+                ChangeFailureCategory::Tooling,
+                "compile and test command permissions are required before merge",
+                StdBTreeSet::new(),
+                StdBTreeSet::new(),
+            ));
+        }
+
+        let target_root = self.workspace_root.join("target");
+        let isolated_root = self
+            .workspace_root
+            .join("isolated")
+            .join(format!("{}_attempt_{attempt}", task.task_id));
+        let backup_root = self
+            .workspace_root
+            .join("backups")
+            .join(format!("{}_attempt_{attempt}", task.task_id));
+        if isolated_root.exists() {
+            fs::remove_dir_all(&isolated_root)?;
+        }
+        fs::create_dir_all(&target_root)?;
+        fs::create_dir_all(&isolated_root)?;
+        copy_workspace_tree(&target_root, &isolated_root)?;
+
+        for operation in &contract.operations {
+            if let Err(error) = validate_operation_expectation(&target_root, operation) {
+                return Ok(workspace_rejected_result(
+                    contract,
+                    &contract_hash,
+                    ChangeFailureCategory::Conflict,
+                    error.to_string(),
+                    StdBTreeSet::new(),
+                    StdBTreeSet::new(),
+                ));
+            }
+            apply_workspace_operation(&isolated_root, operation)?;
+        }
+
+        let mut agent_changed_paths = StdBTreeSet::new();
+        for operation in &contract.operations {
+            collect_operation_paths(operation, &mut agent_changed_paths);
+        }
+        let build_output_changed_paths = write_compile_smoke_evidence(&isolated_root, contract)?;
+        let trusted_test_hashes = contract
+            .trusted_tests
+            .iter()
+            .map(|test| (test.test_id.clone(), test.baseline_sha256.clone()))
+            .collect::<StdBTreeMap<_, _>>();
+        let resulting_tree_hash = hash_workspace_tree(&isolated_root)?;
+        replace_workspace_tree(&target_root, &isolated_root, &backup_root)?;
+
+        Ok(WorkspaceTransactionResult {
+            schema_version: WORKSPACE_CHANGE_SET_SCHEMA_VERSION.to_string(),
+            change_set_id: contract.change_set_id.clone(),
+            contract_sha256: contract_hash,
+            base_tree_hash: contract.base_tree_hash.clone(),
+            outcome: ChangeOutcome::Committed,
+            failure_category: None,
+            side_effect_state: SideEffectState::Committed,
+            stage: "isolated_workspace_snapshot_merge_compile_smoke".to_string(),
+            resulting_tree_hash: Some(resulting_tree_hash),
+            agent_changed_paths,
+            trusted_tool_changed_paths: StdBTreeSet::new(),
+            build_output_changed_paths,
+            trusted_test_hashes,
+            evidence: vec![ChangeEvidence::from_bytes(
+                "filesystem_workspace_agent",
+                "step11",
+                EvidenceStatus::Observed,
+                format!("{}:{attempt}", task.task_id).as_bytes(),
+            )],
+        })
+    }
+}
+
+fn workspace_rejected_result(
+    contract: &adm_new_change_kernel::WorkspaceChangeSet,
+    contract_hash: &str,
+    category: ChangeFailureCategory,
+    reason: impl AsRef<str>,
+    agent_changed_paths: StdBTreeSet<WorkspaceRelativePath>,
+    build_output_changed_paths: StdBTreeSet<WorkspaceRelativePath>,
+) -> WorkspaceTransactionResult {
+    WorkspaceTransactionResult {
+        schema_version: WORKSPACE_CHANGE_SET_SCHEMA_VERSION.to_string(),
+        change_set_id: contract.change_set_id.clone(),
+        contract_sha256: contract_hash.to_string(),
+        base_tree_hash: contract.base_tree_hash.clone(),
+        outcome: ChangeOutcome::Rejected,
+        failure_category: Some(category),
+        side_effect_state: SideEffectState::None,
+        stage: "isolated_workspace_rejected".to_string(),
+        resulting_tree_hash: None,
+        agent_changed_paths,
+        trusted_tool_changed_paths: StdBTreeSet::new(),
+        build_output_changed_paths,
+        trusted_test_hashes: contract
+            .trusted_tests
+            .iter()
+            .map(|test| (test.test_id.clone(), test.baseline_sha256.clone()))
+            .collect(),
+        evidence: vec![ChangeEvidence::from_bytes(
+            "filesystem_workspace_agent_rejection",
+            "step11",
+            EvidenceStatus::Observed,
+            reason.as_ref().as_bytes(),
+        )],
+    }
+}
+
+fn validate_operation_expectation(root: &Path, operation: &WorkspaceOperation) -> AdmResult<()> {
+    match operation {
+        WorkspaceOperation::WriteFile { path, expected, .. } => {
+            validate_file_expectation(&workspace_path(root, path), expected)
+        }
+        WorkspaceOperation::DeleteFile {
+            path,
+            expected_sha256,
+        } => validate_file_hash(&workspace_path(root, path), expected_sha256),
+        WorkspaceOperation::RenameFile {
+            from,
+            to,
+            expected_source_sha256,
+            expected_target,
+        } => {
+            validate_file_hash(&workspace_path(root, from), expected_source_sha256)?;
+            validate_file_expectation(&workspace_path(root, to), expected_target)
+        }
+    }
+}
+
+fn validate_file_expectation(path: &Path, expected: &WorkspaceFileExpectation) -> AdmResult<()> {
+    match expected {
+        WorkspaceFileExpectation::Missing if path.exists() => Err(AdmError::new(format!(
+            "expected missing file already exists: {}",
+            path.display()
+        ))),
+        WorkspaceFileExpectation::Missing => Ok(()),
+        WorkspaceFileExpectation::Sha256 { value } => validate_file_hash(path, value),
+    }
+}
+
+fn validate_file_hash(path: &Path, expected_sha256: &str) -> AdmResult<()> {
+    let actual = sha256_hex(&fs::read(path)?);
+    if actual == expected_sha256 {
+        Ok(())
+    } else {
+        Err(AdmError::new(format!(
+            "file hash mismatch for {}",
+            path.display()
+        )))
+    }
+}
+
+fn apply_workspace_operation(root: &Path, operation: &WorkspaceOperation) -> AdmResult<()> {
+    match operation {
+        WorkspaceOperation::WriteFile { path, payload, .. } => {
+            let path = workspace_path(root, path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(path, payload_bytes(payload))?;
+        }
+        WorkspaceOperation::DeleteFile { path, .. } => {
+            let path = workspace_path(root, path);
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+        }
+        WorkspaceOperation::RenameFile { from, to, .. } => {
+            let from = workspace_path(root, from);
+            let to = workspace_path(root, to);
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::rename(from, to)?;
+        }
+    }
+    Ok(())
+}
+
+fn payload_bytes(payload: &WorkspaceFilePayload) -> Vec<u8> {
+    match payload {
+        WorkspaceFilePayload::Utf8 { content, .. } => content.as_bytes().to_vec(),
+        WorkspaceFilePayload::Binary { bytes, .. } => bytes.clone(),
+    }
+}
+
+fn collect_operation_paths(
+    operation: &WorkspaceOperation,
+    paths: &mut StdBTreeSet<WorkspaceRelativePath>,
+) {
+    match operation {
+        WorkspaceOperation::WriteFile { path, .. }
+        | WorkspaceOperation::DeleteFile { path, .. } => {
+            paths.insert(path.clone());
+        }
+        WorkspaceOperation::RenameFile { from, to, .. } => {
+            paths.insert(from.clone());
+            paths.insert(to.clone());
+        }
+    }
+}
+
+fn write_compile_smoke_evidence(
+    target_root: &Path,
+    contract: &adm_new_change_kernel::WorkspaceChangeSet,
+) -> AdmResult<StdBTreeSet<WorkspaceRelativePath>> {
+    let mut changed = StdBTreeSet::new();
+    let Some(scope) = contract.build_output_paths.iter().next() else {
+        return Ok(changed);
+    };
+    let evidence_path =
+        WorkspaceRelativePath::parse(format!("{}/compile_smoke.json", scope.as_str()))
+            .map_err(|error| AdmError::new(error.to_string()))?;
+    let absolute = workspace_path(target_root, &evidence_path);
+    if let Some(parent) = absolute.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(
+        absolute,
+        serde_json::to_vec_pretty(&json!({
+            "schemaVersion": "step11_compile_smoke_evidence.v1",
+            "status": "not_executed",
+            "mode": "local_filesystem_contract_fallback",
+            "verificationRequired": true,
+            "message": "local fallback materialized the declared WorkspaceChangeSet but did not spawn build or smoke commands",
+            "commandPermissionCount": contract.command_permissions.len(),
+        }))
+        .map_err(|error| {
+            AdmError::new(format!("failed to encode compile smoke evidence: {error}"))
+        })?,
+    )?;
+    changed.insert(evidence_path);
+    Ok(changed)
+}
+
+fn workspace_path(root: &Path, path: &WorkspaceRelativePath) -> PathBuf {
+    root.join(path.as_str())
+}
+
+fn copy_workspace_tree(source: &Path, destination: &Path) -> AdmResult<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_workspace_tree(&source_path, &destination_path)?;
+        } else if file_type.is_file() {
+            if let Some(parent) = destination_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&source_path, &destination_path)?;
+        } else {
+            return Err(AdmError::new(format!(
+                "unsupported workspace entry type while copying isolated tree: {}",
+                source_path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn replace_workspace_tree(target: &Path, replacement: &Path, backup: &Path) -> AdmResult<()> {
+    if backup.exists() {
+        fs::remove_dir_all(backup)?;
+    }
+    if let Some(parent) = backup.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let target_existed = target.exists();
+    if target_existed {
+        fs::rename(target, backup)?;
+    }
+    match fs::rename(replacement, target) {
+        Ok(()) => {
+            if backup.exists() {
+                fs::remove_dir_all(backup)?;
+            }
+            Ok(())
+        }
+        Err(error) => {
+            if target_existed {
+                if target.exists() {
+                    let _ = fs::remove_dir_all(target);
+                }
+                if let Err(restore_error) = fs::rename(backup, target) {
+                    return Err(AdmError::new(format!(
+                        "workspace commit failed ({error}) and rollback failed ({restore_error})"
+                    )));
+                }
+            }
+            Err(AdmError::new(format!(
+                "workspace commit failed before target replacement completed: {error}"
+            )))
+        }
+    }
+}
+
+fn hash_workspace_tree(root: &Path) -> AdmResult<String> {
+    let mut files = StdBTreeMap::new();
+    collect_workspace_hashes(root, root, &mut files)?;
+    let payload = serde_json::to_vec(&files)
+        .map_err(|error| AdmError::new(format!("failed to encode workspace tree hash: {error}")))?;
+    Ok(sha256_hex(&payload))
+}
+
+fn collect_workspace_hashes(
+    root: &Path,
+    current: &Path,
+    files: &mut StdBTreeMap<String, String>,
+) -> AdmResult<()> {
+    if !current.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_workspace_hashes(root, &path, files)?;
+        } else if file_type.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            files.insert(relative, sha256_hex(&fs::read(path)?));
+        }
+    }
+    Ok(())
+}
+
+fn bool_at_path(value: &Value, path: &[&str]) -> bool {
+    let mut current = value;
+    for key in path {
+        let Some(next) = current.get(*key) else {
+            return false;
+        };
+        current = next;
+    }
+    current.as_bool().unwrap_or(false)
+}
+
+fn parse_game_spec_file(path: &Path) -> AdmResult<GameSpec> {
+    let input = fs::read_to_string(path)?;
+    parse_game_spec(&input).map_err(|error| AdmError::new(error.to_string()))
+}
+
+fn game_spec_content_hash(spec: &GameSpec) -> AdmResult<String> {
+    canonicalize_game_spec(spec)
+        .map(|canonical| canonical.content_hash)
+        .map_err(|error| AdmError::new(format!("GameSpec hash failed: {error}")))
+}
+
+fn validate_frozen_step08_10_hashes(
+    compiled: &step08_10_v2::Step08_10Compilation,
+    expected_source_hash: &str,
+) -> AdmResult<()> {
+    let observed = [
+        (
+            "runtime_architecture.source_game_spec_hash",
+            compiled.architecture.source_game_spec_hash.as_str(),
+        ),
+        (
+            "frozen_asset_manifest.source_game_spec_hash",
+            compiled.asset_manifest.source_game_spec_hash.as_str(),
+        ),
+        (
+            "trusted_task_graph.source_game_spec_hash",
+            compiled.task_graph.source_game_spec_hash.as_str(),
+        ),
+    ];
+    for (field, value) in observed {
+        if value != expected_source_hash {
+            return Err(AdmError::new(format!(
+                "frozen Step10 source hash mismatch at {field}; rerun Step10 before executing Step11/12"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn read_json_typed<T: DeserializeOwned>(path: &Path) -> AdmResult<T> {
+    let bytes = fs::read(path)?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| AdmError::new(format!("failed to parse {}: {error}", path.display())))
+}
+
+fn json_value<T: Serialize>(value: T) -> AdmResult<Value> {
+    serde_json::to_value(value)
+        .map_err(|error| AdmError::new(format!("failed to encode stage output JSON: {error}")))
+}
+
+fn game_spec_v2_validation_report(
+    step_number: u32,
+    locale: ArtifactLocale,
+    raw_status: String,
+    output: Value,
+    blockers: Vec<String>,
+) -> Value {
+    let normalized = raw_status.to_ascii_lowercase();
+    let status = if !blockers.is_empty() || normalized.contains("blocked") {
+        "blocked"
+    } else if normalized.contains("waiting") {
+        "waiting_confirmation"
+    } else if normalized.contains("stopped") {
+        "stopped"
+    } else if normalized.contains("success") || normalized.contains("passed") {
+        "success"
+    } else if normalized.contains("correction")
+        || normalized.contains("failed")
+        || normalized.contains("manual")
+    {
+        "blocked"
+    } else {
+        "failed"
+    };
+    let blocking_issues = blockers
+        .iter()
+        .map(|message| {
+            json!({
+                "code": "GAME_SPEC_V2_STAGE_BLOCKER",
+                "severity": "blocker",
+                "message": message,
+                "return_target": format!("stage_{step_number:02}"),
+            })
+        })
+        .collect::<Vec<_>>();
+    let blocking_issue_count = blocking_issues.len();
+    json!({
+        "schema_version": "game_spec_v2_product_stage_report.v1",
+        "stage": step_number,
+        "stage_id": format!("{step_number:02}"),
+        "status": status,
+        "raw_status": raw_status,
+        "valid": status == "success" || status == "waiting_confirmation",
+        "artifact_locale": locale,
+        "content_exists": true,
+        "game_spec_v2": true,
+        "blocking_issues": blocking_issues,
+        "review_items_count": 0,
+        "ai_review_status": "not_called",
+        "traceability_valid": status == "success" || status == "waiting_confirmation",
+        "business_quality": {
+            "status": status,
+            "artifact_locale": locale,
+            "content_exists": true,
+            "blocking_issues": blocking_issue_count,
+            "review_items_count": 0,
+            "ai_review_status": "not_called",
+            "traceability_valid": status == "success" || status == "waiting_confirmation",
+            "game_spec_v2": true,
+        },
+        "outputs": output,
+    })
+}
+
 fn non_empty_path(path: &Path) -> Option<PathBuf> {
     (!path.as_os_str().is_empty()).then(|| path.to_path_buf())
 }
@@ -1242,11 +2231,14 @@ mod tests {
     use super::*;
     use crate::generation::parse_design_text;
     use crate::{PipelineService, default_development_registry};
+    use adm_new_change_kernel::{
+        CommandPermission, TrustedTestContract, WorkspaceChangeSet, WorkspaceResourceBudget,
+    };
     use adm_new_contracts::pipeline::{
         PipelineCheckpoint, PipelineRunState, PipelineUnitCheckpoint, PipelineUnitStatus,
     };
     use adm_new_foundation::{new_stable_id, paths::SourceProjectRoot, sha256_hex};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
 
     use crate::work_units::{WorkUnitJournalPhase, WorkUnitKind, WorkUnitRequest};
@@ -1647,6 +2639,77 @@ mod tests {
     }
 
     #[test]
+    fn game_spec_v2_product_step14_derives_gate_evidence_from_release_sources() {
+        let root = temp_root("product_pipeline_v2_step14_sources");
+        fs::create_dir_all(root.join("settings")).unwrap();
+        fs::write(
+            root.join("settings/project_settings.json"),
+            serde_json::to_vec_pretty(&json!({"game_spec_v2": {"enabled": true}})).unwrap(),
+        )
+        .unwrap();
+        let executor = ProductPipelineExecutor::new(&root, "session_a")
+            .unwrap()
+            .without_protocol_gate_for_tests();
+        let source_root = SourceProjectRoot::discover(env!("CARGO_MANIFEST_DIR"))
+            .unwrap()
+            .into_path();
+        let spec_path =
+            source_root.join("testdata/game_spec/r1c0_micro_ecodome_lane_guard_frozen.json");
+        let spec = parse_game_spec_file(&spec_path).unwrap();
+        let stage06 = executor.artifact_root().join("stage_06");
+        fs::create_dir_all(&stage06).unwrap();
+        fs::copy(&spec_path, stage06.join("r1_frozen_game_spec.json")).unwrap();
+        let stage13 = executor.artifact_root().join("stage_13");
+        fs::create_dir_all(&stage13).unwrap();
+        io::write_json_serializable(
+            &stage13.join("step13_acceptance_output.json"),
+            &passed_step13_for_product_step14_test(&spec),
+        )
+        .unwrap();
+        let stage14 = executor.artifact_root().join("stage_14");
+        fs::create_dir_all(&stage14).unwrap();
+        let evidence_id = write_product_step14_standalone_release_evidence(&root);
+        io::write_json_serializable(
+            &stage14.join(step14_v2::R1_PIPELINE_GATE_EVIDENCE_FILE),
+            &step14_v2::R1PipelineGateEvidence::all_passed_for_tests(),
+        )
+        .unwrap();
+        io::write_json_serializable(
+            &stage14.join(step14_v2::R1_USER_PLAYTEST_SIGNATURE_FILE),
+            &step14_v2::R1UserPlaytestSignature::manual_for_tests(&evidence_id),
+        )
+        .unwrap();
+        let registry = default_development_registry();
+        let step14 = registry
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "14")
+            .unwrap();
+
+        let result = executor.execute(step14, &empty_context("14"));
+
+        assert_eq!(result.status, StageStatus::Success);
+        assert!(stage14.join("r1_gate_evidence.json").is_file());
+        assert!(
+            stage14
+                .join(step14_v2::R1_GATE_EVIDENCE_SOURCE_REPORT_FILE)
+                .is_file()
+        );
+        let derived = read_json(
+            &stage14.join(step14_v2::R1_GATE_EVIDENCE_SOURCE_REPORT_FILE),
+            json!({}),
+        );
+        assert!(derived["blockers"].as_array().unwrap().is_empty());
+        assert_eq!(
+            derived["standaloneReleaseEvidencePath"],
+            root.join("gates/standalone-release-evidence.json")
+                .to_string_lossy()
+                .replace('\\', "/")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn product_executor_does_not_normalize_a_missing_upstream_locale_marker() {
         let root = temp_root("product_pipeline_locale_marker_missing");
         let executor = ProductPipelineExecutor::new(&root, "session_a")
@@ -1974,6 +3037,77 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn filesystem_workspace_agent_renames_from_target_snapshot() {
+        let root = temp_root("filesystem_workspace_rename_snapshot");
+        let workspace_root = root.join("workspace");
+        let target = workspace_root.join("target");
+        fs::create_dir_all(target.join("assets")).unwrap();
+        fs::write(target.join("assets/old.txt"), "sealed source").unwrap();
+        let source_hash = sha256_hex(b"sealed source");
+        let contract = workspace_contract(vec![WorkspaceOperation::RenameFile {
+            from: workspace_relative("assets/old.txt"),
+            to: workspace_relative("assets/new.txt"),
+            expected_source_sha256: source_hash,
+            expected_target: WorkspaceFileExpectation::Missing,
+        }]);
+        let task = workspace_task("rename_snapshot", contract.clone());
+        let agent = FilesystemWorkspaceTaskAgent {
+            workspace_root: workspace_root.clone(),
+        };
+
+        let result = agent.execute_task(&task, 1, None).unwrap();
+
+        assert_eq!(result.outcome, ChangeOutcome::Committed);
+        assert_eq!(result.side_effect_state, SideEffectState::Committed);
+        assert!(!target.join("assets/old.txt").exists());
+        assert_eq!(
+            fs::read_to_string(target.join("assets/new.txt")).unwrap(),
+            "sealed source"
+        );
+        let compile_smoke: Value =
+            serde_json::from_slice(&fs::read(target.join("build/compile_smoke.json")).unwrap())
+                .unwrap();
+        assert_eq!(compile_smoke["status"], "not_executed");
+        assert_eq!(compile_smoke["verificationRequired"], true);
+        assert!(
+            !workspace_root
+                .join("isolated/rename_snapshot_attempt_1")
+                .exists()
+        );
+        assert!(result.validate_against(&contract).is_valid());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn filesystem_workspace_agent_rejects_conflict_without_mutating_target() {
+        let root = temp_root("filesystem_workspace_conflict_no_mutation");
+        let workspace_root = root.join("workspace");
+        let target = workspace_root.join("target");
+        fs::create_dir_all(target.join("assets")).unwrap();
+        fs::write(target.join("assets/existing.txt"), "original").unwrap();
+        let contract = workspace_contract(vec![WorkspaceOperation::WriteFile {
+            path: workspace_relative("assets/existing.txt"),
+            expected: WorkspaceFileExpectation::Missing,
+            payload: WorkspaceFilePayload::utf8("replacement"),
+        }]);
+        let task = workspace_task("conflict_no_mutation", contract);
+        let agent = FilesystemWorkspaceTaskAgent {
+            workspace_root: workspace_root.clone(),
+        };
+
+        let result = agent.execute_task(&task, 1, None).unwrap();
+
+        assert_eq!(result.outcome, ChangeOutcome::Rejected);
+        assert_eq!(result.side_effect_state, SideEffectState::None);
+        assert_eq!(
+            fs::read_to_string(target.join("assets/existing.txt")).unwrap(),
+            "original"
+        );
+        assert!(!target.join("build/compile_smoke.json").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
     fn write_step07_started_record(
         executor: &ProductPipelineExecutor,
         style_id: &str,
@@ -2062,6 +3196,222 @@ mod tests {
             skills: BTreeMap::new(),
             test_mode: false,
             artifact_dir: String::new(),
+        }
+    }
+
+    fn passed_step13_for_product_step14_test(spec: &GameSpec) -> step13_v2::Step13AcceptanceOutput {
+        let spec_hash = canonicalize_game_spec(spec).unwrap().content_hash;
+        step13_v2::Step13AcceptanceOutput {
+            schema_version: "step13_acceptance_validation.v1".to_string(),
+            compiler_version: step13_v2::STEP13_V2_COMPILER_VERSION.to_string(),
+            status: step13_v2::Step13Status::Passed,
+            spec_hash: spec_hash.clone(),
+            build_hash: sha256_hex(format!("{spec_hash}:build").as_bytes()),
+            scenario_results: spec
+                .acceptance_scenarios
+                .iter()
+                .map(
+                    |(scenario_id, scenario)| step13_v2::AcceptanceScenarioResult {
+                        scenario_id: scenario_id.to_string(),
+                        summary: scenario.summary.clone(),
+                        automation_kind: step13_v2::AutomationKind::Automated,
+                        status: step13_v2::ScenarioExecutionStatus::Passed,
+                        action_ids: scenario
+                            .when
+                            .iter()
+                            .map(|action| action.action.to_string())
+                            .collect(),
+                        spec_hash: spec_hash.clone(),
+                        build_hash: "product-step14-test-build".to_string(),
+                        log_hash: sha256_hex(scenario_id.to_string().as_bytes()),
+                        performance_checks: Vec::new(),
+                        accessibility_checks: Vec::new(),
+                        failure_reason: None,
+                    },
+                )
+                .collect(),
+            output_paths: Default::default(),
+        }
+    }
+
+    fn write_product_step14_standalone_release_evidence(root: &Path) -> String {
+        let evidence_id = "3".repeat(32);
+        let transaction_id = "4".repeat(32);
+        let now = adm_new_foundation::unix_timestamp();
+        let checks = product_step14_required_release_checks()
+            .into_iter()
+            .map(|check| {
+                (
+                    check.to_string(),
+                    json!({
+                        "status": "passed",
+                        "command": format!("fixture:{check}"),
+                        "exitCode": 0,
+                        "durationMs": 1,
+                        "outputSha256": "a".repeat(64),
+                    }),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>();
+        write_json(
+            &root.join("gates/standalone-release-evidence.json"),
+            &json!({
+                "schemaVersion": 2,
+                "producer": "tools/verify-standalone.ps1/v2",
+                "evidenceId": evidence_id,
+                "projectId": "autodesignmaker-rust-v2",
+                "status": "passed",
+                "gitCommit": "b".repeat(40),
+                "sourceTreeClean": true,
+                "generatedAtUnix": now,
+                "expiresAtUnix": now + 3600,
+                "checks": checks,
+                "portable": {
+                    "root": "dist/AutoDesignMaker-NEWrust-release",
+                    "executable": "AutoDesignMaker.exe",
+                    "executableSha256": "c".repeat(64),
+                    "buildManifestSha256": "d".repeat(64),
+                    "resourceManifestSha256": "e".repeat(64),
+                    "gitCommit": "b".repeat(40),
+                    "swapReceipt": format!("dist/.AutoDesignMaker-NEWrust-release.swap-{transaction_id}.json"),
+                    "swapReceiptSha256": "f".repeat(64),
+                    "transactionId": transaction_id,
+                    "transactionStatus": "finalized",
+                },
+                "errors": [],
+            }),
+        )
+        .unwrap();
+        evidence_id
+    }
+
+    fn product_step14_required_release_checks() -> Vec<&'static str> {
+        vec![
+            "cargo_fmt_check",
+            "cargo_check_workspace",
+            "cargo_test_workspace",
+            "web_unit",
+            "web_i18n",
+            "web_design_content",
+            "web_build",
+            "web_e2e",
+            "web_language_gate",
+            "web_ui_gate",
+            "web_ui_baseline_gate",
+            "package_contract_self_test",
+            "resource_manifest",
+            "standalone_boundary_gate",
+            "portable_build",
+            "portable_smoke",
+            "portable_integrity",
+            "pe_architecture_crt",
+            "clean_clone_relocation",
+            "anti_fake_scan",
+            "generated_cleanup",
+        ]
+    }
+
+    fn workspace_relative(path: &str) -> WorkspaceRelativePath {
+        WorkspaceRelativePath::parse(path).unwrap()
+    }
+
+    fn workspace_contract(operations: Vec<WorkspaceOperation>) -> WorkspaceChangeSet {
+        let mut agent_write_paths = StdBTreeSet::new();
+        let mut read_paths = StdBTreeSet::from([workspace_relative("Tests/TrustedSmoke.cs")]);
+        for operation in &operations {
+            collect_operation_paths(operation, &mut agent_write_paths);
+            match operation {
+                WorkspaceOperation::WriteFile { path, expected, .. } => {
+                    if !matches!(expected, WorkspaceFileExpectation::Missing) {
+                        read_paths.insert(path.clone());
+                    }
+                }
+                WorkspaceOperation::DeleteFile { path, .. } => {
+                    read_paths.insert(path.clone());
+                }
+                WorkspaceOperation::RenameFile {
+                    from,
+                    to,
+                    expected_target,
+                    ..
+                } => {
+                    read_paths.insert(from.clone());
+                    if !matches!(expected_target, WorkspaceFileExpectation::Missing) {
+                        read_paths.insert(to.clone());
+                    }
+                }
+            }
+        }
+        WorkspaceChangeSet {
+            schema_version: WORKSPACE_CHANGE_SET_SCHEMA_VERSION.to_string(),
+            change_set_id: "filesystem_workspace_agent_contract".to_string(),
+            base_tree_hash: sha256_hex(b"base-tree"),
+            read_paths,
+            agent_write_paths,
+            trusted_tool_write_paths: StdBTreeSet::new(),
+            build_output_paths: StdBTreeSet::from([workspace_relative("build")]),
+            operations,
+            command_permissions: vec![
+                command_permission("compile_workspace", CommandPurpose::Compile),
+                command_permission("trusted_test", CommandPurpose::Test),
+            ],
+            trusted_tests: vec![TrustedTestContract {
+                test_id: "trusted_runtime_smoke".to_string(),
+                path: workspace_relative("Tests/TrustedSmoke.cs"),
+                baseline_sha256: sha256_hex(b"trusted-test-baseline"),
+                command_id: "trusted_test".to_string(),
+            }],
+            resource_budget: WorkspaceResourceBudget {
+                max_duration_ms: 30_000,
+                max_processes: 2,
+                max_write_bytes: 1_000_000,
+                max_file_count: 20,
+                max_retries: 2,
+            },
+            evidence: vec![ChangeEvidence::from_bytes(
+                "filesystem_workspace_agent_contract",
+                "test",
+                EvidenceStatus::Observed,
+                b"sealed contract fixture",
+            )],
+        }
+    }
+
+    fn command_permission(command_id: &str, purpose: CommandPurpose) -> CommandPermission {
+        CommandPermission {
+            command_id: command_id.to_string(),
+            tool_binding_id: "local_test_tool".to_string(),
+            purpose,
+            argument_template: vec!["--workspace".to_string()],
+            working_directory: None,
+            timeout_ms: 10_000,
+            allow_network: false,
+        }
+    }
+
+    fn workspace_task(
+        task_id: &str,
+        workspace_contract: WorkspaceChangeSet,
+    ) -> step08_10_v2::TrustedDevelopmentTask {
+        step08_10_v2::TrustedDevelopmentTask {
+            task_id: task_id.to_string(),
+            title: task_id.to_string(),
+            ordinal_size: "S".to_string(),
+            architecture_system_id: "test_runtime".to_string(),
+            declared_write_paths: workspace_contract
+                .agent_write_paths
+                .iter()
+                .map(|path| path.as_str().to_string())
+                .collect(),
+            machine_checks: vec![step08_10_v2::MachineAcceptanceCheck {
+                check_id: "check_trusted_runtime_smoke".to_string(),
+                compile_target: "test".to_string(),
+                trusted_test_id: "trusted_runtime_smoke".to_string(),
+                command_id: "trusted_test".to_string(),
+            }],
+            dependencies: Vec::new(),
+            rollback_boundary: Vec::new(),
+            workspace_contract,
         }
     }
 

@@ -490,6 +490,49 @@ textarea:focus-visible,
   background: rgb(255 255 255 / 70%);
 }
 
+.bounded-completion-panel {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 7px;
+  margin: 10px 0;
+  padding: 10px;
+}
+
+.bounded-completion-panel.status-failed,
+.bounded-completion-panel.status-rejected {
+  border-color: var(--danger);
+}
+
+.bounded-completion-panel.status-confirmed {
+  border-color: var(--warning);
+}
+
+.bounded-completion-panel.status-committed {
+  border-color: var(--success);
+}
+
+.bounded-completion-panel h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.completion-summary,
+.completion-confirmation {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.completion-error {
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+}
+
 .semantic-quality-panel {
   background: var(--surface-alt);
   border: 1px solid var(--border);
@@ -1758,6 +1801,17 @@ button:disabled {
 .project-config-field {
   display: grid;
   gap: 5px;
+}
+
+.project-config-toggle {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.project-config-toggle input {
+  margin: 0;
 }
 
 .native-path-field {

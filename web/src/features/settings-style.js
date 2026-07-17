@@ -52,6 +52,7 @@ export const DEFAULT_PROJECT_CONFIG = {
   bindingId: "",
   projectEngine: "unity",
   pipelineAdapter: "none",
+  gameSpecV2Enabled: false,
   customEngineName: "",
   requiredEditorVersion: "",
   developmentPath: "",
@@ -135,11 +136,18 @@ export function normalizeProjectConfig(input) {
   const engine = String(read(value, "projectEngine", "project_engine") ?? "unity")
     .trim()
     .toLowerCase();
+  const gameSpecV2 = read(value, "gameSpecV2", "game_spec_v2");
+  const gameSpecV2Enabled =
+    read(value, "gameSpecV2Enabled", "game_spec_v2_enabled")
+    ?? (typeof gameSpecV2 === "object" && gameSpecV2 !== null
+      ? read(gameSpecV2, "enabled")
+      : gameSpecV2);
   return {
     schemaVersion: Number(read(value, "schemaVersion", "schema_version") ?? 2),
     bindingId: read(value, "bindingId", "binding_id") ?? "",
     projectEngine: ENGINE_OPTIONS.some((option) => option.id === engine) ? engine : "unity",
     pipelineAdapter: read(value, "pipelineAdapter", "pipeline_adapter") ?? "none",
+    gameSpecV2Enabled: Boolean(gameSpecV2Enabled),
     customEngineName: read(value, "customEngineName", "custom_engine_name") ?? "",
     requiredEditorVersion:
       read(value, "requiredEditorVersion", "required_editor_version") ?? "",
@@ -532,6 +540,7 @@ export function renderProjectConfigDialog(documentRef, configInput, api = {}) {
   setFieldValue(modal, "custom-engine-name", config.customEngineName);
   setFieldValue(modal, "development-project-path", config.developmentPath);
   setFieldValue(modal, "editor-path", config.editorPath);
+  setFieldChecked(modal, "game-spec-v2-enabled", config.gameSpecV2Enabled);
   updateProjectConfigLabels(modal, config.projectEngine);
   const editorCandidates = modal.querySelector('[data-role="unity-editor-candidates"]');
   if (editorCandidates) {
@@ -752,6 +761,7 @@ function projectConfigToSnake(settings) {
     binding_id: config.bindingId,
     project_engine: config.projectEngine,
     pipeline_adapter: config.pipelineAdapter,
+    game_spec_v2_enabled: config.gameSpecV2Enabled,
     custom_engine_name: config.projectEngine === "custom" ? config.customEngineName.trim() : "",
     required_editor_version: config.requiredEditorVersion.trim(),
     development_path: config.developmentPath.trim(),
@@ -764,6 +774,7 @@ function readProjectConfigForm(modal) {
     ...(modal.__projectConfigBase ?? DEFAULT_PROJECT_CONFIG),
     projectEngine: fieldValue(modal, "project-engine"),
     customEngineName: fieldValue(modal, "custom-engine-name"),
+    gameSpecV2Enabled: fieldChecked(modal, "game-spec-v2-enabled"),
     developmentPath: fieldValue(modal, "development-project-path"),
     editorPath: fieldValue(modal, "editor-path"),
   });
@@ -996,8 +1007,19 @@ function setFieldValue(container, role, value) {
   }
 }
 
+function setFieldChecked(container, role, value) {
+  const field = container.querySelector(`[data-role="${role}"]`);
+  if (field) {
+    field.checked = Boolean(value);
+  }
+}
+
 function fieldValue(container, role) {
   return container.querySelector(`[data-role="${role}"]`)?.value ?? "";
+}
+
+function fieldChecked(container, role) {
+  return Boolean(container.querySelector(`[data-role="${role}"]`)?.checked);
 }
 
 function bindAction(container, action, eventName, handler) {

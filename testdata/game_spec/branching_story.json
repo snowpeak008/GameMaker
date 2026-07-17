@@ -100,6 +100,46 @@
           "from": "arrival",
           "to": "interview",
           "trigger": { "source": "input" }
+        },
+        {
+          "transitionId": "resolve_with_trust",
+          "from": "interview",
+          "to": "reconciliation",
+          "trigger": {
+            "source": "action",
+            "reference": { "kind": "action", "id": "choose_reply" }
+          },
+          "guards": [
+            {
+              "description": "Trust supports reconciliation.",
+              "expression": {
+                "kind": "compare",
+                "source": { "kind": "component", "id": "story_variables", "path": "trust" },
+                "operator": "greater_or_equal",
+                "value": 1
+              }
+            }
+          ]
+        },
+        {
+          "transitionId": "resolve_without_trust",
+          "from": "interview",
+          "to": "separation",
+          "trigger": {
+            "source": "action",
+            "reference": { "kind": "action", "id": "choose_reply" }
+          },
+          "guards": [
+            {
+              "description": "Trust is insufficient for reconciliation.",
+              "expression": {
+                "kind": "compare",
+                "source": { "kind": "component", "id": "story_variables", "path": "trust" },
+                "operator": "less",
+                "value": 1
+              }
+            }
+          ]
         }
       ]
     }
@@ -154,6 +194,12 @@
     }
   },
   "technical": {
+    "productEnvelope": {
+      "sceneScale": "medium",
+      "systemComplexity": "medium",
+      "assetScale": "medium",
+      "contentVolume": "medium"
+    },
     "platforms": ["windows", "android", "ios"],
     "performanceBudgets": { "loadedScenes": 8 },
     "saveRequirements": ["Persist branch variables and the current scene."],
@@ -171,6 +217,30 @@
         }
       ],
       "then": [{ "description": "A later scene observes the updated trust value.", "expression": { "kind": "always" } }]
+    },
+    "hidden_reply_stays_unavailable": {
+      "summary": "A reply hidden by branch conditions cannot be committed.",
+      "given": [
+        {
+          "description": "Trust is below the threshold for the reply.",
+          "reads": [{ "kind": "component", "id": "story_variables", "path": "trust" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "component", "id": "story_variables", "path": "trust" },
+            "operator": "less",
+            "value": 1
+          }
+        }
+      ],
+      "when": [
+        {
+          "action": "choose_reply",
+          "actor": { "kind": "entity", "id": "protagonist" },
+          "targets": [{ "kind": "entity", "id": "witness" }]
+        }
+      ],
+      "then": [{ "description": "The unavailable reply is not committed and no later scene observes it.", "expression": { "kind": "always" } }],
+      "failureCase": true
     }
   },
   "traceLinks": {
@@ -179,6 +249,12 @@
       "target": { "kind": "scenario", "id": "reply_changes_later_scene" },
       "relation": "verifies",
       "rationale": "The scenario requires a delayed but explainable consequence."
+    },
+    "consequence_to_hidden_reply_rejection": {
+      "source": { "kind": "intent", "id": "visible_consequences" },
+      "target": { "kind": "scenario", "id": "hidden_reply_stays_unavailable" },
+      "relation": "verifies",
+      "rationale": "The failure scenario verifies that unavailable choices do not silently apply consequences."
     }
   },
   "extensions": {}

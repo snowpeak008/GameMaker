@@ -722,6 +722,7 @@ mod tests {
                 settings: ProjectRuntimeSettings {
                     project_engine: "custom".to_string(),
                     custom_engine_name: "Internal Engine".to_string(),
+                    game_spec_v2_enabled: true,
                     development_path: "missing_custom_project".to_string(),
                     ..ProjectRuntimeSettings::default()
                 },
@@ -733,6 +734,7 @@ mod tests {
         let logical_settings = view.settings.clone();
         assert!(view.saved_path.is_empty());
         assert_eq!(view.settings.project_engine, "custom");
+        assert!(view.settings.game_spec_v2_enabled);
         assert_eq!(view.preflight.unwrap().status, "passed");
 
         let moved = root.join("custom-project-moved");
@@ -756,7 +758,9 @@ mod tests {
 
         let loaded = load_project_config(&service);
         assert!(loaded.ok);
-        assert_eq!(loaded.data.unwrap().custom_engine_name, "Internal Engine");
+        let loaded = loaded.data.unwrap();
+        assert_eq!(loaded.custom_engine_name, "Internal Engine");
+        assert!(loaded.game_spec_v2_enabled);
 
         let blocked = run_project_preflight(
             &service,

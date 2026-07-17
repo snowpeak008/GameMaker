@@ -12,6 +12,11 @@ use adm_new_ai::resolution::resolve_active_ai_target;
 use adm_new_ai::{
     AiAdapterKind, AiConfigCategory, AiConfigSource, CompletionAdapter, validate_allowed_outputs,
 };
+use adm_new_change_kernel::{
+    ChangeEvidence, ChangeFailureCategory, ChangeOutcome, CommandPurpose, EvidenceStatus,
+    SideEffectState, WORKSPACE_CHANGE_SET_SCHEMA_VERSION, WorkspaceChangeSet,
+    WorkspaceRelativePath, WorkspaceTransactionResult,
+};
 use adm_new_contracts::ArtifactLocale;
 use adm_new_contracts::ai::{AiConfig, ModelResultStatus, ModelTask};
 use adm_new_contracts::execution_object::ExecutionObjectStatus;
@@ -24,6 +29,8 @@ use adm_new_pipeline::{
     StyleImageGenerator, StyleImageRequest, StyleImageStatus, WorkUnitExecutionResult,
     WorkUnitExecutionStatus, WorkUnitExecutor, WorkUnitJournalRecord, WorkUnitKind,
     WorkUnitReconcileDecision, WorkUnitRequest,
+    stages::step08_10_v2::TrustedDevelopmentTask,
+    stages::step11_v2::{Step11FailureEvidence, WorkspaceTaskAgent},
 };
 use image::{GenericImageView, ImageFormat};
 use serde_json::{Value, json};
@@ -43,6 +50,11 @@ enum CliKind {
 }
 
 #[derive(Clone)]
+/// Legacy development work-unit adapter used by the current desktop pipeline.
+///
+/// The GameSpec v2 Step11 path uses `WorkspaceTaskAgent` plus
+/// `WorkspaceChangeSet` results; this adapter remains a compatibility bridge
+/// for R0 and existing Step08-14 execution until the caller surface migrates.
 pub struct AiDevelopmentWorkUnitExecutor {
     kind: CliKind,
     program: String,
@@ -51,6 +63,18 @@ pub struct AiDevelopmentWorkUnitExecutor {
     program_verifier: Arc<dyn ProgramWorkUnitVerifier>,
     execution_scope: String,
 }
+
+pub const AI_DEVELOPMENT_EXECUTOR_RETAINED_CALLERS: &[&str] = &[
+    "legacy_work_unit_executor",
+    "gamespec_v2_workspace_task_agent_bridge",
+    "r0_harness",
+];
+pub const AI_DEVELOPMENT_EXECUTOR_PROHIBITED_CALLERS: &[&str] = &[
+    "gamespec_v2_product_step11_direct_work_unit_commit",
+    "gamespec_v2_authoritative_execution_without_workspace_change_set",
+];
+pub const AI_DEVELOPMENT_EXECUTOR_V2_REPLACEMENT: &str =
+    "WorkspaceTaskAgent::execute_task with WorkspaceChangeSet validation";
 
 impl fmt::Debug for AiDevelopmentWorkUnitExecutor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -582,6 +606,199 @@ impl WorkUnitExecutor for AiDevelopmentWorkUnitExecutor {
     }
 }
 
+impl WorkspaceTaskAgent for AiDevelopmentWorkUnitExecutor {
+    fn execute_task(
+        &self,
+        task: &TrustedDevelopmentTask,
+        attempt: u32,
+        previous_failure: Option<&Step11FailureEvidence>,
+    ) -> AdmResult<WorkspaceTransactionResult> {
+        let request = workspace_task_to_work_unit_request(
+            task,
+            attempt,
+            previous_failure,
+            self.execution_scope_fingerprint(),
+        )?;
+        let execution = <Self as WorkUnitExecutor>::execute(self, &request)?;
+        workspace_transaction_from_work_unit(task, attempt, &execution)
+    }
+}
+
+fn workspace_task_to_work_unit_request(
+    task: &TrustedDevelopmentTask,
+    attempt: u32,
+    previous_failure: Option<&Step11FailureEvidence>,
+    execution_scope: String,
+) -> AdmResult<WorkUnitRequest> {
+    let contract = &task.workspace_contract;
+    let output_files = if task.declared_write_paths.is_empty() {
+        workspace_path_strings(&contract.agent_write_paths)
+    } else {
+        task.declared_write_paths.clone()
+    };
+    let payload = json!({
+        "schema_version": "workspace_task_agent_bridge.v1",
+        "artifact_locale": "en-US",
+        "task_id": task.task_id,
+        "title": task.title,
+        "architecture_system_id": task.architecture_system_id,
+        "ordinal_size": task.ordinal_size,
+        "attempt": attempt,
+        "dependencies": task.dependencies,
+        "input_files": workspace_path_strings(&contract.read_paths),
+        "output_files": output_files,
+        "allowed_write_paths": workspace_path_strings(&contract.agent_write_paths),
+        "workspace_contract_hash": contract.contract_hash().map_err(|error| {
+            AdmError::new(format!("failed to hash WorkspaceChangeSet: {error}"))
+        })?,
+        "workspace_contract": contract,
+        "machine_checks": task.machine_checks,
+        "previous_failure": previous_failure.map(|failure| json!({
+            "failure_kind": format!("{:?}", failure.failure_kind).to_ascii_lowercase(),
+            "reason": failure.reason,
+            "issue_codes": failure.issue_codes,
+        })),
+        "instructions": [
+            "Modify only files listed in output_files / allowed_write_paths.",
+            "Do not modify trusted tests or files outside the declared WorkspaceChangeSet.",
+            "Return only after compile and test checks are satisfied."
+        ],
+    });
+    let mut request =
+        WorkUnitRequest::new("11", &task.task_id, WorkUnitKind::Development, payload)?;
+    request.execution_scope = execution_scope;
+    request.idempotency_key = sha256_hex(
+        format!(
+            "workspace-task-agent-v1:{}:{}:{}",
+            request.idempotency_key, request.execution_scope, attempt
+        )
+        .as_bytes(),
+    );
+    Ok(request)
+}
+
+fn workspace_transaction_from_work_unit(
+    task: &TrustedDevelopmentTask,
+    attempt: u32,
+    execution: &WorkUnitExecutionResult,
+) -> AdmResult<WorkspaceTransactionResult> {
+    let contract = &task.workspace_contract;
+    let contract_hash = contract
+        .contract_hash()
+        .map_err(|error| AdmError::new(format!("failed to hash WorkspaceChangeSet: {error}")))?;
+    let agent_changed_paths = workspace_paths_from_strings(&execution.changed_files)?;
+    let side_effects_committed = execution
+        .data
+        .get("side_effects_committed")
+        .and_then(Value::as_bool)
+        .unwrap_or(execution.status == WorkUnitExecutionStatus::Verified);
+    let status_passed = execution.status == WorkUnitExecutionStatus::Verified;
+    let failure_category = if status_passed {
+        None
+    } else {
+        Some(work_unit_failure_category(execution))
+    };
+    let side_effect_state = if status_passed {
+        SideEffectState::Committed
+    } else if side_effects_committed {
+        SideEffectState::CommittedRecoveryBlocked
+    } else {
+        SideEffectState::None
+    };
+    let resulting_tree_hash = if side_effects_committed || status_passed {
+        Some(sha256_hex(
+            serde_json::to_vec(&json!({
+                "taskId": task.task_id,
+                "attempt": attempt,
+                "changedFiles": execution.changed_files,
+                "data": execution.data,
+            }))
+            .map_err(|error| {
+                AdmError::new(format!("failed to encode workspace result hash: {error}"))
+            })?
+            .as_slice(),
+        ))
+    } else {
+        None
+    };
+    Ok(WorkspaceTransactionResult {
+        schema_version: WORKSPACE_CHANGE_SET_SCHEMA_VERSION.to_string(),
+        change_set_id: contract.change_set_id.clone(),
+        contract_sha256: contract_hash,
+        base_tree_hash: contract.base_tree_hash.clone(),
+        outcome: if status_passed {
+            ChangeOutcome::Committed
+        } else {
+            ChangeOutcome::Rejected
+        },
+        failure_category,
+        side_effect_state,
+        stage: "ai_development_work_unit_workspace_agent".to_string(),
+        resulting_tree_hash,
+        agent_changed_paths,
+        trusted_tool_changed_paths: BTreeSet::new(),
+        build_output_changed_paths: BTreeSet::new(),
+        trusted_test_hashes: contract
+            .trusted_tests
+            .iter()
+            .map(|test| (test.test_id.clone(), test.baseline_sha256.clone()))
+            .collect(),
+        evidence: vec![ChangeEvidence::from_bytes(
+            "ai_development_work_unit_result",
+            "step11",
+            if status_passed {
+                EvidenceStatus::Passed
+            } else {
+                EvidenceStatus::Failed
+            },
+            serde_json::to_vec(&json!({
+                "taskId": task.task_id,
+                "attempt": attempt,
+                "status": format!("{:?}", execution.status),
+                "verificationResults": execution.verification_results,
+                "message": execution.message,
+            }))
+            .map_err(|error| {
+                AdmError::new(format!("failed to encode work-unit evidence: {error}"))
+            })?
+            .as_slice(),
+        )],
+    })
+}
+
+fn workspace_path_strings(paths: &BTreeSet<WorkspaceRelativePath>) -> Vec<String> {
+    paths.iter().map(|path| path.as_str().to_string()).collect()
+}
+
+fn workspace_paths_from_strings(paths: &[String]) -> AdmResult<BTreeSet<WorkspaceRelativePath>> {
+    paths
+        .iter()
+        .map(|path| {
+            WorkspaceRelativePath::parse(path).map_err(|error| {
+                AdmError::new(format!("invalid WorkspaceChangeSet result path: {error}"))
+            })
+        })
+        .collect()
+}
+
+fn work_unit_failure_category(execution: &WorkUnitExecutionResult) -> ChangeFailureCategory {
+    if execution.status == WorkUnitExecutionStatus::Unavailable {
+        return ChangeFailureCategory::Tooling;
+    }
+    let text = serde_json::to_string(&execution.verification_results)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if text.contains("trusted") || text.contains("test") {
+        ChangeFailureCategory::Test
+    } else if text.contains("compile") || text.contains("unity") {
+        ChangeFailureCategory::Compile
+    } else if text.contains("scope") || text.contains("write_set") {
+        ChangeFailureCategory::ScopeViolation
+    } else {
+        ChangeFailureCategory::AgentError
+    }
+}
+
 #[derive(Debug, Clone)]
 struct UnavailableWorkUnitExecutor {
     message: String,
@@ -719,6 +936,20 @@ impl UnityBatchmodeProgramVerifier {
     }
 }
 
+#[derive(Debug, Clone)]
+struct UnityValidationPlan {
+    command_id: String,
+    purpose: CommandPurpose,
+    argument_template: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct UnityValidationCheck {
+    purpose: CommandPurpose,
+    passed: bool,
+    result: Value,
+}
+
 impl ProgramWorkUnitVerifier for UnityBatchmodeProgramVerifier {
     fn execution_scope_fingerprint(&self) -> String {
         self.execution_scope.clone()
@@ -730,31 +961,125 @@ impl ProgramWorkUnitVerifier for UnityBatchmodeProgramVerifier {
         project_root: &Path,
         expected_output_hashes: &BTreeMap<String, String>,
     ) -> AdmResult<ProgramVerificationOutcome> {
-        let log_name = format!(
-            "{}-{}.log",
-            sha256_hex(request.unit_id.as_bytes())
-                .chars()
-                .take(16)
-                .collect::<String>(),
-            new_stable_id("unity-verify")?
-        );
-        let log_path = self.log_root.join(log_name);
         let timeout_seconds = request
             .payload
             .get("unity_validation_timeout_seconds")
             .and_then(Value::as_u64)
             .unwrap_or(600)
             .clamp(30, 1_800);
-        let mut command = Command::new(&self.editor_path);
+        let requires_smoke = request
+            .payload
+            .get("schema_version")
+            .and_then(Value::as_str)
+            == Some("workspace_task_agent_bridge.v1");
+        let plans = unity_validation_plans(request)?;
+        let has_compile_plan = plans
+            .iter()
+            .any(|plan| plan.purpose == CommandPurpose::Compile);
+        let has_smoke_plan = plans
+            .iter()
+            .any(|plan| matches!(plan.purpose, CommandPurpose::Test | CommandPurpose::Smoke));
+        if !has_compile_plan || (requires_smoke && !has_smoke_plan) {
+            let result = json!({
+                "id": "unity_batchmode_compile_and_smoke",
+                "status": "failed",
+                "compile_plan_present": has_compile_plan,
+                "smoke_plan_present": has_smoke_plan,
+                "requires_smoke": requires_smoke,
+            });
+            return Ok(ProgramVerificationOutcome::failed(
+                "Workspace task contract did not declare both compile and trusted smoke/test checks",
+                result,
+            ));
+        }
+
+        let mut checks = Vec::new();
+        for plan in &plans {
+            checks.push(self.run_validation_plan(
+                request,
+                project_root,
+                expected_output_hashes,
+                timeout_seconds,
+                plan,
+            )?);
+        }
+        let compile_passed = checks
+            .iter()
+            .any(|check| check.purpose == CommandPurpose::Compile && check.passed);
+        let smoke_passed = if requires_smoke {
+            checks.iter().any(|check| {
+                matches!(check.purpose, CommandPurpose::Test | CommandPurpose::Smoke)
+                    && check.passed
+            })
+        } else {
+            true
+        };
+        let passed = compile_passed && smoke_passed;
+        let result = json!({
+            "id": "unity_batchmode_compile_and_smoke",
+            "status": if passed { "passed" } else { "failed" },
+            "requires_smoke": requires_smoke,
+            "compile_passed": compile_passed,
+            "smoke_passed": smoke_passed,
+            "check_count": checks.len(),
+            "checks": checks.iter().map(|check| check.result.clone()).collect::<Vec<_>>(),
+        });
+        Ok(if passed {
+            ProgramVerificationOutcome::passed(result)
+        } else {
+            ProgramVerificationOutcome::failed(
+                if !compile_passed {
+                    "Unity batchmode compile verification failed"
+                } else {
+                    "Unity trusted smoke/test verification failed"
+                },
+                result,
+            )
+        })
+    }
+}
+
+impl UnityBatchmodeProgramVerifier {
+    fn run_validation_plan(
+        &self,
+        request: &WorkUnitRequest,
+        project_root: &Path,
+        expected_output_hashes: &BTreeMap<String, String>,
+        timeout_seconds: u64,
+        plan: &UnityValidationPlan,
+    ) -> AdmResult<UnityValidationCheck> {
+        let log_name = format!(
+            "{}-{}-{}.log",
+            sha256_hex(request.unit_id.as_bytes())
+                .chars()
+                .take(16)
+                .collect::<String>(),
+            plan.command_id,
+            new_stable_id("unity-verify")?
+        );
+        let log_path = self.log_root.join(log_name);
+        let editor_path = unity_external_process_path(&self.editor_path);
+        let project_path = unity_external_process_path(project_root);
+        let process_log_path = unity_external_process_path(&log_path);
+        let mut command = Command::new(editor_path);
         command
             .args(["-batchmode", "-quit", "-projectPath"])
-            .arg(project_root)
+            .arg(&project_path)
             .arg("-logFile")
-            .arg(&log_path)
-            .current_dir(project_root)
+            .arg(&process_log_path)
+            .current_dir(&project_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        if !matches!(plan.purpose, CommandPurpose::Compile) {
+            for argument in &plan.argument_template {
+                command.arg(resolve_unity_argument(
+                    argument,
+                    &project_path,
+                    &process_log_path,
+                ));
+            }
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -807,6 +1132,15 @@ impl ProgramWorkUnitVerifier for UnityBatchmodeProgramVerifier {
         ]
         .iter()
         .any(|marker| log_text.contains(marker));
+        let test_success_marker = [
+            "test run finished",
+            "run finished",
+            "0 failed",
+            "passed",
+            "tests passed",
+        ]
+        .iter()
+        .any(|marker| log_text.contains(marker));
         let markers_verified = project_root.join("Assets").is_dir()
             && project_root.join("ProjectSettings").is_dir()
             && project_root.join("Packages/manifest.json").is_file();
@@ -819,15 +1153,22 @@ impl ProgramWorkUnitVerifier for UnityBatchmodeProgramVerifier {
             .unwrap_or(&log_path)
             .to_string_lossy()
             .replace('\\', "/");
+        let marker_passed = match plan.purpose {
+            CommandPurpose::Compile => success_marker,
+            CommandPurpose::Test | CommandPurpose::Smoke => success_marker || test_success_marker,
+            CommandPurpose::Tooling => success_marker,
+        };
         let passed = status.success()
             && !timed_out
             && !log_bytes.is_empty()
             && !compile_error
-            && success_marker
+            && marker_passed
             && markers_verified
             && output_hashes_verified;
         let result = json!({
-            "id": "unity_batchmode_compile",
+            "id": format!("unity_batchmode_{}", plan.command_id),
+            "command_id": plan.command_id,
+            "purpose": format!("{:?}", plan.purpose).to_ascii_lowercase(),
             "status": if passed { "passed" } else { "failed" },
             "exit_code": status.code(),
             "timed_out": timed_out,
@@ -835,23 +1176,15 @@ impl ProgramWorkUnitVerifier for UnityBatchmodeProgramVerifier {
             "log_sha256": if log_bytes.is_empty() { String::new() } else { sha256_hex(&log_bytes) },
             "log_bytes": log_bytes.len(),
             "success_marker_found": success_marker,
+            "test_success_marker_found": test_success_marker,
             "compiler_error_found": compile_error,
             "project_markers_verified": markers_verified,
             "output_hashes_verified": output_hashes_verified,
         });
-        Ok(if passed {
-            ProgramVerificationOutcome::passed(result)
-        } else {
-            ProgramVerificationOutcome::failed(
-                if timed_out {
-                    "Unity batchmode verification timed out"
-                } else if compile_error {
-                    "Unity batchmode reported compiler errors"
-                } else {
-                    "Unity batchmode verification did not produce complete success evidence"
-                },
-                result,
-            )
+        Ok(UnityValidationCheck {
+            purpose: plan.purpose,
+            passed,
+            result,
         })
     }
 }
@@ -1167,6 +1500,27 @@ pub fn work_unit_executor_from_config(
     }))
 }
 
+pub fn workspace_task_agent_from_config(
+    config: &AiConfig,
+    project_root: &Path,
+    unity_editor_path: Option<&Path>,
+    execution_object_root: &Path,
+    execution_object_owner_id: &str,
+) -> AdmResult<Arc<dyn WorkspaceTaskAgent>> {
+    let canonical_root = canonical_project_root(project_root)?;
+    let execution_objects = ExecutionObjectBinding::new(
+        &canonical_root,
+        execution_object_root,
+        execution_object_owner_id,
+    )?;
+    Ok(Arc::new(development_workspace_task_agent_from_config(
+        config,
+        &canonical_root,
+        unity_editor_path,
+        execution_objects,
+    )?))
+}
+
 fn development_work_unit_executor_from_config(
     config: &AiConfig,
     project_root: &Path,
@@ -1230,6 +1584,71 @@ fn development_work_unit_executor_from_config(
         program_verifier,
         execution_scope,
     }))
+}
+
+fn development_workspace_task_agent_from_config(
+    config: &AiConfig,
+    project_root: &Path,
+    unity_editor_path: Option<&Path>,
+    execution_objects: ExecutionObjectBinding,
+) -> AdmResult<AiDevelopmentWorkUnitExecutor> {
+    let target = resolve_active_ai_target(config, AiConfigCategory::Dev)?;
+    if !target.is_available() {
+        return Err(AdmError::new(
+            "active development configuration is unavailable",
+        ));
+    }
+    if target.descriptor().source != AiConfigSource::Cli {
+        return Err(AdmError::new(
+            "workspace task agents require a local Codex or Claude CLI",
+        ));
+    }
+    let kind = match target.descriptor().adapter {
+        AiAdapterKind::Codex => CliKind::Codex,
+        AiAdapterKind::Claude => CliKind::Claude,
+        _ => {
+            return Err(AdmError::new(
+                "the active development adapter cannot execute workspace task agents",
+            ));
+        }
+    };
+    let program = target
+        .program()
+        .ok_or_else(|| AdmError::new("resolved development CLI program is missing"))?;
+    let canonical_root = canonical_project_root(project_root)?;
+    let program_verifier: Arc<dyn ProgramWorkUnitVerifier> = match unity_editor_path {
+        Some(path) => match UnityBatchmodeProgramVerifier::new(path, &execution_objects.root) {
+            Ok(verifier) => Arc::new(verifier),
+            Err(_) => Arc::new(UnavailableProgramVerifier {
+                message: "the configured Unity editor cannot run batchmode verification"
+                    .to_string(),
+            }),
+        },
+        None => Arc::new(UnavailableProgramVerifier {
+            message: "the current save has no bound Unity editor for batchmode verification"
+                .to_string(),
+        }),
+    };
+    let execution_scope = sha256_hex(
+        format!(
+            "workspace-task-agent-v1-ai-development|{:?}|{}|{}|{}|{}|{}",
+            kind,
+            canonical_root.to_string_lossy(),
+            program,
+            execution_objects.root.to_string_lossy(),
+            execution_objects.owner_id,
+            program_verifier.execution_scope_fingerprint(),
+        )
+        .as_bytes(),
+    );
+    Ok(AiDevelopmentWorkUnitExecutor {
+        kind,
+        program: program.to_string(),
+        project_root: canonical_root,
+        execution_objects,
+        program_verifier,
+        execution_scope,
+    })
 }
 
 fn reconcile_declared_outputs(
@@ -2164,6 +2583,62 @@ fn localized_work_unit_text(request: &WorkUnitRequest, zh_cn: &str, en_us: &str)
     }
 }
 
+fn unity_external_process_path(path: &Path) -> PathBuf {
+    let value = path.to_string_lossy();
+    if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{unc}"))
+    } else if let Some(local) = value.strip_prefix(r"\\?\") {
+        PathBuf::from(local)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+fn unity_validation_plans(request: &WorkUnitRequest) -> AdmResult<Vec<UnityValidationPlan>> {
+    let mut plans = Vec::new();
+    if let Some(value) = request.payload.get("workspace_contract") {
+        let contract: WorkspaceChangeSet =
+            serde_json::from_value(value.clone()).map_err(|error| {
+                AdmError::new(format!(
+                    "workspace task contract is invalid for Unity verification: {error}"
+                ))
+            })?;
+        for command in contract.command_permissions {
+            if matches!(
+                command.purpose,
+                CommandPurpose::Compile | CommandPurpose::Test | CommandPurpose::Smoke
+            ) {
+                plans.push(UnityValidationPlan {
+                    command_id: command.command_id,
+                    purpose: command.purpose,
+                    argument_template: command.argument_template,
+                });
+            }
+        }
+    }
+    if !plans
+        .iter()
+        .any(|plan| plan.purpose == CommandPurpose::Compile)
+    {
+        plans.insert(
+            0,
+            UnityValidationPlan {
+                command_id: "implicit_compile".to_string(),
+                purpose: CommandPurpose::Compile,
+                argument_template: Vec::new(),
+            },
+        );
+    }
+    Ok(plans)
+}
+
+fn resolve_unity_argument(argument: &str, project_path: &Path, log_path: &Path) -> String {
+    argument
+        .replace("{workspace}", &project_path.to_string_lossy())
+        .replace("{project_path}", &project_path.to_string_lossy())
+        .replace("{log_file}", &log_path.to_string_lossy())
+}
+
 fn allowed_write_paths(payload: &Value, output_files: &[String]) -> Vec<String> {
     let explicit = string_array(
         payload
@@ -2216,10 +2691,32 @@ fn safe_message(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adm_new_change_kernel::{
+        CommandPermission, CommandPurpose, TrustedTestContract, WorkspaceChangeSet,
+        WorkspaceFileExpectation, WorkspaceFilePayload, WorkspaceOperation,
+        WorkspaceResourceBudget,
+    };
     use adm_new_contracts::ai::{ApiCategory, ApiEntry};
     use image::{DynamicImage, RgbImage};
     use serde_json::json;
     use std::io::Cursor;
+
+    #[test]
+    fn unity_process_paths_remove_windows_verbatim_prefixes() {
+        let local = format!(r"\\?\{}:\Unity\project", "C");
+        let expected_local = format!(r"{}:\Unity\project", "C");
+        assert_eq!(
+            unity_external_process_path(Path::new(&local)),
+            PathBuf::from(expected_local)
+        );
+
+        let unc = format!(r"{}?\UNC\server\share\project", r"\\");
+        let expected_unc = format!(r"{}server\share\project", r"\\");
+        assert_eq!(
+            unity_external_process_path(Path::new(&unc)),
+            PathBuf::from(expected_unc)
+        );
+    }
 
     #[derive(Debug)]
     struct FakeArtGenerator;
@@ -2365,6 +2862,113 @@ mod tests {
     }
 
     #[test]
+    fn development_executor_maps_workspace_task_preflight_failure_to_v2_transaction() {
+        let root = std::env::temp_dir()
+            .join(adm_new_foundation::new_stable_id("workspace-task-agent-preflight").unwrap());
+        fs::create_dir_all(root.join("tests")).unwrap();
+        fs::write(root.join("tests/trusted_smoke.cs"), b"trusted baseline").unwrap();
+        let (execution_object_root, execution_objects) =
+            test_execution_objects(&root, "workspace-task-agent-preflight");
+        let executor = AiDevelopmentWorkUnitExecutor {
+            kind: CliKind::Codex,
+            program: "codex".to_string(),
+            project_root: root.clone(),
+            execution_objects,
+            program_verifier: Arc::new(UnavailableProgramVerifier {
+                message: "test Unity preflight unavailable".to_string(),
+            }),
+            execution_scope: "test-workspace-agent".to_string(),
+        };
+        let contract = workspace_test_contract();
+        let task = TrustedDevelopmentTask {
+            task_id: "runtime.scaffold".to_string(),
+            title: "Runtime scaffold".to_string(),
+            ordinal_size: "S".to_string(),
+            architecture_system_id: "runtime_bootstrap".to_string(),
+            declared_write_paths: vec![
+                "assets/autodesign/scripts/runtime/bootstrap.cs".to_string(),
+            ],
+            machine_checks: Vec::new(),
+            dependencies: Vec::new(),
+            rollback_boundary: Vec::new(),
+            workspace_contract: contract.clone(),
+        };
+
+        let result = executor.execute_task(&task, 1, None).unwrap();
+
+        assert_eq!(result.outcome, ChangeOutcome::Rejected);
+        assert_eq!(
+            result.failure_category,
+            Some(ChangeFailureCategory::Compile)
+        );
+        assert_eq!(result.side_effect_state, SideEffectState::None);
+        assert!(result.validate_against(&contract).is_valid());
+        assert!(
+            !root
+                .join("assets/autodesign/scripts/runtime/bootstrap.cs")
+                .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(execution_object_root);
+    }
+
+    #[test]
+    fn workspace_task_bridge_declares_compile_and_trusted_smoke_unity_plans() {
+        let contract = workspace_test_contract();
+        let task = TrustedDevelopmentTask {
+            task_id: "runtime.scaffold".to_string(),
+            title: "Runtime scaffold".to_string(),
+            ordinal_size: "S".to_string(),
+            architecture_system_id: "runtime_bootstrap".to_string(),
+            declared_write_paths: vec![
+                "assets/autodesign/scripts/runtime/bootstrap.cs".to_string(),
+            ],
+            machine_checks: Vec::new(),
+            dependencies: Vec::new(),
+            rollback_boundary: Vec::new(),
+            workspace_contract: contract,
+        };
+        let request =
+            workspace_task_to_work_unit_request(&task, 1, None, "test-scope".to_string()).unwrap();
+        let plans = unity_validation_plans(&request).unwrap();
+
+        assert!(
+            plans
+                .iter()
+                .any(|plan| plan.command_id == "compile_workspace"
+                    && plan.purpose == CommandPurpose::Compile)
+        );
+        assert!(plans.iter().any(|plan| plan.command_id == "trusted_test"
+            && plan.purpose == CommandPurpose::Test
+            && plan.argument_template.contains(&"-runTests".to_string())));
+    }
+
+    #[test]
+    fn legacy_development_work_units_keep_implicit_compile_only_unity_plan() {
+        let request =
+            WorkUnitRequest::new("11", "legacy-task", WorkUnitKind::Development, json!({}))
+                .unwrap();
+        let plans = unity_validation_plans(&request).unwrap();
+
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].command_id, "implicit_compile");
+        assert_eq!(plans[0].purpose, CommandPurpose::Compile);
+    }
+
+    #[test]
+    fn development_executor_boundary_allows_v2_bridge_but_not_direct_v2_commit() {
+        assert!(
+            AI_DEVELOPMENT_EXECUTOR_RETAINED_CALLERS
+                .contains(&"gamespec_v2_workspace_task_agent_bridge")
+        );
+        assert!(
+            AI_DEVELOPMENT_EXECUTOR_PROHIBITED_CALLERS
+                .contains(&"gamespec_v2_product_step11_direct_work_unit_commit")
+        );
+        assert!(AI_DEVELOPMENT_EXECUTOR_V2_REPLACEMENT.contains("WorkspaceChangeSet"));
+    }
+
+    #[test]
     fn art_work_unit_routes_verified_png_into_the_declared_project_target() {
         let root =
             std::env::temp_dir().join(adm_new_foundation::new_stable_id("art-work-unit").unwrap());
@@ -2412,6 +3016,65 @@ mod tests {
         );
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(execution_object_root);
+    }
+
+    fn workspace_test_contract() -> WorkspaceChangeSet {
+        let write_path =
+            WorkspaceRelativePath::parse("assets/autodesign/scripts/runtime/bootstrap.cs").unwrap();
+        let trusted_test = WorkspaceRelativePath::parse("tests/trusted_smoke.cs").unwrap();
+        WorkspaceChangeSet {
+            schema_version: WORKSPACE_CHANGE_SET_SCHEMA_VERSION.to_string(),
+            change_set_id: "workspace_agent_bridge_test".to_string(),
+            base_tree_hash: sha256_hex(b"workspace-agent-bridge-base"),
+            read_paths: BTreeSet::from([trusted_test.clone()]),
+            agent_write_paths: BTreeSet::from([write_path.clone()]),
+            trusted_tool_write_paths: BTreeSet::new(),
+            build_output_paths: BTreeSet::from([WorkspaceRelativePath::parse("build").unwrap()]),
+            operations: vec![WorkspaceOperation::WriteFile {
+                path: write_path,
+                expected: WorkspaceFileExpectation::Missing,
+                payload: WorkspaceFilePayload::utf8("// generated by v2 workspace agent\n"),
+            }],
+            command_permissions: vec![
+                CommandPermission {
+                    command_id: "compile_workspace".to_string(),
+                    tool_binding_id: "unity_batchmode".to_string(),
+                    purpose: CommandPurpose::Compile,
+                    argument_template: vec!["-runEditorCompilation".to_string()],
+                    working_directory: None,
+                    timeout_ms: 10_000,
+                    allow_network: false,
+                },
+                CommandPermission {
+                    command_id: "trusted_test".to_string(),
+                    tool_binding_id: "unity_batchmode".to_string(),
+                    purpose: CommandPurpose::Test,
+                    argument_template: vec!["-runTests".to_string()],
+                    working_directory: None,
+                    timeout_ms: 10_000,
+                    allow_network: false,
+                },
+            ],
+            trusted_tests: vec![TrustedTestContract {
+                test_id: "trusted_runtime_smoke".to_string(),
+                path: trusted_test,
+                baseline_sha256: sha256_hex(b"trusted baseline"),
+                command_id: "trusted_test".to_string(),
+            }],
+            resource_budget: WorkspaceResourceBudget {
+                max_duration_ms: 30_000,
+                max_processes: 2,
+                max_write_bytes: 512_000,
+                max_file_count: 8,
+                max_retries: 2,
+            },
+            evidence: vec![ChangeEvidence::from_bytes(
+                "workspace_agent_bridge_contract",
+                "test",
+                EvidenceStatus::Observed,
+                b"test contract",
+            )],
+        }
     }
 
     #[test]

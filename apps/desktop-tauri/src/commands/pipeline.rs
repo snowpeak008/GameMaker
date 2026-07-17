@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use adm_new_application::{
-    StageExecutor, style_image_generator_from_config, work_unit_executor_from_config,
+    StageExecutor, style_image_generator_from_config, vlm_review_service_from_config,
+    work_unit_executor_from_config, workspace_task_agent_from_config,
 };
 use adm_new_contracts::log::LogLevel;
 use adm_new_contracts::pipeline::{
@@ -432,8 +433,28 @@ async fn start_pipeline_range(
             }
             if range_stage_ids
                 .iter()
+                .any(|stage_id| matches!(stage_id.as_str(), "07" | "12"))
+            {
+                match vlm_review_service_from_config(&ai_config_snapshot) {
+                    Ok(vlm_service) => {
+                        executor = executor.with_vlm_review_service(vlm_service);
+                    }
+                    Err(error) => {
+                        runtime.write_log(
+                            LogLevel::Warning,
+                            "pipeline.vlm_review",
+                            &format!(
+                                "active VLM review configuration is unavailable; GameSpec v2 Step07/12 will remain fail-closed: {error}"
+                            ),
+                        );
+                    }
+                }
+            }
+            if range_stage_ids
+                .iter()
                 .any(|stage_id| matches!(stage_id.as_str(), "11" | "12"))
             {
+                executor = executor.require_workspace_task_agent();
                 let work_executor =
                     development_work_root(&runtime, &project_settings).and_then(|work_root| {
                         let editor_path = development_editor_path(&runtime, &project_settings).ok();
@@ -454,6 +475,29 @@ async fn start_pipeline_range(
                             LogLevel::Warning,
                             "pipeline.work_units",
                             "a required work-unit provider is unavailable; Step11/12 will remain blocked",
+                        );
+                    }
+                }
+                let workspace_agent =
+                    development_work_root(&runtime, &project_settings).and_then(|work_root| {
+                        let editor_path = development_editor_path(&runtime, &project_settings).ok();
+                        workspace_task_agent_from_config(
+                            &ai_config_snapshot,
+                            &work_root,
+                            editor_path.as_deref(),
+                            runtime.save.draft_root(),
+                            &execution_object_owner_id,
+                        )
+                    });
+                match workspace_agent {
+                    Ok(workspace_agent) => {
+                        executor = executor.with_workspace_task_agent(workspace_agent);
+                    }
+                    Err(_) => {
+                        runtime.write_log(
+                            LogLevel::Warning,
+                            "pipeline.workspace_task_agent",
+                            "a required workspace task agent is unavailable; GameSpec v2 Step11 will use the local filesystem fallback",
                         );
                     }
                 }

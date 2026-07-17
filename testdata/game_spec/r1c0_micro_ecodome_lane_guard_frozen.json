@@ -1,0 +1,772 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "r1c0_micro_ecodome_lane_guard",
+    "revision": 1
+  },
+  "intent": {
+    "title": "Micro Ecodome Lane Guard",
+    "summary": "Protect a small authored ecosystem by reading lane pressure, growing resources, placing guardians, and recovering from clear failure states.",
+    "experiencePromises": {
+      "micro_ecodome_lane_mastery": {
+        "statement": "Players can understand every pressure lane, spend resources deliberately, and see both success and failure outcomes without hidden rules.",
+        "priority": "primary"
+      }
+    },
+    "audiences": ["strategy players", "game designers validating R1"],
+    "targetPlatforms": ["windows"],
+    "successMetrics": [
+      "A fresh player completes the tutorial without external instructions.",
+      "Every authored stage has at least one executable success path and one failure or rejection path.",
+      "The final build can run the complete regression path from new save to final win."
+    ],
+    "scope": {
+      "mustHave": [
+        "2d authored lane defense",
+        "resource production and spending",
+        "guardian placement",
+        "enemy wave escalation",
+        "save reload",
+        "pause resume",
+        "asset binding validation"
+      ],
+      "wontHave": [
+        "network play",
+        "account system",
+        "monetization",
+        "procedural generation commitment",
+        "open world scope",
+        "3d asset pipeline",
+        "external live service dependency",
+        "copied game ip or assets"
+      ],
+      "maximumSessionMinutes": 30
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "lane", "dimensionality": "two_d" },
+    "time": { "progression": "realtime", "simultaneity": "simultaneous" },
+    "control": { "cardinality": "many", "directness": "indirect" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "partial", "uncertainty": "mixed" },
+    "progression": { "persistence": "persistent", "structure": "linear" },
+    "content": { "generation": "authored", "mutability": "runtime_mutable" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "player_cursor": {
+      "summary": "Player-controlled selector used for lane and guardian decisions.",
+      "components": ["lane_position"],
+      "tags": ["player_controlled"]
+    },
+    "resource_spore": {
+      "summary": "Authored producer that grows energy at predictable intervals.",
+      "components": ["lane_position", "cooldown"],
+      "tags": ["producer"]
+    },
+    "basic_guardian": {
+      "summary": "Core defender that protects one lane slot.",
+      "components": ["health", "lane_position", "cooldown"],
+      "tags": ["guardian", "placeable"]
+    },
+    "counter_guardian": {
+      "summary": "Specialist guardian that counters a documented enemy weakness.",
+      "components": ["health", "lane_position", "cooldown"],
+      "tags": ["guardian", "counter"]
+    },
+    "enemy_sporeblight": {
+      "summary": "Readable hostile unit that advances toward the protected core.",
+      "components": ["health", "lane_position"],
+      "tags": ["enemy", "hostile"]
+    },
+    "elite_enemy": {
+      "summary": "Late wave enemy with an authored counter rule.",
+      "components": ["health", "lane_position"],
+      "tags": ["enemy", "elite", "has_counter_rule"]
+    },
+    "protected_core": {
+      "summary": "The micro-ecodome heart that must not be breached.",
+      "components": ["health", "lane_position"],
+      "tags": ["objective"]
+    },
+    "stage_registry": {
+      "summary": "Stores authored stage completion and unlock state.",
+      "components": ["save_state"],
+      "tags": ["progression"]
+    },
+    "asset_manifest": {
+      "summary": "Frozen list of planned sprites, UI, effects, audio, scenes, and prefabs.",
+      "components": ["asset_reference"],
+      "tags": ["integration_contract"]
+    },
+    "settings_panel": {
+      "summary": "Runtime settings surface reachable from pause.",
+      "components": ["settings_state"],
+      "tags": ["ui"]
+    },
+    "style_anchor": {
+      "summary": "Human-approved visual reference set for the micro-ecodome art direction.",
+      "components": ["asset_reference"],
+      "tags": ["style_anchor"]
+    }
+  },
+  "components": {
+    "health": {
+      "summary": "Durability used by guardians, enemies, and the protected core.",
+      "properties": {
+        "current": { "valueKind": "integer", "required": true, "default": 100 },
+        "maximum": { "valueKind": "integer", "required": true, "default": 100 }
+      }
+    },
+    "lane_position": {
+      "summary": "Logical lane and slot location.",
+      "properties": {
+        "lane_index": { "valueKind": "integer", "required": true, "default": 0 },
+        "slot_index": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    },
+    "cooldown": {
+      "summary": "Action availability timer.",
+      "properties": {
+        "remaining_ms": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    },
+    "save_state": {
+      "summary": "Persisted authored stage progress.",
+      "properties": {
+        "unlocked_stage": { "valueKind": "identifier", "required": true, "default": "tutorial" },
+        "completed_stage_count": { "valueKind": "integer", "required": true, "default": 0 }
+      }
+    },
+    "asset_reference": {
+      "summary": "Stable asset identifier and binding state.",
+      "properties": {
+        "asset_id": { "valueKind": "identifier", "required": true, "default": "unset" },
+        "referenced": { "valueKind": "boolean", "required": true, "default": false }
+      }
+    },
+    "settings_state": {
+      "summary": "Runtime settings changed during pause.",
+      "properties": {
+        "music_enabled": { "valueKind": "boolean", "required": true, "default": true },
+        "simulation_paused": { "valueKind": "boolean", "required": true, "default": false }
+      }
+    }
+  },
+  "relationships": {
+    "producer_supports_guardian": {
+      "summary": "Resource producers support guardian placement.",
+      "source": { "kind": "entity", "id": "resource_spore" },
+      "target": { "kind": "entity", "id": "basic_guardian" },
+      "relation": "supports",
+      "cardinality": "many_to_many"
+    },
+    "guardian_opposes_enemy": {
+      "summary": "Guardians oppose hostile lane pressure.",
+      "source": { "kind": "entity", "id": "basic_guardian" },
+      "target": { "kind": "entity", "id": "enemy_sporeblight" },
+      "relation": "opposes",
+      "cardinality": "many_to_many"
+    },
+    "counter_guardian_opposes_elite": {
+      "summary": "Counter guardians reduce elite enemy pressure.",
+      "source": { "kind": "entity", "id": "counter_guardian" },
+      "target": { "kind": "entity", "id": "elite_enemy" },
+      "relation": "opposes",
+      "cardinality": "many_to_many"
+    },
+    "enemy_targets_core": {
+      "summary": "Enemies move toward the protected core.",
+      "source": { "kind": "entity", "id": "enemy_sporeblight" },
+      "target": { "kind": "entity", "id": "protected_core" },
+      "relation": "targets",
+      "cardinality": "many_to_one"
+    }
+  },
+  "actions": {
+    "start_tutorial": {
+      "summary": "Start the authored tutorial stage from a fresh save.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "stage_registry" }],
+      "inputs": [{ "channel": "menu", "command": "new_run" }],
+      "preconditions": [{ "description": "A fresh save is available.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "campaign_flow", "targetState": "campaign_tutorial" }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Tutorial stage opens." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "produce_resource": {
+      "summary": "Generate energy from a resource spore.",
+      "actors": [{ "kind": "entity", "id": "resource_spore" }],
+      "targets": [{ "kind": "resource", "id": "energy" }],
+      "inputs": [{ "channel": "system", "command": "resource_tick" }],
+      "preconditions": [{ "description": "The resource producer is active.", "expression": { "kind": "always" } }],
+      "effects": [{ "kind": "change_resource", "resource": "energy", "amount": 25 }],
+      "feedback": [{ "channel": "ui", "message": "Energy total increases." }],
+      "timing": { "cooldownMs": 1000 }
+    },
+    "place_basic_guardian": {
+      "summary": "Spend energy to place a basic guardian in an open lane slot.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "basic_guardian" }],
+      "inputs": [{ "channel": "pointer", "command": "place_guardian" }],
+      "preconditions": [
+        {
+          "description": "At least fifty energy is available.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "greater_or_equal",
+            "value": 50
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "change_resource", "resource": "energy", "amount": -50 },
+        { "kind": "create_entity", "entity": "basic_guardian", "quantity": 1 }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Guardian placement is confirmed." }],
+      "timing": { "cooldownMs": 250 }
+    },
+    "reject_unfunded_guardian": {
+      "summary": "Reject a guardian placement when energy is insufficient.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "basic_guardian" }],
+      "inputs": [{ "channel": "pointer", "command": "place_guardian" }],
+      "preconditions": [
+        {
+          "description": "Energy is below the guardian cost.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "less",
+            "value": 50
+          }
+        }
+      ],
+      "effects": [{ "kind": "emit_event", "event": "deploy_rejected" }],
+      "feedback": [{ "channel": "ui", "message": "Placement is rejected and no energy is spent." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "counter_enemy": {
+      "summary": "Trigger the documented counter rule against an elite enemy.",
+      "actors": [{ "kind": "entity", "id": "counter_guardian" }],
+      "targets": [{ "kind": "entity", "id": "elite_enemy" }],
+      "inputs": [{ "channel": "system", "command": "counter_window" }],
+      "preconditions": [{ "description": "A counterable elite enemy is inside range.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "remove_entity", "entity": "elite_enemy", "quantity": 1 },
+        { "kind": "emit_event", "event": "counter_rule_used" }
+      ],
+      "feedback": [{ "channel": "telemetry", "message": "Counter rule identifier is recorded." }],
+      "timing": { "cooldownMs": 500 }
+    },
+    "resolve_wave": {
+      "summary": "Resolve an authored wave after all pressure is handled.",
+      "actors": [{ "kind": "entity", "id": "stage_registry" }],
+      "targets": [{ "kind": "entity", "id": "protected_core" }],
+      "inputs": [{ "channel": "system", "command": "wave_clear" }],
+      "preconditions": [{ "description": "No hostile unit remains active.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "stage_flow", "targetState": "stage_wave_resolved" }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Wave clear state is visible." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "breach_lane": {
+      "summary": "Enter the authored failure state when enemy pressure reaches the core.",
+      "actors": [{ "kind": "entity", "id": "enemy_sporeblight" }],
+      "targets": [{ "kind": "entity", "id": "protected_core" }],
+      "inputs": [{ "channel": "system", "command": "lane_breach" }],
+      "preconditions": [{ "description": "Enemy pressure reaches the protected edge.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "stage_flow", "targetState": "stage_failed" }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Failure and retry actions are visible." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "save_stage_progress": {
+      "summary": "Persist unlocked stages and completed status.",
+      "actors": [{ "kind": "entity", "id": "stage_registry" }],
+      "targets": [{ "kind": "entity", "id": "stage_registry" }],
+      "inputs": [{ "channel": "system", "command": "save_progress" }],
+      "preconditions": [{ "description": "An authored stage has been won.", "expression": { "kind": "always" } }],
+      "effects": [
+        {
+          "kind": "set_value",
+          "target": { "kind": "component", "id": "save_state", "path": "completed_stage_count" },
+          "value": 1
+        }
+      ],
+      "feedback": [{ "channel": "storage", "message": "Progress is saved and reloadable." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "pause_stage": {
+      "summary": "Suspend simulation time while the pause menu is open.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "settings_panel" }],
+      "inputs": [{ "channel": "keyboard", "command": "pause" }],
+      "preconditions": [{ "description": "A stage is running.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "pause_flow", "targetState": "pause_paused" }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Pause menu opens and simulation is suspended." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "resume_stage": {
+      "summary": "Resume simulation after settings are changed.",
+      "actors": [{ "kind": "entity", "id": "player_cursor" }],
+      "targets": [{ "kind": "entity", "id": "settings_panel" }],
+      "inputs": [{ "channel": "keyboard", "command": "resume" }],
+      "preconditions": [{ "description": "The stage is paused.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "pause_flow", "targetState": "pause_running" }
+      ],
+      "feedback": [{ "channel": "ui", "message": "Pause menu closes and simulation resumes." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "verify_asset_bindings": {
+      "summary": "Load every planned scene and asset reference without placeholder fallback.",
+      "actors": [{ "kind": "entity", "id": "asset_manifest" }],
+      "targets": [{ "kind": "entity", "id": "asset_manifest" }],
+      "inputs": [{ "channel": "validator", "command": "load_references" }],
+      "preconditions": [{ "description": "The frozen asset manifest exists.", "expression": { "kind": "always" } }],
+      "effects": [{ "kind": "emit_event", "event": "asset_bindings_verified" }],
+      "feedback": [{ "channel": "validator", "message": "Every reference resolves and no orphan asset remains." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "review_style_anchor": {
+      "summary": "Record human review evidence for the signed style anchors.",
+      "actors": [{ "kind": "entity", "id": "style_anchor" }],
+      "targets": [{ "kind": "entity", "id": "asset_manifest" }],
+      "inputs": [{ "channel": "review", "command": "style_anchor_pass" }],
+      "preconditions": [{ "description": "Representative screenshots and anchors exist.", "expression": { "kind": "always" } }],
+      "effects": [{ "kind": "emit_event", "event": "style_anchor_review_recorded" }],
+      "feedback": [{ "channel": "review", "message": "Readability, originality, and consistency evidence is recorded." }],
+      "timing": { "cooldownMs": 0 }
+    },
+    "complete_regression_run": {
+      "summary": "Play from tutorial through final authored stage including failure and retry.",
+      "actors": [{ "kind": "entity", "id": "stage_registry" }],
+      "targets": [{ "kind": "entity", "id": "protected_core" }],
+      "inputs": [{ "channel": "test_runner", "command": "complete_regression" }],
+      "preconditions": [{ "description": "The fresh installed build starts with no previous save.", "expression": { "kind": "always" } }],
+      "effects": [
+        { "kind": "transition_state", "stateMachine": "campaign_flow", "targetState": "campaign_final_win" }
+      ],
+      "feedback": [{ "channel": "evidence", "message": "Final win state and evidence bundle are produced." }],
+      "timing": { "cooldownMs": 0 }
+    }
+  },
+  "stateMachines": {
+    "campaign_flow": {
+      "summary": "Campaign-level authored progression from fresh save to final win.",
+      "initialState": "campaign_stage_select",
+      "states": {
+        "campaign_stage_select": { "summary": "The player can choose an unlocked authored stage." },
+        "campaign_tutorial": { "summary": "The tutorial stage is active." },
+        "campaign_final_win": { "summary": "The final authored win state is reached.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "campaign_start_tutorial",
+          "from": "campaign_stage_select",
+          "to": "campaign_tutorial",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "start_tutorial" } }
+        },
+        {
+          "transitionId": "campaign_finish_regression",
+          "from": "campaign_tutorial",
+          "to": "campaign_final_win",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "complete_regression_run" } }
+        }
+      ]
+    },
+    "stage_flow": {
+      "summary": "Stage-level preparation, active wave, success, and failure states.",
+      "initialState": "stage_preparing",
+      "states": {
+        "stage_preparing": { "summary": "The player is preparing the lane board." },
+        "stage_active_wave": { "summary": "Enemies are advancing through authored lanes." },
+        "stage_wave_resolved": { "summary": "The wave was resolved successfully.", "terminal": true },
+        "stage_failed": { "summary": "The lane was breached and retry is available.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "stage_begin_wave",
+          "from": "stage_preparing",
+          "to": "stage_active_wave",
+          "trigger": { "source": "timer" }
+        },
+        {
+          "transitionId": "stage_resolve_wave",
+          "from": "stage_active_wave",
+          "to": "stage_wave_resolved",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "resolve_wave" } }
+        },
+        {
+          "transitionId": "stage_lane_breached",
+          "from": "stage_active_wave",
+          "to": "stage_failed",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "breach_lane" } }
+        }
+      ]
+    },
+    "pause_flow": {
+      "summary": "Pause and resume control for running stages.",
+      "initialState": "pause_running",
+      "states": {
+        "pause_running": { "summary": "Simulation time is advancing." },
+        "pause_paused": { "summary": "Simulation time is suspended." }
+      },
+      "transitions": [
+        {
+          "transitionId": "pause_enter",
+          "from": "pause_running",
+          "to": "pause_paused",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "pause_stage" } }
+        },
+        {
+          "transitionId": "pause_exit",
+          "from": "pause_paused",
+          "to": "pause_running",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "resume_stage" } }
+        }
+      ]
+    }
+  },
+  "resources": {
+    "energy": {
+      "summary": "Budget used for producer timing and guardian placement.",
+      "unit": "points",
+      "initial": 75,
+      "minimum": 0,
+      "maximum": 999,
+      "sourceActions": ["produce_resource"],
+      "sinkActions": ["place_basic_guardian"]
+    }
+  },
+  "spaces": {
+    "lane_playfield": {
+      "summary": "Parallel micro-ecodome lanes with authored entry and protected edges.",
+      "topology": "lane",
+      "regions": {
+        "entry_edge": { "summary": "Hostile pressure enters here.", "tags": ["spawn"] },
+        "guardian_slots": { "summary": "The player places guardians here.", "tags": ["placement"] },
+        "protected_core_edge": { "summary": "The protected micro-ecodome boundary.", "tags": ["objective"] }
+      },
+      "connections": [
+        { "from": "entry_edge", "to": "guardian_slots" },
+        { "from": "guardian_slots", "to": "protected_core_edge" }
+      ]
+    }
+  },
+  "time": {
+    "progression": "realtime",
+    "fixedStepHz": 30,
+    "pausable": true,
+    "phases": {
+      "planning_phase": { "summary": "Players inspect lanes and place initial guardians." },
+      "wave_phase": { "summary": "Authored enemies advance with readable warnings." },
+      "pause_phase": { "summary": "Simulation is suspended for settings changes." }
+    }
+  },
+  "interactions": {
+    "placement_input": {
+      "summary": "Pointer placement request for lane slots.",
+      "direction": "input",
+      "modality": "pointer",
+      "sourceActions": ["place_basic_guardian", "reject_unfunded_guardian"]
+    },
+    "pause_input": {
+      "summary": "Keyboard or menu pause controls.",
+      "direction": "input",
+      "modality": "keyboard_or_menu",
+      "sourceActions": ["pause_stage", "resume_stage"]
+    },
+    "validation_runner": {
+      "summary": "Automated validation commands used by Step13 and Step14.",
+      "direction": "input",
+      "modality": "test_runner",
+      "sourceActions": ["verify_asset_bindings", "complete_regression_run"]
+    }
+  },
+  "content": {
+    "authored_stage_set": {
+      "summary": "Tutorial, normal stages, elite pressure stage, and final authored stage.",
+      "generation": "authored",
+      "itemKind": "stage_set",
+      "sourceRefs": [
+        { "kind": "state_machine", "id": "campaign_flow" },
+        { "kind": "state_machine", "id": "stage_flow" }
+      ]
+    },
+    "wave_schedule": {
+      "summary": "Authored normal, elite, and final pressure waves.",
+      "generation": "authored",
+      "itemKind": "wave_schedule",
+      "sourceRefs": [{ "kind": "action", "id": "resolve_wave" }]
+    },
+    "asset_manifest_content": {
+      "summary": "Planned guardians, enemies, UI, effects, audio, scene, and prefab references.",
+      "generation": "authored",
+      "itemKind": "asset_manifest",
+      "sourceRefs": [{ "kind": "entity", "id": "asset_manifest" }]
+    }
+  },
+  "presentation": {
+    "micro_ecodome_style": {
+      "summary": "Readable micro-ecodome visual language with distinct lane, enemy, guardian, and HUD shapes.",
+      "medium": "visual",
+      "constraints": {
+        "styleTheme": "micro_ecodome",
+        "laneReadability": "high",
+        "enemySilhouette": "distinct",
+        "placeholderFallback": "forbidden"
+      },
+      "sourceRefs": [{ "kind": "intent", "id": "micro_ecodome_lane_mastery" }]
+    },
+    "feedback_language": {
+      "summary": "UI, audio, telemetry, and review feedback identify state changes and rejection causes.",
+      "medium": "ui_audio_telemetry",
+      "constraints": {
+        "colorOnlySignals": "forbidden",
+        "rejectionReasonVisible": "required"
+      },
+      "sourceRefs": [
+        { "kind": "action", "id": "reject_unfunded_guardian" },
+        { "kind": "action", "id": "counter_enemy" }
+      ]
+    }
+  },
+  "technical": {
+    "productEnvelope": {
+      "sceneScale": "medium",
+      "systemComplexity": "medium",
+      "assetScale": "medium",
+      "contentVolume": "medium"
+    },
+    "targetEngine": "unity",
+    "platforms": ["windows"],
+    "performanceBudgets": {
+      "activeEntities": 300,
+      "active_entities_budget": 300,
+      "frameTimeMicros": 16667,
+      "frame_time_micros": 16667,
+      "maxAuthoredStages": 5,
+      "maxImageAssets": 200
+    },
+    "saveRequirements": [
+      "Persist unlocked stages, completed status, selected settings, and available units.",
+      "Fresh install starts without previous save data."
+    ],
+    "accessibilityRequirements": [
+      "Do not rely on color alone for threat classes.",
+      "Placement rejection must have explicit UI or audio feedback."
+    ]
+  },
+  "acceptanceScenarios": {
+    "r1c0_tutorial_basic_operation": {
+      "summary": "A first-time player completes prompted resource, placement, and first wave actions.",
+      "given": [{ "description": "A first-time player starts from a fresh save.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "start_tutorial", "actor": { "kind": "entity", "id": "player_cursor" }, "targets": [{ "kind": "entity", "id": "stage_registry" }] }],
+      "then": [{ "description": "The tutorial stage opens and can advance to the next available stage.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_resource_positive_loop": {
+      "summary": "Resources grow, a guardian is placed, and a normal wave can be survived.",
+      "given": [
+        {
+          "description": "Energy is at least fifty points.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "greater_or_equal",
+            "value": 50
+          }
+        }
+      ],
+      "when": [{ "action": "place_basic_guardian", "actor": { "kind": "entity", "id": "player_cursor" }, "targets": [{ "kind": "entity", "id": "basic_guardian" }] }],
+      "then": [{ "description": "Resource count, cooldown state, unit placement, wave progress, and result state update visibly.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_resource_failure_loop": {
+      "summary": "Unfunded guardian placement is rejected without consuming energy.",
+      "given": [
+        {
+          "description": "Energy is below fifty points.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "less",
+            "value": 50
+          }
+        }
+      ],
+      "when": [{ "action": "reject_unfunded_guardian", "actor": { "kind": "entity", "id": "player_cursor" }, "targets": [{ "kind": "entity", "id": "basic_guardian" }] }],
+      "then": [{ "description": "No resource is consumed, board state is unchanged, and explicit rejection feedback is emitted.", "expression": { "kind": "always" } }],
+      "failureCase": true
+    },
+    "r1c0_lane_counter_success": {
+      "summary": "A documented counter guardian reduces elite enemy pressure.",
+      "given": [{ "description": "An elite enemy with a documented weakness enters range.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "counter_enemy", "actor": { "kind": "entity", "id": "counter_guardian" }, "targets": [{ "kind": "entity", "id": "elite_enemy" }] }],
+      "then": [{ "description": "The counter interaction triggers and telemetry identifies the counter rule used.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_lane_breach_failure": {
+      "summary": "Insufficient defense lets enemy pressure breach a lane and reach the retryable failure state.",
+      "given": [{ "description": "A lane has insufficient defense against an incoming wave.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "breach_lane", "actor": { "kind": "entity", "id": "enemy_sporeblight" }, "targets": [{ "kind": "entity", "id": "protected_core" }] }],
+      "then": [{ "description": "The failure state is reached and retry or exit actions are available.", "expression": { "kind": "always" } }],
+      "failureCase": true
+    },
+    "r1c0_wave_escalation": {
+      "summary": "Later waves spawn normal, elite, and final-pressure enemies according to the authored schedule.",
+      "given": [{ "description": "The player has completed early authored waves.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "resolve_wave", "actor": { "kind": "entity", "id": "stage_registry" }, "targets": [{ "kind": "entity", "id": "protected_core" }] }],
+      "then": [{ "description": "Enemy composition, timing, warning UI, and win or fail conditions follow the frozen stage definition.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_stage_unlock_and_save_reload": {
+      "summary": "Winning a stage saves progress and restores it after exit and reload.",
+      "given": [{ "description": "The player wins an authored stage.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "save_stage_progress", "actor": { "kind": "entity", "id": "stage_registry" }, "targets": [{ "kind": "entity", "id": "stage_registry" }] }],
+      "then": [{ "description": "Unlocked stages, completed status, selected settings, and available units are restored exactly.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_pause_resume_settings": {
+      "summary": "Pause suspends simulation time, settings change, and resume returns to a playable stage.",
+      "given": [{ "description": "A stage is running with active enemies, cooldowns, animations, and audio.", "expression": { "kind": "always" } }],
+      "when": [
+        { "action": "pause_stage", "actor": { "kind": "entity", "id": "player_cursor" }, "targets": [{ "kind": "entity", "id": "settings_panel" }] },
+        { "action": "resume_stage", "actor": { "kind": "entity", "id": "player_cursor" }, "targets": [{ "kind": "entity", "id": "settings_panel" }] }
+      ],
+      "then": [{ "description": "Simulation time is suspended during pause, settings take effect, and the resumed stage remains playable.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    },
+    "r1c0_asset_binding_no_orphans": {
+      "summary": "Every planned asset is referenced and every reference resolves in engine loading validation.",
+      "given": [{ "description": "The frozen asset manifest contains all planned gameplay, UI, effects, audio, scene, and prefab assets.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "verify_asset_bindings", "actor": { "kind": "entity", "id": "asset_manifest" }, "targets": [{ "kind": "entity", "id": "asset_manifest" }] }],
+      "then": [{ "description": "Every planned asset is referenced at least once, every reference resolves, and no placeholder success fallback is used.", "expression": { "kind": "always" } }],
+      "failureCase": false,
+      "assetValidationRequired": true
+    },
+    "r1c0_max_load_smoke": {
+      "summary": "The highest authored stage remains responsive under the maximum planned load.",
+      "given": [{ "description": "The highest authored stage uses maximum planned lanes, units, enemies, effects, and UI overlays.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "complete_regression_run", "actor": { "kind": "entity", "id": "stage_registry" }, "targets": [{ "kind": "entity", "id": "protected_core" }] }],
+      "then": [{ "description": "The executable remains responsive, produces no blocking errors, and records performance within the frozen R1 budget.", "expression": { "kind": "always" } }],
+      "failureCase": false,
+      "performanceBudgetRefs": ["active_entities_budget", "frame_time_micros"]
+    },
+    "r1c0_visual_style_anchor_review": {
+      "summary": "Human reviewer records evidence for readability, originality, and style consistency.",
+      "given": [{ "description": "Step07 signed style anchors for the micro-ecodome theme exist.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "review_style_anchor", "actor": { "kind": "entity", "id": "style_anchor" }, "targets": [{ "kind": "entity", "id": "asset_manifest" }] }],
+      "then": [{ "description": "A human reviewer records structured pass or fail evidence for the representative screenshots and core assets.", "expression": { "kind": "always" } }],
+      "failureCase": false,
+      "manualReviewRequired": true
+    },
+    "r1c0_complete_flow_regression": {
+      "summary": "Fresh installed R1 build plays from tutorial through final authored stage with one intentional failure and retry.",
+      "given": [{ "description": "A fresh installed R1 build starts with no previous save.", "expression": { "kind": "always" } }],
+      "when": [{ "action": "complete_regression_run", "actor": { "kind": "entity", "id": "stage_registry" }, "targets": [{ "kind": "entity", "id": "protected_core" }] }],
+      "then": [{ "description": "The run reaches the final win state, produces the expected evidence bundle, and leaves no unresolved correction queue entries.", "expression": { "kind": "always" } }],
+      "failureCase": false
+    }
+  },
+  "traceLinks": {
+    "trace_tutorial_basic_operation": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_tutorial_basic_operation" },
+      "relation": "verifies",
+      "rationale": "The tutorial scenario verifies that a new player can learn the core loop."
+    },
+    "trace_resource_positive_loop": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_resource_positive_loop" },
+      "relation": "verifies",
+      "rationale": "The positive resource scenario verifies deliberate spending and visible state changes."
+    },
+    "trace_resource_failure_loop": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_resource_failure_loop" },
+      "relation": "verifies",
+      "rationale": "The rejection scenario verifies that failure feedback has no hidden side effects."
+    },
+    "trace_lane_counter_success": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_lane_counter_success" },
+      "relation": "verifies",
+      "rationale": "The counter scenario verifies readable enemy weakness rules."
+    },
+    "trace_lane_breach_failure": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_lane_breach_failure" },
+      "relation": "verifies",
+      "rationale": "The breach scenario verifies the visible retryable failure path."
+    },
+    "trace_wave_escalation": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_wave_escalation" },
+      "relation": "verifies",
+      "rationale": "The wave scenario verifies authored pressure progression."
+    },
+    "trace_stage_unlock_and_save_reload": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_stage_unlock_and_save_reload" },
+      "relation": "verifies",
+      "rationale": "The save scenario verifies persistent authored progression."
+    },
+    "trace_pause_resume_settings": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_pause_resume_settings" },
+      "relation": "verifies",
+      "rationale": "The pause scenario verifies controllable runtime interruption and recovery."
+    },
+    "trace_asset_binding_no_orphans": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_asset_binding_no_orphans" },
+      "relation": "verifies",
+      "rationale": "The asset binding scenario verifies no orphan or placeholder integration path."
+    },
+    "trace_max_load_smoke": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_max_load_smoke" },
+      "relation": "verifies",
+      "rationale": "The smoke scenario verifies the frozen performance envelope."
+    },
+    "trace_visual_style_anchor_review": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_visual_style_anchor_review" },
+      "relation": "verifies",
+      "rationale": "The manual style scenario verifies the required taste gate."
+    },
+    "trace_complete_flow_regression": {
+      "source": { "kind": "intent", "id": "micro_ecodome_lane_mastery" },
+      "target": { "kind": "scenario", "id": "r1c0_complete_flow_regression" },
+      "relation": "verifies",
+      "rationale": "The complete flow scenario verifies the R1 vertical slice from install to final win."
+    }
+  },
+  "extensions": {
+    "r1c0_source_charter": {
+      "namespace": "r1c0_charter",
+      "version": "2026-07-16",
+      "payload": {
+        "selectedCombination": "A+M+P1+V2",
+        "theme": "micro_ecodome",
+        "scope": "high_polish_vertical_slice",
+        "confirmationPolicy": "quality_first_replayable_automation",
+        "acceptanceLevel": "complete_vertical_slice"
+      }
+    }
+  }
+}

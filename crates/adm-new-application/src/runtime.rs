@@ -260,6 +260,14 @@ impl RuntimeApplicationService {
             json!(settings.pipeline_adapter),
         );
         existing.insert(
+            "game_spec_v2_enabled".to_string(),
+            json!(settings.game_spec_v2_enabled),
+        );
+        existing.insert(
+            "game_spec_v2".to_string(),
+            json!({"enabled": settings.game_spec_v2_enabled}),
+        );
+        existing.insert(
             "custom_engine_name".to_string(),
             json!(settings.custom_engine_name),
         );
@@ -1539,6 +1547,7 @@ pub struct ProjectRuntimeSettings {
     pub binding_id: String,
     pub project_engine: String,
     pub pipeline_adapter: String,
+    pub game_spec_v2_enabled: bool,
     pub custom_engine_name: String,
     pub required_editor_version: String,
     pub development_path: String,
@@ -1552,6 +1561,7 @@ impl Default for ProjectRuntimeSettings {
             binding_id: String::new(),
             project_engine: "unity".to_string(),
             pipeline_adapter: "none".to_string(),
+            game_spec_v2_enabled: false,
             custom_engine_name: String::new(),
             required_editor_version: String::new(),
             development_path: String::new(),
@@ -1754,6 +1764,13 @@ pub fn normalize_project_settings(raw: &Value) -> ProjectRuntimeSettings {
         .unwrap_or("none")
         .trim()
         .to_ascii_lowercase();
+    settings.game_spec_v2_enabled = bool_setting(raw, "game_spec_v2_enabled")
+        || bool_setting(raw, "gameSpecV2Enabled")
+        || bool_setting(raw, "game_spec_v2")
+        || bool_at_path(raw, &["game_spec_v2", "enabled"])
+        || bool_at_path(raw, &["gameSpecV2", "enabled"])
+        || bool_at_path(raw, &["features", "game_spec_v2"])
+        || bool_at_path(raw, &["features", "gameSpecV2"]);
     settings.custom_engine_name = string_field(raw, "custom_engine_name");
     settings.required_editor_version = string_field(raw, "required_editor_version");
     settings.development_path = string_field(raw, "development_path");
@@ -2086,6 +2103,21 @@ fn string_field(value: &Value, field: &str) -> String {
         .unwrap_or_default()
         .trim()
         .to_string()
+}
+
+fn bool_setting(value: &Value, field: &str) -> bool {
+    value.get(field).and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn bool_at_path(value: &Value, path: &[&str]) -> bool {
+    let mut current = value;
+    for key in path {
+        let Some(next) = current.get(*key) else {
+            return false;
+        };
+        current = next;
+    }
+    current.as_bool().unwrap_or(false)
 }
 
 fn bounded_u32(value: Option<&Value>, default: u32, minimum: u32, maximum: u32) -> u32 {
@@ -2676,6 +2708,45 @@ mod tests {
         let unbound_snapshot = service.load_project_settings(true);
         assert!(unbound_snapshot.development_path.is_empty());
         assert!(unbound_snapshot.editor_path.is_empty());
+        cleanup(root);
+    }
+
+    #[test]
+    fn project_settings_persist_game_spec_v2_switch_without_machine_paths() {
+        let root = temp_root("project_config_game_spec_v2");
+        let service = RuntimeApplicationService::new(&root, "session_a").unwrap();
+        fs::write(
+            service.active_project_settings_path(),
+            r#"{"schema_version":1,"future_field":{"keep":true}}"#,
+        )
+        .unwrap();
+
+        service
+            .save_project_settings(&ProjectRuntimeSettings {
+                project_engine: "custom".to_string(),
+                game_spec_v2_enabled: true,
+                development_path: "local-machine-project".to_string(),
+                ..ProjectRuntimeSettings::default()
+            })
+            .unwrap();
+
+        let project_document: Value = serde_json::from_str(
+            &fs::read_to_string(service.active_project_settings_path()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(project_document["future_field"]["keep"], true);
+        assert_eq!(project_document["game_spec_v2_enabled"], true);
+        assert_eq!(project_document["game_spec_v2"]["enabled"], true);
+        assert!(project_document.get("development_path").is_none());
+        assert!(service.load_project_settings(false).game_spec_v2_enabled);
+        assert!(
+            normalize_project_settings(&json!({"game_spec_v2": {"enabled": true}}))
+                .game_spec_v2_enabled
+        );
+        assert!(
+            normalize_project_settings(&json!({"gameSpecV2Enabled": true})).game_spec_v2_enabled
+        );
+
         cleanup(root);
     }
 

@@ -76,6 +76,7 @@ import {
   buildResumePipelineRequest,
   buildRunPipelineRequest,
   createPipelineModel,
+  normalizeBoundedCompletion,
   normalizePipelineIssues,
   normalizeSemanticQuality,
   normalizePipelineView,
@@ -867,6 +868,7 @@ function testPipeline(html, css, pipelineJs) {
     ".style-image-preview",
     ".runtime-log-pane",
     ".style-confirmed",
+    ".bounded-completion-panel",
     ".semantic-quality-panel",
     ".semantic-issue",
     ".pipeline-issue",
@@ -894,6 +896,7 @@ function testPipeline(html, css, pipelineJs) {
   const semanticStage = view.stages.find((stage) => stage.stageId === "10");
   assert(semanticStage.semanticQuality.status === "blocked", "semantic quality should normalize");
   assert(semanticStage.semanticQuality.returnTargets[0].returnTarget.includes("Step10"), "semantic return targets should normalize");
+  assert(view.stages[0].boundedCompletion.status === "not_called", "completion state should default to not_called");
   assert(!Object.hasOwn(semanticStage, "artifacts"), "pipeline view must discard artifact records");
   assert(!Object.hasOwn(semanticStage, "outputs"), "pipeline view must discard raw outputs");
   assert(
@@ -931,6 +934,34 @@ function testPipeline(html, css, pipelineJs) {
   assert(recoverable.recovery.revision === 3, "pipeline recovery summary should normalize");
   assert(recoverable.state.currentUnitId === "11:program:TASK-002", "current safe unit should normalize");
   assert(buildResumePipelineRequest(recoverable.recovery).expected_revision === 3, "resume request revision mismatch");
+  const completionStage = normalizePipelineView({
+    ordered_stage_ids: ["05"],
+    stages: [
+      {
+        stage_id: "05",
+        title: "Program Review",
+        status: "completed_with_review",
+        bounded_completion: {
+          status: "confirmed",
+          model_config_id: "local-codex",
+          attempts: 2,
+          risk: "medium",
+          confirmation_mode: "attended",
+          confirmation_actor: "reviewer",
+          confirmation_accepted: "false",
+          errors: ["needs review"],
+        },
+        outputs: { secret: "raw output" },
+        artifacts: [{ relative_path: "stage_05/private.json" }],
+      },
+    ],
+  }).stages[0];
+  assert(completionStage.boundedCompletion.status === "confirmed", "completion status should normalize");
+  assert(completionStage.boundedCompletion.modelConfigId === "local-codex", "completion model should normalize");
+  assert(completionStage.boundedCompletion.confirmationAccepted === false, "completion boolean should parse false strings");
+  assert(completionStage.boundedCompletion.errors[0] === "needs review", "completion errors should normalize");
+  assert(!Object.hasOwn(completionStage, "outputs"), "completion view must still discard raw outputs");
+  assert(normalizeBoundedCompletion({ status: "unexpected" }).status === "failed", "unknown completion status should fail closed");
   assert(normalizeSemanticQuality({ return_targets: [{ code: "SEMANTIC_ALIGNMENT_GAP" }] }).returnTargets[0].returnTarget.includes("Step10"), "semantic return fallback should resolve");
   assert(normalizePipelineIssues(["failed"], "error")[0].severity === "error", "issue string should use fallback severity");
   const previewRequest = buildReadStep07PreviewRequest("generated_images/a.png", 1024);
@@ -1281,6 +1312,7 @@ function testSettingsStyle(html, css, pipelineJs, settingsStyleJs) {
   for (const required of [
     'data-role="project-config-modal"',
     'data-role="project-engine"',
+    'data-role="game-spec-v2-enabled"',
     'data-role="development-project-path"',
     'data-action="pick-development-project-path"',
     'data-action="pick-editor-path"',
@@ -1305,6 +1337,7 @@ function testSettingsStyle(html, css, pipelineJs, settingsStyleJs) {
   for (const required of [
     ".project-config-dialog",
     ".project-config-grid",
+    ".project-config-toggle",
     ".native-path-field",
     ".editor-discovery-controls",
     ".project-preflight-section",
@@ -1321,8 +1354,17 @@ function testSettingsStyle(html, css, pipelineJs, settingsStyleJs) {
 
   const config = normalizeProjectConfig(sampleProjectConfig());
   assert(config.projectEngine === "unity", "project engine should normalize");
+  assert(!config.gameSpecV2Enabled, "GameSpec v2 should default off");
   assert(config.developmentPath === "UnityProject", "development path should normalize");
   assert(normalizeProjectConfig({ project_engine: "bad-engine" }).projectEngine === "unity", "invalid engine should fallback");
+  assert(
+    normalizeProjectConfig({ game_spec_v2: { enabled: true } }).gameSpecV2Enabled,
+    "nested GameSpec v2 switch should normalize",
+  );
+  assert(
+    normalizeProjectConfig({ game_spec_v2_enabled: true }).gameSpecV2Enabled,
+    "flat GameSpec v2 switch should normalize",
+  );
   assert(engineLabel("godot") === "Godot", "engine label mismatch");
   const projectPicker = buildProjectDirectoryPickerRequest(config);
   assert(projectPicker.kind === "folder", "project picker must request a folder");
@@ -1362,11 +1404,13 @@ function testSettingsStyle(html, css, pipelineJs, settingsStyleJs) {
   const customSave = buildProjectConfigSaveRequest(
     sampleProjectConfig({
       project_engine: "custom",
+      game_spec_v2_enabled: true,
       custom_engine_name: "Internal",
       editor_path: "ignored.exe",
     }),
   );
   assert(customSave.settings.project_engine === "custom", "custom engine save mismatch");
+  assert(customSave.settings.game_spec_v2_enabled, "GameSpec v2 switch should persist through project config save");
   assert(customSave.settings.custom_engine_name === "Internal", "custom engine name should persist");
   assert(customSave.settings.editor_path === "", "custom engine should not send editor path");
   const preflight = buildProjectPreflightRequest(sampleProjectConfig(), { writeReport: false });

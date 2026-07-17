@@ -3112,9 +3112,76 @@ pub fn classify_conflicts(conflicts: &[Value]) -> (Vec<CorrectionItem>, Vec<Valu
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExecutionBudget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_ai_cost_units: Option<u64>,
+    pub task_timeout_seconds: u32,
+    pub max_retry_attempts: u32,
+    pub max_parallel_workers: u32,
+}
+
+impl ExecutionBudget {
+    pub fn validate(&self) -> Result<(), ExecutionBudgetError> {
+        if self.task_timeout_seconds == 0 {
+            return Err(ExecutionBudgetError {
+                code: "EXECUTION_BUDGET_TIMEOUT_INVALID",
+                severity: "error",
+                path: "/taskTimeoutSeconds",
+                related_ids: Vec::new(),
+                message: "task timeout must be greater than zero",
+                suggestion: "Set a positive per-task timeout in the local execution policy.",
+            });
+        }
+        if self.max_parallel_workers == 0 {
+            return Err(ExecutionBudgetError {
+                code: "EXECUTION_BUDGET_WORKERS_INVALID",
+                severity: "error",
+                path: "/maxParallelWorkers",
+                related_ids: Vec::new(),
+                message: "parallel worker count must be greater than zero",
+                suggestion: "Configure at least one local execution worker.",
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionBudgetError {
+    pub code: &'static str,
+    pub severity: &'static str,
+    pub path: &'static str,
+    pub related_ids: Vec<String>,
+    pub message: &'static str,
+    pub suggestion: &'static str,
+}
+
+impl std::fmt::Display for ExecutionBudgetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{} at {}: {}",
+            self.code, self.path, self.message
+        )
+    }
+}
+
+impl std::error::Error for ExecutionBudgetError {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Legacy unattended recovery policy for execution-object workflows.
+///
+/// GameSpec v2 Step11 stores retry, correction queue, and stop/resume state in
+/// `Step11ExecutionState`; this config remains for the existing execution
+/// object surfaces until their callers are moved behind the v2 contract engine.
 pub struct UnattendedExecutionConfig {
     pub max_auto_repair_attempts: u32,
     pub repair_timeout_seconds: u32,
+    #[serde(default)]
+    pub max_ai_cost_units: Option<u64>,
+    #[serde(default = "default_parallel_workers")]
+    pub max_parallel_workers: u32,
     pub continue_independent_tasks: bool,
     pub continue_after_completed_with_review: bool,
     pub sync_per_group: bool,
@@ -3129,6 +3196,8 @@ impl Default for UnattendedExecutionConfig {
         Self {
             max_auto_repair_attempts: 2,
             repair_timeout_seconds: 120,
+            max_ai_cost_units: None,
+            max_parallel_workers: 1,
             continue_independent_tasks: true,
             continue_after_completed_with_review: false,
             sync_per_group: true,
@@ -3138,6 +3207,21 @@ impl Default for UnattendedExecutionConfig {
             enable_step12_auto_repair: false,
         }
     }
+}
+
+impl UnattendedExecutionConfig {
+    pub fn execution_budget(&self) -> ExecutionBudget {
+        ExecutionBudget {
+            max_ai_cost_units: self.max_ai_cost_units,
+            task_timeout_seconds: self.repair_timeout_seconds,
+            max_retry_attempts: self.max_auto_repair_attempts,
+            max_parallel_workers: self.max_parallel_workers,
+        }
+    }
+}
+
+const fn default_parallel_workers() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4209,6 +4293,23 @@ fn default_true() -> bool {
 mod tests {
     use super::*;
     use adm_new_foundation::new_stable_id;
+
+    #[test]
+    fn execution_budget_is_validated_local_policy_outside_game_spec() {
+        let config = UnattendedExecutionConfig::default();
+        let budget = config.execution_budget();
+
+        assert_eq!(budget.max_parallel_workers, 1);
+        assert!(budget.validate().is_ok());
+
+        let mut invalid = budget;
+        invalid.max_parallel_workers = 0;
+        let error = invalid
+            .validate()
+            .expect_err("zero workers must fail closed");
+        assert_eq!(error.code, "EXECUTION_BUDGET_WORKERS_INVALID");
+        assert_eq!(error.path, "/maxParallelWorkers");
+    }
 
     #[test]
     fn type_registry_matches_python_categories_and_confirmation_levels() {

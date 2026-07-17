@@ -137,6 +137,12 @@
           "from": "opposition_turn",
           "to": "squad_turn",
           "trigger": { "source": "system" }
+        },
+        {
+          "transitionId": "resolve_encounter",
+          "from": "squad_turn",
+          "to": "resolved",
+          "trigger": { "source": "system" }
         }
       ]
     }
@@ -195,6 +201,12 @@
     }
   },
   "technical": {
+    "productEnvelope": {
+      "sceneScale": "medium",
+      "systemComplexity": "medium",
+      "assetScale": "medium",
+      "contentVolume": "medium"
+    },
     "platforms": ["windows"],
     "performanceBudgets": { "activeUnits": 64, "frameTimeMicros": 16667 },
     "saveRequirements": ["Persist the full turn state at safe checkpoints."],
@@ -212,6 +224,21 @@
         }
       ],
       "then": [{ "description": "The unit occupies the previewed cell with one fewer point.", "expression": { "kind": "always" } }]
+    },
+    "reject_unreachable_move": {
+      "summary": "An unreachable move is rejected before action points are spent.",
+      "given": [
+        { "description": "The selected cell is outside the previewed reachable set.", "expression": { "kind": "always" } }
+      ],
+      "when": [
+        {
+          "action": "move_unit",
+          "actor": { "kind": "entity", "id": "squad_unit" },
+          "targets": [{ "kind": "entity", "id": "squad_unit" }]
+        }
+      ],
+      "then": [{ "description": "The unit remains in place and action points are unchanged.", "expression": { "kind": "always" } }],
+      "failureCase": true
     }
   },
   "traceLinks": {

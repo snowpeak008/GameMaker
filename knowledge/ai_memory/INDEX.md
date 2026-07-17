@@ -1,11 +1,451 @@
 ﻿# AI 会话记忆索引
 
-> 最后更新：2026-07-15
+> 最后更新：2026-07-17
 > 缓存状态：✓ 有效
 
 ---
 
 ## 上次会话摘要
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-014
+**Summary**: Completed W4.10 at source level by widening anti-overfit tooling across display-label permutation, 16-axis capability mutation coverage, and A09 source/brand scanning.
+
+**Completed**:
+- [x] Extended `permute_display_labels` to cover intent title, audiences, entity tags, and region tags.
+- [x] Preserved entity-tag semantics by rewriting matching `HasTag` condition references during tag permutation.
+- [x] Added `capability_mutation_suite` for all 16 A03 capability axes.
+- [x] Step00-06 evidence now records 16-axis mutation hash coverage with changed/failed axis lists.
+- [x] Step08-10 evidence now records 16-axis architecture reaction coverage with changed/unchanged/failed axis lists.
+- [x] A09 forbidden source tokens now come from A09 samples plus `forbidden_source_tokens.json` external aliases instead of a runner-local hard-coded array.
+- [x] A09 source scanning now recursively collects v2 core source files and excludes sample fixture definitions.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.10 complete.
+
+**Verification**:
+- [x] `cargo test -p adm-new-design --test a03_decision_graph --locked`
+- [x] `cargo test -p adm-new-pipeline game_spec_v2_steps --locked`
+- [x] `cargo test -p adm-new-pipeline step08_10_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo test -p adm-new-pipeline source_scan --locked`
+- [x] `cargo test -p adm-new-pipeline forbidden_source_tokens --locked`
+- [x] `cargo test -p adm-new-pipeline --locked`
+- [x] `cargo check --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W5 remains open: commit after user acceptance, clean-tree standalone verification, rebuilt package/EXE smoke, and manual R1 playtest signing.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-013
+**Summary**: Completed W4.9 at source level by replacing Step02's internally generated capability reason check with real A03 decision-graph activation evidence.
+
+**Completed**:
+- [x] Removed the old Step02 `capability_reasons` gate that generated non-empty strings from the current capability profile.
+- [x] Extended `Step00_06Compiler` with explicit A03 decision-domain input.
+- [x] Default source-level Step00-06 compilation now loads real `knowledge/design_data` domains through the validated NEWrust source root.
+- [x] Product GameSpec v2 projection now constructs the Step00-06 compiler from the product/resource-root `knowledge/design_data`, matching the existing design-engine resource lookup.
+- [x] Step02 now compiles `CapabilityDecisionGraph` and fails closed when domains are unavailable, graph compilation fails, the graph is empty, or activation evidence is incomplete.
+- [x] Step02 output now exposes structured activation evidence with `predicateId`, capability JSON Pointer, `operator`, `expected`, and `actual`, plus the full decision graph.
+- [x] Step02 trace refs now point to actual `/capabilities/...` evidence paths.
+- [x] Added regression coverage that verifies A03 activation evidence is consumed and that missing decision domains block at Step02.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.9 complete.
+
+**Verification**:
+- [x] `cargo test -p adm-new-pipeline game_spec_v2_steps --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo test -p adm-new-design --test a03_decision_graph --locked`
+- [x] `cargo test -p adm-new-pipeline --locked`
+- [x] `cargo check --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This closes the source-level Step02 gate defect. It does not claim clean-tree standalone verification, rebuilt release package validation, EXE smoke, real target-environment VLM/model execution, or manual playtest signing.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-012
+**Summary**: Completed W4.8 at source level by exposing A05 bounded AI completion five-state visibility in the Rust pipeline stage view and Web detail UI.
+
+**Completed**:
+- [x] Added `PipelineBoundedCompletionView` to the Tauri pipeline stage view.
+- [x] Parsed bounded-completion outputs into a safe UI whitelist: `not_called`, `failed`, `rejected`, `confirmed`, `committed`, model config id, risk, attempts, confirmation summary, and redacted error summaries.
+- [x] Made missing bounded-completion records visible as `not_called`.
+- [x] Made unknown bounded-completion statuses fail closed to `failed` with a visible error.
+- [x] Kept raw `outputs` and `artifacts` skipped from serialized pipeline views.
+- [x] Added the Web pipeline detail `AI completion state` panel with localized status labels and status-specific styling.
+- [x] Rebuilt `web/dist` from source.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.8 complete.
+
+**Verification**:
+- [x] `cargo test -p adm-new-tauri-commands pipeline_view_exposes_bounded_completion_five_states_without_raw_outputs --locked`
+- [x] `cargo test -p adm-new-tauri-commands --locked`
+- [x] `cargo fmt --check`
+- [x] `npm.cmd test`
+- [x] `npm.cmd run build`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This closes UI visibility for A05 states only. It does not claim real external VLM/model execution, clean-tree standalone verification, rebuilt release package validation, EXE smoke, or manual playtest signing.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-011
+**Summary**: Completed W4.7 at source level by wiring GameSpec v2 Step14 R1GateEvidence to real release-tool evidence, explicit pipeline evidence refs, and a separate manual playtest signature.
+
+**Completed**:
+- [x] Added `R1PipelineGateEvidence` for content completion, AI usage audit, AI-off flow, and anti-overfit evidence refs.
+- [x] Added `R1UserPlaytestSignature` for a separate manual R1 playable-build signature bound to the standalone evidence id.
+- [x] Added `derive_r1_gate_evidence_from_sources(...)` to validate `tools/verify-standalone.ps1/v2` output in `gates/standalone-release-evidence.json`.
+- [x] Step14 now validates schema/producer/project/status/sourceTreeClean/freshness/21 required checks/portable receipt before deriving build, integrity, standalone, and EXE smoke evidence.
+- [x] Product Step14 now writes derived `r1_gate_evidence.json` and `r1_gate_evidence_source_report.json` at runtime instead of requiring a prewritten bool-only evidence file.
+- [x] Added regression coverage for successful derivation, missing manual signature, failed `portable_smoke`, and product-path derivation.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.7 source-level wiring complete.
+
+**Verification**:
+- [x] `cargo test -p adm-new-pipeline --test step14_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline game_spec_v2_product_step14_derives_gate_evidence_from_release_sources --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo check -p adm-new-pipeline --locked`
+- [x] `cargo test -p adm-new-pipeline --locked`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+- [x] `cargo run --locked -p adm-new-cli -- --project-root . standalone-boundary-gate`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This closes source-level Step14 evidence wiring, but does not claim a current clean-tree `tools/verify-standalone.ps1` run, rebuilt package, real EXE smoke, or user playtest signing. Those remain W5 release validation.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-010
+**Summary**: Completed W4.6 at source level by removing the remaining Step13 fixture heuristic for asset-related scenarios. Asset validation is now driven by an explicit `assetValidationRequired` GameSpec field.
+
+**Completed**:
+- [x] Added `assetValidationRequired` to `AcceptanceScenario` with a default of `false`.
+- [x] Marked the R1-C0 asset binding scenario with `assetValidationRequired: true`.
+- [x] Removed Step13 `scenario_touches_assets()` string heuristics that inspected scenario ids, summaries, action ids, and target ids for the word `asset`.
+- [x] Step13 missing-asset failures now apply only to scenarios whose `assetValidationRequired` field is true.
+- [x] `scenario_execution_request.json` now includes `assetValidationRequired` alongside manual review and performance budget flags.
+- [x] Added a regression test proving an asset-named scenario is not blocked by missing assets unless the explicit field is set.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.6 complete and record verification.
+
+**Verification**:
+- [x] `cargo test -p adm-new-game-spec --test fixtures --locked`
+- [x] `cargo test -p adm-new-pipeline --test step13_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo test -p adm-new-design --locked`
+- [x] `cargo fmt --all`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This closes the source-level Step13/14 fixture heuristic issue; true Unity/PlayMode execution, EXE smoke, and manual playtest signing remain release-gate work.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-009
+**Summary**: Completed W4.5 at source level: Step13 no longer passes from nominal policy defaults. It now requires explicit scenario execution evidence and fails closed when observations are missing or mismatched.
+
+**Completed**:
+- [x] Added `Step13ExecutionEvidence` and `ScenarioExecutionObservation` as the explicit Step13 evidence contract.
+- [x] Removed the implicit `nominal_for_spec` product path; tests and A09 now use an explicitly named `test_only_nominal_for_spec` fixture evidence helper.
+- [x] Step13 now writes `scenario_execution_request.json` with the expected evidence schema, build hash, scenario action ids, performance budgets, and accessibility requirements.
+- [x] Step13 validation now fails closed when execution evidence is absent, has the wrong schema/build hash, lacks an automated scenario observation, omits required actions, or lacks performance/accessibility observations.
+- [x] Product Step13 reads only `stage_13/scenario_execution_evidence.json`; missing evidence creates a blocked product report instead of a synthetic pass.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.5 complete and record verification.
+
+**Verification**:
+- [x] `cargo test -p adm-new-pipeline --test step13_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo test -p adm-new-pipeline --test step14_v2 --locked`
+- [x] `cargo fmt --all`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This closes the fake-pass Step13 source path, but does not claim that Unity/PlayMode or EXE smoke actually ran in the target environment.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-008
+**Summary**: Completed W4.4 at source level: `sample(n)` is now a real confirmation policy for A05 and Step12, with structured audit/report fields and a product-path approval loop.
+
+**Completed**:
+- [x] Added an explicit A05 `ConfirmationMode::Sample` decision branch instead of falling through to the generic confirmation path.
+- [x] Added `sampleSize` to bounded-completion confirmation audit records; `sample_size=0` fails closed and requires human confirmation without committing.
+- [x] Changed Step12 sampling from "first N assets" to deterministic slice-family coverage first, then manifest-order fill.
+- [x] Added structured Step12 `confirmationRecords` to the main output and `asset_confirmation_report.json`, including `sampled`, `sampleIndex`, `sampleCount`, `requiresHuman`, and status.
+- [x] Product Step12 now has a regression path for sample mode: run waits with unapproved samples, sampled ids are read from `confirmationRecords`, approved sample ids are written, and the rerun succeeds.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.4 complete and record verification.
+
+**Verification**:
+- [x] `cargo test -p adm-new-ai bounded_completion --locked`
+- [x] `cargo test -p adm-new-pipeline --test step12_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor game_spec_v2_product_step12_waits_for_explicit_asset_confirmation --locked`
+- [x] `cargo fmt --all`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This did not claim real Unity scene execution, EXE smoke, or manual playtest signing. W4.5+ remains responsible for true scenario execution and later release gates.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-007
+**Summary**: Completed W4.3 at source level by removing Step12 synthetic runtime binding and fake loaded evidence: asset binding now comes from workspace scene/prefab/asset reference files, and the old deterministic loader fails closed instead of claiming engine load success.
+
+**Completed**:
+- [x] Removed the Step12 `default_bindings(manifest)` product path; `run_step12_asset_production*` now requires explicit runtime bindings from the caller.
+- [x] Added `discover_asset_bindings_from_workspace(...)`, which scans `.unity`, `.prefab`, and `.asset` files under the real workspace target for asset ids or imported asset paths.
+- [x] Added `WorkspaceReferenceAssetLoader`, which requires an existing generated asset, passed hard gates, readable runtime reference files, and actual asset references before reporting `loaded=true` and `instantiated=true`.
+- [x] Changed `DeterministicHeadlessAssetLoader` to fail closed so it cannot report referenced+gated assets as loaded.
+- [x] Updated the GameSpec v2 product Step12 route to scan `workspace/game_spec_v2/target` and enter correction when no runtime references are present.
+- [x] Updated Step12, Step13, A09, and product executor tests to build or scan explicit runtime reference fixtures instead of relying on synthetic bindings.
+
+**Verification**:
+- [x] `cargo fmt --all`
+- [x] `cargo test -p adm-new-pipeline --test step12_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test step13_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo test -p adm-new-pipeline --test a09_cross_genre_evaluation --locked`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test -p adm-new-pipeline --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] This did not claim a real Unity batchmode/headless smoke run. True Unity instantiation, scene execution, EXE smoke, and manual playtest signing remain release-gate work.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-006
+**Summary**: Completed W4.2 at source level by strengthening the shared Step07/Step12 asset hard gate: image files now get integrity checks, watermark detection covers edge text-like marks instead of only bottom-right dark blocks, and known asset slice kinds get deterministic geometry validation.
+
+**Completed**:
+- [x] Added decode-preflight file integrity checks for metadata access, regular file requirement, empty files, and PNG signature validity.
+- [x] Added decoded image integrity checks for zero dimensions and implausible file size relative to image dimensions.
+- [x] Expanded watermark detection from the previous bottom-right dark-pixel heuristic to include deterministic OCR-like edge text stroke detection.
+- [x] Added slice geometry validation for `sprite` / `single_sprite`, `nine_slice_ui`, and `full_frame` / `keyframe` asset kinds.
+- [x] Added regression tests for invalid/empty PNG files, non-bottom-right text-like watermarks, and invalid slice geometry.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` to mark W4.2 source-level work complete and document the no-third-party-OCR boundary.
+
+**Verification**:
+- [x] `cargo fmt --all`
+- [x] `cargo test -p adm-new-pipeline step07_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test step12_v2 --locked`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W4.1 still needs target-environment validation with a real visual model and credentials before release-level closure.
+- [x] W4.3+ true engine/headless asset loading, sample confirmation behavior, real scenario execution, EXE smoke, and manual playtest signing remain open.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-005
+**Summary**: Continued W4.1 by adding application-layer real VLM provider injection for GameSpec v2 Step07/12: active OpenAI-compatible completion API configurations can now create a VLM review service that sends PNG data URLs, expects strict JSON, and feeds the existing fail-closed VLM evidence path.
+
+**Completed**:
+- [x] Added `adm-new-application::vlm_review_service_from_config(...)`.
+- [x] Added `OpenAiVisionVlmReviewer`, which constructs chat-completions requests with PNG `data:image/png;base64,...` inputs and strict JSON response requirements.
+- [x] Mapped model output to `VlmReviewEvidence`; invalid JSON, rejected status, or unsupported configuration fails closed.
+- [x] Tauri pipeline now injects the configured VLM service for Step07/12 ranges when active completion config is OpenAI-compatible API.
+- [x] CLI completion configurations are explicitly rejected as VLM providers.
+
+**Verification**:
+- [x] `cargo test -p adm-new-application vlm_review --locked`
+- [x] `cargo check -p desktop-tauri --locked`
+- [x] `cargo test -p desktop-tauri commands::pipeline --locked`
+- [x] `cargo check --workspace --locked`
+- [x] `cargo test --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W4.1 still needs target-environment validation with a real visual model and credentials before release-level closure.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-004
+**Summary**: Continued W4.1 by wiring VLM review into the GameSpec v2 product source path: Step07 and Step12 now call an injectable VLM review service, persist review evidence by image content hash, write audit reports, and fail closed when no real VLM provider is configured.
+
+**Completed**:
+- [x] Added `VlmReviewService` / `VlmImageReviewer` contracts and structured VLM review reports.
+- [x] Converted `CachedVlmReviewService` to a thread-safe persistent cache keyed by `config_id + image_hash`.
+- [x] Step07 now writes `vlm_style_review_report.json`, blocks on failed/unavailable VLM evidence, and refuses style confirmation before VLM passes.
+- [x] Step12 now writes `vlm_asset_review_report.json`, stores VLM status/score/summary on produced assets, and routes VLM failures to the correction queue.
+- [x] Product Step07/12 now use the VLM service path; missing app-layer provider writes `vlm_unconfigured` unavailable evidence and blocks instead of silently approving.
+
+**Verification**:
+- [x] `cargo test -p adm-new-pipeline step07_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test step12_v2 --locked`
+- [x] `cargo test -p adm-new-pipeline --test product_executor --locked`
+- [x] `cargo check --workspace --locked`
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] Real target-environment VLM provider injection remains open; Unity/headless/EXE/manual signing gates remain open.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-003
+**Summary**: Closed W1.5 by freezing and testing the legacy execution retention boundary: v2 product Step11 stays on `WorkspaceTaskAgent + WorkspaceChangeSet`, while legacy `WorkUnitExecutor`, bridge `AiDevelopmentWorkUnitExecutor`, and `CodexPatchRunner` have explicit retained/prohibited caller contracts.
+
+**Completed**:
+- [x] Added `plan/newdesignplan/contracts/W1_5_legacy_execution_boundary.md` and updated A08c plus `remaining_work_checklist.md`.
+- [x] Added `WORK_UNIT_EXECUTOR_*`, `AI_DEVELOPMENT_EXECUTOR_*`, and `CODEX_PATCH_RUNNER_*` boundary constants.
+- [x] Added tests proving all retained surfaces prohibit GameSpec v2 product Step11 as a legacy/direct execution path.
+- [x] Preserved `game_spec_v2=false` legacy Step08-14, Step07 image work units, CLI patch, and R0 harness compatibility.
+
+**Verification**:
+- [x] `cargo fmt --all`, `cargo check --workspace --locked`, and `cargo test --workspace --locked` passed.
+- [x] Focused boundary tests for `adm-new-pipeline`, `adm-new-application`, and `adm-new-patch` passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W4 real VLM/Unity/headless/EXE gates and W5 release flow remain open.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-002
+**Summary**: Completed W1.4 at source level for GameSpec v2 Step11: product runs require a real `WorkspaceTaskAgent`, real Codex/Claude bridge requests run Unity batchmode compile plus trusted smoke/test plans, and local fallback evidence is explicitly `not_executed`.
+
+**Completed**:
+- [x] Product/UI v2 Step11 now fails closed when no configured real workspace task agent exists; local filesystem fallback is disabled for product runs.
+- [x] The v2 work-unit payload carries `WorkspaceChangeSet` command permissions, and `UnityBatchmodeProgramVerifier` runs compile plus trusted test/smoke validation plans.
+- [x] Legacy development work units remain compile-only when no v2 workspace contract is present.
+- [x] The offline filesystem fallback now writes `status: not_executed` and `verificationRequired: true` instead of fake passed smoke evidence.
+- [x] `remaining_work_checklist.md` now closes W1.4 only for Step11 post-merge compile/trusted smoke-test; full EXE playable smoke and manual playtest signing remain W4.7/W5 release gates.
+
+**Verification**:
+- [x] `cargo fmt --all`, `cargo check --workspace --locked`, and `cargo test --workspace --locked` passed.
+- [x] Focused application bridge, product executor, filesystem fallback, and desktop-tauri checks passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W1.5, true VLM/Unity/headless/EXE gates, and manual playtest signing remain open.
+
+---
+
+**Date**: 2026-07-17
+**ID**: 2026-07-17-001
+**Summary**: Closed the B6 and W2.1 follow-up issues, completed W1.3 filesystem workspace semantics, and wired the real Codex/Claude development CLI executor into GameSpec v2 Step11 through an application-layer `WorkspaceTaskAgent`.
+
+**Completed**:
+- [x] Step11/12 now validate frozen Step08-10 source hashes before reusing `stage_10`; changed GameSpec input after Step10 fails closed without overwriting the frozen task graph.
+- [x] W2.1 gained Chinese multibyte long-name coverage; migration remains panic-free and canonicalizable.
+- [x] W1.3 now uses a target snapshot as the isolated workspace source, applies operations in isolation, and replaces target through a backup rollback path.
+- [x] W1.2 now has a source-level bridge: `AiDevelopmentWorkUnitExecutor` implements `WorkspaceTaskAgent`, and Tauri injects `workspace_task_agent_from_config(...)` into the product executor when development CLI config is available.
+- [x] `remaining_work_checklist.md` now marks W1.2/W1.3 source-level complete and keeps W1.4 open for full smoke work.
+
+**Verification**:
+- [x] `cargo fmt --all`, `cargo check --workspace --locked`, and `cargo test --workspace --locked` passed.
+- [x] Focused product, A10 migration, filesystem workspace agent, application bridge, and desktop-tauri checks passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W1.4 full smoke, W1.5 legacy-caller migration/retention decision, VLM/Unity/headless/EXE gates, and manual playtest signing remain open.
+
+---
+
+**Date**: 2026-07-16
+**ID**: 2026-07-16-003
+**Summary**: Completed the post-review NEWrust v2 second-development repair pass: fixed the two high-risk regressions, added the real UI/project-config switch for `game_spec_v2`, covered Step11 stop/checkpoint behavior, and corrected W1.4 back to unfinished instead of over-marked.
+
+**Completed**:
+- [x] Step12 product execution now waits for explicit asset confirmation by default; synthetic full approval was removed and `auto_accept` requires `explicitAutoAccept=true`.
+- [x] The R1-C0 frozen fixture now carries Step13 manual-review and performance-budget fields directly.
+- [x] Runtime settings, Tauri config commands, and Web project settings now persist `game_spec_v2_enabled`, while product routing still accepts legacy nested switch shapes.
+- [x] v2 Step11 now honors the shared stop token, reports `Stopped` correctly, and rejects legacy checkpoint work-unit reconciliation.
+- [x] v2 Step07 confirmation rejects unknown ids, Step13 unknown budget refs fail closed, A09 mutation rejection has a negative test, and VLM cache writes are temp+rename.
+- [x] `remaining_work_checklist.md` was corrected: W1.4 remains open because compile-smoke evidence is not a real process spawn.
+
+**Verification**:
+- [x] `cargo fmt --all`, `cargo check --workspace --locked`, and `cargo test --workspace --locked` passed.
+- [x] Web `npm.cmd test`, `npm.cmd run i18n-test`, and `npm.cmd run build` passed.
+- [x] Focused product, Step13, A09, runtime, and Tauri config tests passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] W1.4 real build+smoke, the deeper W1.3 isolated-workspace/rollback limitation, real CLI/VLM/Unity/EXE gates, and manual playtest signing remain open.
+
+---
+
+**Date**: 2026-07-16
+**ID**: 2026-07-16-002
+**Summary**: Completed the NEWrust v2 second-development checklist pass at source level: product `game_spec_v2` routing now reaches v2 Step07-14, P1/P2 bugs are fixed, Step11 has product-level filesystem workspace execution, and remaining release gates are explicitly separated from source-complete work.
+
+**Completed**:
+- [x] Routed product Step07-14 through v2 implementations when `game_spec_v2` is enabled, with legacy behavior preserved when disabled.
+- [x] Fixed long-name `SpecId` panic, Windows case-fold path bypass, RequiresAny cycles, Step07 margin clamping, A09 fail-open/no-AI/bounded-repeat evidence, A10 sidecar half-publish behavior, and readiness double-write.
+- [x] Added persistent VLM review cache, Step12 `sample(n)`, explicit Step13 manual/performance fields, and removed synthetic A09 user playtest signing.
+- [x] Updated `plan/newdesignplan/remaining_work_checklist.md` with completed/partial status and verification records.
+
+**Verification**:
+- [x] `cargo fmt --all -- --check`, `cargo check --workspace --locked`, `cargo test -p adm-new-pipeline --locked`, and `cargo test --workspace --locked` passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or repository synchronization was performed.
+- [x] Real Codex/Claude CLI bridge, true VLM/Unity/EXE smoke, and manual playtest signature remain external release/acceptance gates.
+
+---
+
+**Date**: 2026-07-16
+**ID**: 2026-07-16-001
+**Summary**: Completed the local NEWrust v2 A02-A10 implementation loop with R1-C0 accepted as A+M+P1+V2, including Step07-14 vertical slice gates, A09 cross-genre evaluation, and A10 sidecar migration/release readiness, while preserving the no-repository-sync acceptance hold.
+
+**Completed**:
+- [x] Implemented GameSpec validation/canonical hashing, envelope/budget layering, capability decision graph, ChangeKernel/SpecStore, bounded AI audit, D1-D4 projection, and Step00-06 frozen specification compilation.
+- [x] Implemented A08a-A08f: art direction and anchors, architecture/manifest/task contracts, WorkspaceChangeSet execution, asset production/binding, acceptance scenarios, packaging, and R1 stop gate.
+- [x] Implemented A09 cross-genre evaluation with eight spec-level samples, three R2 full-production slices, network architecture-only validation, anti-overfit checks, and R1 calibration outputs.
+- [x] Implemented A10 sidecar-only migration preview/apply/rollback and R2 release-readiness aggregation; formal release evidence remains gated on a clean committed tree.
+
+**Verification**:
+- [x] `cargo fmt --all -- --check`, `cargo check --workspace --locked`, `cargo test -p adm-new-game-spec`, `cargo test -p adm-new-pipeline`, and `cargo test --workspace --locked --quiet` passed.
+
+**Release Hold**:
+- [x] No commit, tag, push, or GitHub Release was performed before user acceptance.
+- [x] `tools/verify-standalone.ps1` remains deferred because formal release verification requires a clean committed worktree.
+
+---
+
+**Date**: 2026-07-15
+**ID**: 2026-07-15-003
+**Summary**: Entered an explicit acceptance hold: update NEWrust memory locally, but do not commit, tag, push, or modify the remote repository until the user accepts the current version and explicitly requests synchronization.
+
+**Release Hold**:
+- [x] Remote acceptance baseline remains `origin/main` at `a29c7d0`; `v0.1.0` is unchanged.
+- [x] Memory-only updates remain local and uncommitted during acceptance.
+- [x] Repository synchronization requires an explicit post-acceptance instruction.
+
+**Scope Decision**:
+- [x] Shelved the proposed expansion based on additional open-source game samples because its net effect is uncertain.
+- [x] Do not add that method to A02-A10 or change current schedule and quality forecasts unless the user explicitly reopens it.
+
+**Next**:
+- [ ] Wait for user acceptance; then audit pending changes before any repository synchronization.
+
+---
 
 **Date**: 2026-07-15
 **ID**: 2026-07-15-002

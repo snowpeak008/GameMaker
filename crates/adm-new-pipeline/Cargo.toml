@@ -8,8 +8,10 @@ license.workspace = true
 [dependencies]
 adm-new-contracts = { path = "../adm-new-contracts" }
 adm-new-config = { path = "../adm-new-config" }
+adm-new-change-kernel = { path = "../adm-new-change-kernel" }
 adm-new-design = { path = "../adm-new-design" }
 adm-new-foundation = { path = "../adm-new-foundation" }
+adm-new-game-spec.workspace = true
 adm-new-storage = { path = "../adm-new-storage" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }

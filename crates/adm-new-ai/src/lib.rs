@@ -21,6 +21,7 @@ pub use resolution::{AiCliProbeView, AiResolutionView};
 
 pub mod adapters;
 pub mod api_probe;
+pub mod bounded_completion;
 pub mod cli_probe;
 pub mod design_contracts;
 mod http_endpoint_policy;
@@ -903,6 +904,15 @@ fn validate_json_urls(
 
 pub trait CompletionAdapter {
     fn generate(&self, task: &ModelTask) -> AdmResult<ModelResult>;
+}
+
+impl<T> CompletionAdapter for &T
+where
+    T: CompletionAdapter + ?Sized,
+{
+    fn generate(&self, task: &ModelTask) -> AdmResult<ModelResult> {
+        (*self).generate(task)
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -114,6 +114,12 @@
           "from": "preparation",
           "to": "active",
           "trigger": { "source": "timer" }
+        },
+        {
+          "transitionId": "finish_pressure",
+          "from": "active",
+          "to": "resolved",
+          "trigger": { "source": "timer" }
         }
       ]
     }
@@ -173,6 +179,12 @@
     }
   },
   "technical": {
+    "productEnvelope": {
+      "sceneScale": "medium",
+      "systemComplexity": "medium",
+      "assetScale": "medium",
+      "contentVolume": "medium"
+    },
     "platforms": ["windows"],
     "performanceBudgets": { "activeEntities": 300, "frameTimeMicros": 16667 },
     "saveRequirements": ["Persist unlocked encounters."],
@@ -201,6 +213,30 @@
         }
       ],
       "then": [{ "description": "The placement effects are observable.", "expression": { "kind": "always" } }]
+    },
+    "reject_when_unfunded": {
+      "summary": "An unfunded placement is rejected without creating a defender.",
+      "given": [
+        {
+          "description": "Energy is below the placement cost.",
+          "reads": [{ "kind": "resource", "id": "energy" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "energy" },
+            "operator": "less",
+            "value": 50
+          }
+        }
+      ],
+      "when": [
+        {
+          "action": "place_defender",
+          "actor": { "kind": "entity", "id": "player_cursor" },
+          "targets": [{ "kind": "entity", "id": "defender" }]
+        }
+      ],
+      "then": [{ "description": "The player receives a readable rejection reason.", "expression": { "kind": "always" } }],
+      "failureCase": true
     }
   },
   "traceLinks": {
@@ -209,6 +245,12 @@
       "target": { "kind": "scenario", "id": "place_when_funded" },
       "relation": "verifies",
       "rationale": "The scenario verifies a readable counter decision."
+    },
+    "promise_to_unfunded_rejection": {
+      "source": { "kind": "intent", "id": "read_and_counter" },
+      "target": { "kind": "scenario", "id": "reject_when_unfunded" },
+      "relation": "verifies",
+      "rationale": "The failure scenario verifies readable rejection feedback."
     }
   },
   "extensions": {}

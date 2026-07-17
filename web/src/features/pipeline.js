@@ -29,6 +29,7 @@ export const DEFAULT_PIPELINE_VIEW = {
 
 const stylePreviewObjectUrls = new WeakMap();
 let stylePreviewToken = 0;
+const COMPLETION_RUN_STATUSES = new Set(["not_called", "failed", "rejected", "confirmed", "committed"]);
 
 export function createPipelineApi(invokeCommand) {
   return {
@@ -388,6 +389,7 @@ function renderDetail(panel, model, api = {}) {
     detail.append(labeledRuntimeLine("pipeline.detail.message", stage.message));
   }
   renderStageIssues(detail, stage);
+  renderBoundedCompletion(detail, stage.boundedCompletion);
   renderSemanticQuality(detail, stage.semanticQuality);
   const action = el(
     "button",
@@ -423,6 +425,49 @@ function renderStageIssues(container, stage) {
       : protocolLabel("strong", "pipeline-issue-heading", "pipelineSeverity", issue.severity);
     item.append(heading, markRuntime(el("span", "pipeline-issue-message", issue.message)));
     section.append(item);
+  }
+  container.append(section);
+}
+
+function renderBoundedCompletion(container, boundedCompletion) {
+  const completion = normalizeBoundedCompletion(boundedCompletion);
+  const section = el("section", `bounded-completion-panel status-${completion.status}`);
+  section.setAttribute("data-role", "bounded-completion-panel");
+  section.append(el("h3", "", t("pipeline.completion.title")));
+  const summary = [
+    t("pipeline.completion.status", {
+      status: enumLabel("completionRunStatus", completion.status),
+    }),
+    t("pipeline.completion.model", {
+      model: completion.modelConfigId || t("pipeline.completion.none"),
+    }),
+    t("pipeline.completion.attempts", { attempts: String(completion.attempts) }),
+    t("pipeline.completion.risk", { risk: completion.risk || t("pipeline.completion.none") }),
+  ].join(t("pipeline.separator"));
+  section.append(el("div", "completion-summary", summary));
+  if (completion.status === "not_called") {
+    section.append(el("div", "empty-inline", t("pipeline.completion.notCalled")));
+  }
+  if (completion.confirmationMode || completion.confirmationActor || completion.confirmationAccepted !== null) {
+    section.append(
+      markRuntime(
+        el(
+          "div",
+          "completion-confirmation",
+          t("pipeline.completion.confirmation", {
+            mode: completion.confirmationMode || t("pipeline.completion.none"),
+            actor: completion.confirmationActor || t("pipeline.completion.none"),
+            accepted:
+              completion.confirmationAccepted === null
+                ? t("pipeline.completion.none")
+                : String(completion.confirmationAccepted),
+          }),
+        ),
+      ),
+    );
+  }
+  for (const error of completion.errors.slice(0, 4)) {
+    section.append(markRuntime(el("div", "completion-error", error)));
   }
   container.append(section);
 }
@@ -816,6 +861,9 @@ function normalizeStageView(stage) {
     message: read(stage, "message") ?? read(result, "message") ?? "",
     isStep07: Boolean(read(stage, "isStep07", "is_step07")),
     semanticQuality: normalizeSemanticQuality(read(stage, "semanticQuality", "semantic_quality")),
+    boundedCompletion: normalizeBoundedCompletion(
+      read(stage, "boundedCompletion", "bounded_completion"),
+    ),
     errors: normalizePipelineIssues(
       read(stage, "errors") ?? read(result, "errors"),
       "error",
@@ -841,6 +889,51 @@ function normalizeStyleOption(option) {
     promptRefined: Boolean(read(option, "promptRefined", "prompt_refined")),
     selected: Boolean(read(option, "selected")),
   };
+}
+
+export function normalizeBoundedCompletion(input) {
+  const value = input && typeof input === "object" ? input : {};
+  const rawStatus = String(read(value, "status") ?? "not_called").toLowerCase().replaceAll("-", "_");
+  const errors = listFromUnknown(read(value, "errors")).map(structuredText).filter(Boolean);
+  const status = COMPLETION_RUN_STATUSES.has(rawStatus) ? rawStatus : "failed";
+  if (status === "failed" && rawStatus && !COMPLETION_RUN_STATUSES.has(rawStatus)) {
+    errors.unshift(`unknown completion status: ${rawStatus}`);
+  }
+  return {
+    status,
+    taskId: read(value, "taskId", "task_id") ?? "",
+    modelConfigId: read(value, "modelConfigId", "model_config_id") ?? "",
+    candidatePatchId: read(value, "candidatePatchId", "candidate_patch_id") ?? "",
+    risk: read(value, "risk") ?? "",
+    attempts: Math.max(0, Math.trunc(Number(read(value, "attempts") ?? 0)) || 0),
+    confirmationMode: read(value, "confirmationMode", "confirmation_mode") ?? "",
+    confirmationActor: read(value, "confirmationActor", "confirmation_actor") ?? "",
+    confirmationAccepted: completionBoolean(
+      read(value, "confirmationAccepted", "confirmation_accepted"),
+    ),
+    errorCount: Math.max(
+      0,
+      Math.trunc(Number(read(value, "errorCount", "error_count") ?? errors.length)) || 0,
+    ),
+    errors,
+  };
+}
+
+function completionBoolean(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "yes", "1"].includes(normalized)) {
+    return true;
+  }
+  if (["false", "no", "0"].includes(normalized)) {
+    return false;
+  }
+  return null;
 }
 
 export function normalizePipelineIssues(input, fallbackSeverity = "warning") {
@@ -898,6 +991,7 @@ function stageFromState(stageId, state) {
     message: read(result, "message") ?? "",
     isStep07: stageId === "07",
     semanticQuality: normalizeSemanticQuality(null),
+    boundedCompletion: normalizeBoundedCompletion(null),
     errors: normalizePipelineIssues(read(result, "errors"), "error"),
     warnings: normalizePipelineIssues(read(result, "warnings"), "warning"),
   };

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 adm-new-ai = { path = "../adm-new-ai" }
 adm-new-artifact = { path = "../adm-new-artifact" }
+adm-new-change-kernel = { path = "../adm-new-change-kernel" }
 adm-new-contracts = { path = "../adm-new-contracts" }
 adm-new-design = { path = "../adm-new-design" }
 adm-new-foundation = { path = "../adm-new-foundation" }
@@ -17,6 +18,7 @@ adm-new-pipeline = { path = "../adm-new-pipeline" }
 adm-new-save = { path = "../adm-new-save" }
 adm-new-sdk = { path = "../adm-new-sdk" }
 adm-new-storage = { path = "../adm-new-storage" }
+base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }

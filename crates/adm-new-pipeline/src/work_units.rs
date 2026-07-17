@@ -205,6 +205,27 @@ pub enum WorkUnitReconcileDecision {
     Unknown,
 }
 
+pub const GAME_SPEC_V2_PRODUCT_STEP11_USAGE: &str = "gamespec_v2_product_step11";
+pub const WORK_UNIT_EXECUTOR_RETAINED_CALLERS: &[&str] = &[
+    "legacy_step08_14",
+    "step07_image_work_units",
+    "legacy_checkpoint_recovery",
+    "r0_harness",
+];
+pub const WORK_UNIT_EXECUTOR_PROHIBITED_CALLERS: &[&str] = &[
+    GAME_SPEC_V2_PRODUCT_STEP11_USAGE,
+    "gamespec_v2_authoritative_execution_evidence",
+];
+pub const WORK_UNIT_EXECUTOR_V2_REPLACEMENT: &str =
+    "adm_new_pipeline::stages::step11_v2::WorkspaceTaskAgent + WorkspaceChangeSet";
+
+/// Legacy Step08-14 compatibility execution surface.
+///
+/// The GameSpec v2 production path uses `stages::step11_v2` and
+/// `WorkspaceChangeSet` contracts as the authoritative Step11 execution model.
+/// This trait remains for the existing desktop pipeline, Step07 image work
+/// units, and R0 regression harness until those callers are migrated behind the
+/// v2 contract executor.
 pub trait WorkUnitExecutor: Send + Sync + fmt::Debug {
     /// Returns an opaque, non-secret fingerprint of the adapter and target
     /// side-effect scope. Changing project roots or adapters must change it.
@@ -288,6 +309,10 @@ pub struct WorkUnitStopToken(Arc<AtomicBool>);
 impl WorkUnitStopToken {
     pub fn from_shared(flag: Arc<AtomicBool>) -> Self {
         Self(flag)
+    }
+
+    pub fn shared_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.0)
     }
 
     pub fn request_stop(&self) {
@@ -1748,6 +1773,19 @@ mod tests {
             WorkUnitReconcileDecision::SafeToRetry
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn work_unit_executor_retention_boundary_excludes_v2_product_step11() {
+        assert!(
+            WORK_UNIT_EXECUTOR_RETAINED_CALLERS.contains(&"legacy_step08_14"),
+            "legacy projects still need the compatibility executor while game_spec_v2 is opt-in"
+        );
+        assert!(
+            WORK_UNIT_EXECUTOR_PROHIBITED_CALLERS.contains(&GAME_SPEC_V2_PRODUCT_STEP11_USAGE),
+            "v2 product Step11 must use the WorkspaceTaskAgent contract executor"
+        );
+        assert!(WORK_UNIT_EXECUTOR_V2_REPLACEMENT.contains("WorkspaceTaskAgent"));
     }
 
     fn request(task_id: &str) -> WorkUnitRequest {

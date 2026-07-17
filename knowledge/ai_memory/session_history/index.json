@@ -1,5 +1,478 @@
 [
   {
+    "id": "2026-07-17-014",
+    "date": "2026-07-17",
+    "summary": "Completed W4.10 at source level by widening anti-overfit tooling across display-label permutation, 16-axis capability mutation coverage, and A09 source/brand scanning",
+    "changed_files": [
+      "NEWrust/crates/adm-new-design/src/anti_overfit.rs",
+      "NEWrust/crates/adm-new-design/tests/a03_decision_graph.rs",
+      "NEWrust/crates/adm-new-pipeline/src/game_spec_v2_steps.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step08_10_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/runner.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/forbidden_source_tokens.json",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-014.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/forbidden_source_tokens.json",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-014.md"
+    ],
+    "next_tasks": [
+      "W5.1: commit only after explicit user acceptance",
+      "W5.2-W5.4: run clean-tree standalone verification, rebuild package, execute EXE smoke, and collect manual R1 playtest signing",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-013",
+    "date": "2026-07-17",
+    "summary": "Completed W4.9 at source level by replacing Step02's internally generated capability reason check with real A03 decision-graph activation evidence",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/game_spec_v2_steps.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-013.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-013.md"
+    ],
+    "next_tasks": [
+      "Continue W4.10: widen anti-overfit tools beyond current display-label fields, single capability mutation axis, and hard-coded source/brand scan lists",
+      "Keep W5 release validation open",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-012",
+    "date": "2026-07-17",
+    "summary": "Completed W4.8 at source level by exposing A05 bounded AI completion five-state visibility in the Rust pipeline stage view and Web detail UI",
+    "changed_files": [
+      "NEWrust/crates/adm-new-tauri-commands/src/pipeline.rs",
+      "NEWrust/web/src/features/pipeline.js",
+      "NEWrust/web/src/locales/pipeline.js",
+      "NEWrust/web/src/styles.css",
+      "NEWrust/web/scripts/test.mjs",
+      "NEWrust/web/dist/features/pipeline.js",
+      "NEWrust/web/dist/locales/pipeline.js",
+      "NEWrust/web/dist/styles.css",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-012.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-012.md"
+    ],
+    "next_tasks": [
+      "Continue W4.9: replace the Step02 capability gate's internally generated reason check with real A03 decision-graph predicate evidence",
+      "Keep W4.10 and W5 release validation open",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-011",
+    "date": "2026-07-17",
+    "summary": "Completed W4.7 at source level by wiring GameSpec v2 Step14 R1GateEvidence to real release-tool evidence, explicit pipeline evidence refs, and a separate manual playtest signature",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/stages/step14_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step14_v2.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-011.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-011.md"
+    ],
+    "next_tasks": [
+      "Continue W4.8: expose A05 bounded-completion states in UI/product views",
+      "Keep W5 clean-tree verify-standalone, rebuilt package, real EXE smoke, and manual playtest signing as release validation",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-010",
+    "date": "2026-07-17",
+    "summary": "Completed W4.6 at source level by replacing the remaining Step13 asset string heuristic with explicit assetValidationRequired scenario metadata",
+    "changed_files": [
+      "NEWrust/crates/adm-new-game-spec/src/spec.rs",
+      "NEWrust/crates/adm-new-design/src/game_spec_projection.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2/validation.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step13_v2.rs",
+      "NEWrust/testdata/game_spec/r1c0_micro_ecodome_lane_guard_frozen.json",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-010.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-010.md"
+    ],
+    "next_tasks": [
+      "Continue W4.7: wire and verify the remaining true tool/release-gate evidence path without fabricating EXE smoke or playtest signatures",
+      "Keep true Unity/PlayMode execution, EXE smoke, and manual playtest signing as release-gate work",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-009",
+    "date": "2026-07-17",
+    "summary": "Completed W4.5 at source level: Step13 no longer passes from nominal policy defaults and now requires explicit scenario execution evidence",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2/validation.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/runner.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step13_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-009.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-009.md"
+    ],
+    "next_tasks": [
+      "Continue W4.6: remove remaining Step13/14 fixture heuristics such as scenario_touches_assets and string/path coupling",
+      "Keep true Unity/PlayMode execution, EXE smoke, and manual playtest signing as release-gate work",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-008",
+    "date": "2026-07-17",
+    "summary": "Completed W4.4 at source level: sample(n) is now a real confirmation policy for A05 and Step12, with structured audit/report fields and a product-path approval loop",
+    "changed_files": [
+      "NEWrust/crates/adm-new-ai/src/bounded_completion/policy.rs",
+      "NEWrust/crates/adm-new-ai/src/bounded_completion/types.rs",
+      "NEWrust/crates/adm-new-ai/src/bounded_completion/service.rs",
+      "NEWrust/crates/adm-new-ai/src/bounded_completion/tests.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/production.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step12_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-008.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-008.md"
+    ],
+    "next_tasks": [
+      "Continue W4.5: replace Step13 nominal/decision-table defaults with real scenario execution and observed performance/manual-review evidence",
+      "Keep true Unity scene execution, EXE smoke, and manual playtest signing as release-gate work",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-007",
+    "date": "2026-07-17",
+    "summary": "Completed W4.3 at source level by removing Step12 synthetic runtime binding and fake loaded evidence: asset binding now comes from workspace scene/prefab/asset reference files, and the old deterministic loader fails closed instead of claiming engine load success",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/production.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/runner.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step12_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step13_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-007.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-007.md"
+    ],
+    "next_tasks": [
+      "Continue W4.4: finish A05/Step12 sample confirmation behavior and UI/strategy visibility",
+      "Keep real Unity batchmode/headless instantiation, EXE smoke, and manual playtest signing as release-gate work",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-006",
+    "date": "2026-07-17",
+    "summary": "Completed W4.2 at source level by strengthening the shared Step07/Step12 asset hard gate: image files now get integrity checks, watermark detection covers edge text-like marks instead of only bottom-right dark blocks, and known asset slice kinds get deterministic geometry validation",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/stages/step07_v2.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-006.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-006.md"
+    ],
+    "next_tasks": [
+      "Continue W4.3: replace deterministic Step12 asset loading and synthetic default bindings with real headless/engine loading and real scene/prefab references",
+      "Validate W4.1 with a real target-environment visual model and credentials before release-level closure",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-005",
+    "date": "2026-07-17",
+    "summary": "Continued W4.1 by adding application-layer real VLM provider injection for GameSpec v2 Step07/12: active OpenAI-compatible completion API configurations can now create a VLM review service that sends PNG data URLs, expects strict JSON, and feeds the existing fail-closed VLM evidence path",
+    "changed_files": [
+      "NEWrust/Cargo.lock",
+      "NEWrust/crates/adm-new-application/Cargo.toml",
+      "NEWrust/crates/adm-new-application/src/lib.rs",
+      "NEWrust/crates/adm-new-application/src/vlm_review.rs",
+      "NEWrust/apps/desktop-tauri/src/commands/pipeline.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-005.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/crates/adm-new-application/src/vlm_review.rs",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-005.md"
+    ],
+    "next_tasks": [
+      "Validate W4.1 with a real target-environment visual model and credentials before release-level closure",
+      "Continue W4.2 asset hard-gate work: OCR watermark detection, slicing geometry checks, and file integrity checks",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-004",
+    "date": "2026-07-17",
+    "summary": "Continued W4.1 by wiring VLM review into the GameSpec v2 product source path: Step07 and Step12 now call an injectable VLM review service, persist review evidence by image content hash, write audit reports, and fail closed when no real VLM provider is configured",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/stages/step07_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/production.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step12_v2.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-004.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-004.md"
+    ],
+    "next_tasks": [
+      "Inject and validate a real target-environment VLM provider before closing W4.1 at release level",
+      "Continue W4 release-gate work: asset hard-gate OCR/slicing/integrity, true headless/engine asset loading, scenario execution, standalone verification, EXE smoke, and manual playtest signing",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-003",
+    "date": "2026-07-17",
+    "summary": "Closed W1.5 by freezing and testing the legacy execution retention boundary: v2 product Step11 stays on WorkspaceTaskAgent plus WorkspaceChangeSet, while legacy WorkUnitExecutor, bridge AiDevelopmentWorkUnitExecutor, and CodexPatchRunner have explicit retained/prohibited caller contracts",
+    "changed_files": [
+      "NEWrust/crates/adm-new-pipeline/src/work_units.rs",
+      "NEWrust/crates/adm-new-pipeline/src/lib.rs",
+      "NEWrust/crates/adm-new-application/src/work_unit.rs",
+      "NEWrust/crates/adm-new-application/src/lib.rs",
+      "NEWrust/crates/adm-new-patch/src/lib.rs",
+      "plan/newdesignplan/contracts/W1_5_legacy_execution_boundary.md",
+      "plan/newdesignplan/dev/A08c_step11_execution_engine.md",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/memory_config.json",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-003.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "plan/newdesignplan/contracts/W1_5_legacy_execution_boundary.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-003.md"
+    ],
+    "next_tasks": [
+      "Continue W4 release-gate work: true VLM judging, real headless/engine asset loading, real scene execution, standalone verification, EXE smoke, and manual playtest signing",
+      "Run W5 release flow only after explicit user acceptance",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-002",
+    "date": "2026-07-17",
+    "summary": "Completed W1.4 at source level for GameSpec v2 Step11: product runs require a real WorkspaceTaskAgent, real Codex/Claude bridge requests run Unity batchmode compile plus trusted smoke/test plans, and local fallback evidence is explicitly not_executed",
+    "changed_files": [
+      "NEWrust/crates/adm-new-application/src/work_unit.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "NEWrust/apps/desktop-tauri/src/commands/pipeline.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-002.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-002.md"
+    ],
+    "next_tasks": [
+      "Resolve W1.5 by migrating or explicitly retaining legacy callers after the v2 Step11 execution bridge",
+      "Connect true VLM, Unity/headless asset loading, scenario execution, standalone verification, EXE smoke, and manual playtest signature before closing release gates",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-17-001",
+    "date": "2026-07-17",
+    "summary": "Closed B6 and W2.1 follow-ups, completed W1.3 filesystem workspace semantics, and wired the real Codex/Claude development CLI executor into GameSpec v2 Step11 via an application-layer WorkspaceTaskAgent",
+    "changed_files": [
+      "NEWrust/Cargo.lock",
+      "NEWrust/crates/adm-new-application/Cargo.toml",
+      "NEWrust/crates/adm-new-application/src/lib.rs",
+      "NEWrust/crates/adm-new-application/src/work_unit.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step11_v2/engine.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/runner.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/a10_migration_release.rs",
+      "NEWrust/apps/desktop-tauri/src/commands/pipeline.rs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-001.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-17-001.md"
+    ],
+    "next_tasks": [
+      "Implement W1.4 full post-merge build and playable smoke; the real agent path currently has Unity batchmode compile verification only",
+      "Resolve W1.5 by migrating or explicitly retaining legacy callers after the v2 Step11 execution bridge",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-16-003",
+    "date": "2026-07-16",
+    "summary": "Completed the post-review NEWrust v2 second-development repair pass: fixed Step12 synthetic approval, migrated Step13 fixture gates, added the UI/project-config game_spec_v2 switch, covered Step11 stop/checkpoint behavior, corrected W1.4 to unfinished, and passed workspace Rust/Web verification",
+    "changed_files": [
+      "NEWrust/crates/adm-new-application/src/runtime.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step07_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step11_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/types.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2/validation.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/runner.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/step13_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/tests/a09_cross_genre_evaluation.rs",
+      "NEWrust/crates/adm-new-tauri-commands/src/config.rs",
+      "NEWrust/testdata/game_spec/r1c0_micro_ecodome_lane_guard_frozen.json",
+      "NEWrust/web/src/features/settings-style.js",
+      "NEWrust/web/src/index.html",
+      "NEWrust/web/src/locales/shell.js",
+      "NEWrust/web/src/styles.css",
+      "NEWrust/web/scripts/test.mjs",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-003.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-003.md"
+    ],
+    "next_tasks": [
+      "Implement real W1.4 post-merge build and smoke process execution instead of evidence bookkeeping",
+      "Fix the deeper W1.3 isolated workspace copy and atomic rollback model before treating Step11 product execution as complete",
+      "Keep repository synchronization blocked until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-16-002",
+    "date": "2026-07-16",
+    "summary": "Completed the NEWrust v2 second-development checklist pass at source level, including product game_spec_v2 routing, P1/P2 bug fixes, persistent VLM cache, Step12 sample behavior, explicit Step13 fields, and no synthetic A09 user signing",
+    "changed_files": [
+      "NEWrust/crates/adm-new-change-kernel/src/workspace_change_set.rs",
+      "NEWrust/crates/adm-new-design/src/decision_graph/mod.rs",
+      "NEWrust/crates/adm-new-design/src/game_spec_projection.rs",
+      "NEWrust/crates/adm-new-game-spec/src/spec.rs",
+      "NEWrust/crates/adm-new-pipeline/src/product_executor.rs",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/",
+      "NEWrust/crates/adm-new-pipeline/src/r2_release.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step07_v2.rs",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step12_v2/",
+      "NEWrust/crates/adm-new-pipeline/src/stages/step13_v2/",
+      "NEWrust/crates/adm-new-pipeline/tests/",
+      "plan/newdesignplan/remaining_work_checklist.md",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-002.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-002.md"
+    ],
+    "next_tasks": [
+      "Wire the real Codex/Claude CLI adapter into Step11 through an application-layer WorkspaceTaskAgent injection point",
+      "Connect real VLM, Unity/headless asset loading, scenario execution, standalone verification, EXE smoke, and manual playtest signature before closing release gates",
+      "Do not commit, tag, push, or synchronize the repository until explicit user acceptance"
+    ]
+  },
+  {
+    "id": "2026-07-16-001",
+    "date": "2026-07-16",
+    "summary": "Completed the local NEWrust v2 A02-A10 implementation loop with R1-C0 accepted as A+M+P1+V2, including Step07-14 vertical slice gates, A09 cross-genre evaluation, and A10 sidecar migration/release readiness, while preserving the no-repository-sync acceptance hold",
+    "changed_files": [
+      "NEWrust/Cargo.toml",
+      "NEWrust/Cargo.lock",
+      "NEWrust/apps/adm-new-cli/Cargo.toml",
+      "NEWrust/crates/adm-new-ai/",
+      "NEWrust/crates/adm-new-change-kernel/",
+      "NEWrust/crates/adm-new-design/",
+      "NEWrust/crates/adm-new-game-spec/",
+      "NEWrust/crates/adm-new-patch/",
+      "NEWrust/crates/adm-new-pipeline/",
+      "NEWrust/testdata/game_spec/",
+      "plan/newdesignplan/dev/",
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/memory_config.json",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-001.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/crates/adm-new-change-kernel/",
+      "NEWrust/crates/adm-new-pipeline/src/cross_genre_evaluation/",
+      "NEWrust/crates/adm-new-pipeline/src/r2_release.rs",
+      "NEWrust/testdata/game_spec/r1c0_micro_ecodome_lane_guard_frozen.json",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-16-001.md"
+    ],
+    "next_tasks": [
+      "User acceptance of the current local NEWrust v2 implementation",
+      "After explicit acceptance, run clean-tree standalone verification before repository synchronization",
+      "Only after explicit post-acceptance instruction, perform commit, tag, push, and any GitHub release work"
+    ]
+  },
+  {
+    "id": "2026-07-15-003",
+    "date": "2026-07-15",
+    "summary": "Recorded an acceptance hold that permits local memory updates but forbids repository commits, tags, pushes, releases, or remote changes until explicit post-acceptance synchronization",
+    "changed_files": [
+      "NEWrust/knowledge/ai_memory/INDEX.md",
+      "NEWrust/knowledge/ai_memory/decisions/release_workflow.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-15-003.md",
+      "NEWrust/knowledge/ai_memory/session_history/index.json",
+      "NEWrust/knowledge/ai_memory/project_understanding/freshness.json"
+    ],
+    "artifacts_created": [
+      "NEWrust/knowledge/ai_memory/decisions/release_workflow.md",
+      "NEWrust/knowledge/ai_memory/session_history/2026-07-15-003.md"
+    ],
+    "next_tasks": [
+      "Wait for user acceptance of the current remote baseline",
+      "Keep memory changes local and uncommitted during acceptance",
+      "Audit pending changes and synchronize only after an explicit post-acceptance instruction",
+      "Keep the additional open-source game sample method shelved unless the user explicitly reopens it"
+    ]
+  },
+  {
     "id": "2026-07-15-002",
     "date": "2026-07-15",
     "summary": "Published the independent Rust baseline as GameMaker v0.1.0, froze the reviewed generic GameSpec compiler plan, and completed the isolated A01 domain foundation",

@@ -1,5 +1,6 @@
 [package]
 name = "adm-new-cli"
+default-run = "adm-new-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,9 +12,11 @@ adm-new-application = { path = "../../crates/adm-new-application" }
 adm-new-artifact = { path = "../../crates/adm-new-artifact" }
 adm-new-contracts = { path = "../../crates/adm-new-contracts" }
 adm-new-foundation = { path = "../../crates/adm-new-foundation" }
+adm-new-game-spec = { path = "../../crates/adm-new-game-spec" }
 adm-new-governance = { path = "../../crates/adm-new-governance" }
 adm-new-patch = { path = "../../crates/adm-new-patch" }
 adm-new-packaging = { path = "../../crates/adm-new-packaging" }
+adm-new-pipeline = { path = "../../crates/adm-new-pipeline" }
 adm-new-sdk = { path = "../../crates/adm-new-sdk" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -21,3 +24,7 @@ serde_json = "1"
 [[bin]]
 name = "adm-new-cli"
 path = "src/main.rs"
+
+[[bin]]
+name = "adm-new-r0-probe"
+path = "src/bin/adm-new-r0-probe.rs"

@@ -8,6 +8,7 @@ use adm_new_contracts::pipeline::{
 };
 use adm_new_contracts::project::{DecisionState, NodeState, ProjectState};
 use adm_new_design::data_loader::{DesignProjectData, DomainNode};
+use adm_new_design::game_spec_projection::{GameSpecV2Switch, write_game_spec_shadow_outputs};
 use adm_new_design::handoff::export_concept_package_from_state_with_locale;
 use adm_new_design::semantic_pipeline::{
     ArchetypeCatalog, COMMON_REQUIRED_CONTRACTS, OPTIONAL_CONTRACTS,
@@ -704,6 +705,20 @@ fn execute_d4(context: &StageContextModel) -> AdmResult<PipelineStageResult> {
     result
         .outputs
         .insert("conceptPackage".to_string(), package.clone());
+    let game_spec_v2_switch = game_spec_v2_switch_from_context(context, &inputs.project_root);
+    if game_spec_v2_switch.enabled {
+        let mut shadow =
+            write_game_spec_shadow_outputs(&inputs.artifact_dir, &inputs.engine, &project_state)?;
+        if let Some(shadow) = shadow.as_object_mut() {
+            shadow.insert(
+                "d4FreezePolicy".to_string(),
+                json!(game_spec_v2_switch.d4_freeze_policy),
+            );
+        }
+        result
+            .outputs
+            .insert("gameSpecV2Shadow".to_string(), shadow);
+    }
     if is_blocked {
         result
             .outputs
@@ -1588,6 +1603,76 @@ fn config_string(root: &Value, key_path: &str, fallback: &str) -> String {
         .to_string()
 }
 
+fn game_spec_v2_switch_from_context(
+    context: &StageContextModel,
+    project_root: &Path,
+) -> GameSpecV2Switch {
+    let mut switch = GameSpecV2Switch::default();
+    let bundle = load_app_config_bundle(&project_root.join("settings"));
+    for (root, key) in [
+        (&bundle.project_settings, "game_spec_v2.enabled"),
+        (&bundle.project_settings, "game_spec_v2"),
+        (&bundle.project_settings, "features.game_spec_v2"),
+        (&bundle.app_config, "game_spec_v2.enabled"),
+        (&bundle.app_config, "game_spec_v2"),
+        (&bundle.app_config, "features.game_spec_v2"),
+    ] {
+        if let Some(enabled) = config_bool(root, key) {
+            switch.enabled = enabled;
+        }
+    }
+    for (root, key) in [
+        (&bundle.project_settings, "game_spec_v2.d4_freeze_policy"),
+        (&bundle.project_settings, "game_spec_v2.d4FreezePolicy"),
+        (&bundle.app_config, "game_spec_v2.d4_freeze_policy"),
+        (&bundle.app_config, "game_spec_v2.d4FreezePolicy"),
+    ] {
+        if let Some(policy) = get_config(root, key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            switch.d4_freeze_policy = policy.to_string();
+        }
+    }
+    for key in [
+        "game_spec_v2",
+        "game_spec_v2_enabled",
+        "gameSpecV2",
+        "gameSpecV2Enabled",
+    ] {
+        if let Some(enabled) = context.metadata.get(key).and_then(value_bool) {
+            switch.enabled = enabled;
+        }
+    }
+    for key in ["game_spec_v2_d4_freeze_policy", "gameSpecV2D4FreezePolicy"] {
+        if let Some(policy) = context
+            .metadata
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            switch.d4_freeze_policy = policy.to_string();
+        }
+    }
+    switch
+}
+
+fn config_bool(root: &Value, key_path: &str) -> Option<bool> {
+    get_config(root, key_path).and_then(value_bool)
+}
+
+fn value_bool(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(value) => Some(*value),
+        Value::String(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" | "enabled" => Some(true),
+            "0" | "false" | "no" | "off" | "disabled" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
@@ -1795,6 +1880,7 @@ mod tests {
         assert_eq!(result.status, StageStatus::Blocked);
         assert_eq!(result.outputs["structuredHandoffStatus"], json!("blocked"));
         assert!(result.outputs["conceptPackage"]["packages"]["Design"].is_string());
+        assert!(!result.outputs.contains_key("gameSpecV2Shadow"));
         let package_dir = temp.join("drafts/session_a/source_artifacts/devflow_Design_v2");
         assert!(
             package_dir
@@ -1808,5 +1894,53 @@ mod tests {
         assert!(!test_mode.warnings.is_empty());
         let _ = std::fs::remove_dir_all(temp);
         let _ = std::fs::remove_dir_all(temp_test);
+    }
+
+    #[test]
+    fn d4_game_spec_v2_shadow_is_explicit_opt_in_and_stable() {
+        let root = project_root();
+        let (mut first_ctx, first_temp) = context(D4_STAGE_ID, &root, true);
+        first_ctx
+            .metadata
+            .insert("game_spec_v2".to_string(), json!(true));
+        first_ctx
+            .metadata
+            .insert("gameSpecV2D4FreezePolicy".to_string(), json!("attended"));
+
+        let first = execute_design_stage(D4_STAGE_ID, &first_ctx);
+
+        assert_eq!(first.status, StageStatus::Success);
+        let first_shadow = first
+            .outputs
+            .get("gameSpecV2Shadow")
+            .expect("D4 should expose the GameSpec v2 shadow output when enabled");
+        assert_eq!(first_shadow["enabled"], json!(true));
+        assert_eq!(first_shadow["d4FreezePolicy"], json!("attended"));
+        let spec_path = PathBuf::from(first_shadow["gameSpecPath"].as_str().unwrap());
+        let diff_path = PathBuf::from(first_shadow["diffReportPath"].as_str().unwrap());
+        let report_path = PathBuf::from(first_shadow["projectionReportPath"].as_str().unwrap());
+        assert!(spec_path.exists());
+        assert!(diff_path.exists());
+        assert!(report_path.exists());
+        let first_hash = first_shadow["semanticHash"].clone();
+
+        let (mut second_ctx, second_temp) = context(D4_STAGE_ID, &root, true);
+        second_ctx
+            .metadata
+            .insert("game_spec_v2_enabled".to_string(), json!(true));
+
+        let second = execute_design_stage(D4_STAGE_ID, &second_ctx);
+
+        assert_eq!(
+            second.outputs["gameSpecV2Shadow"]["semanticHash"],
+            first_hash
+        );
+        assert_eq!(
+            second.outputs["gameSpecV2Shadow"]["validationErrorCount"],
+            json!(0)
+        );
+
+        let _ = std::fs::remove_dir_all(first_temp);
+        let _ = std::fs::remove_dir_all(second_temp);
     }
 }

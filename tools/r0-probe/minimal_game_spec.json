@@ -1,0 +1,145 @@
+{
+  "identity": {
+    "schemaVersion": "2.0.0-alpha.1",
+    "projectId": "r0_lane_probe",
+    "revision": 1
+  },
+  "intent": {
+    "title": "R0 Lane Probe",
+    "summary": "A disposable lane interaction used only to verify the production toolchain.",
+    "experiencePromises": {
+      "visible_response": {
+        "statement": "A player input produces an immediate visible response.",
+        "priority": "primary"
+      }
+    },
+    "targetPlatforms": ["desktop"],
+    "scope": {
+      "mustHave": ["one input", "one moving threat"],
+      "wontHave": ["production content", "network play"],
+      "maximumSessionMinutes": 5
+    }
+  },
+  "capabilities": {
+    "space": { "topology": "lane", "dimensionality": "two_d" },
+    "time": { "progression": "realtime", "simultaneity": "simultaneous" },
+    "control": { "cardinality": "many", "directness": "indirect" },
+    "participants": { "mode": "solo", "asymmetry": "not_applicable" },
+    "information": { "visibility": "complete", "uncertainty": "none" },
+    "progression": { "persistence": "session_only", "structure": "linear" },
+    "content": { "generation": "authored", "mutability": "static" },
+    "connectivity": { "model": "offline", "authority": "local" }
+  },
+  "entities": {
+    "probe_cursor": {
+      "summary": "Issues the disposable placement input.",
+      "tags": ["player_controlled"]
+    },
+    "probe_defender": {
+      "summary": "Visible response created by the input.",
+      "tags": ["placeable"]
+    }
+  },
+  "actions": {
+    "place_probe": {
+      "summary": "Spend one probe point to add a visible defender.",
+      "actors": [{ "kind": "entity", "id": "probe_cursor" }],
+      "targets": [{ "kind": "entity", "id": "probe_defender" }],
+      "inputs": [{ "channel": "button", "command": "place" }],
+      "preconditions": [
+        {
+          "description": "One probe point remains.",
+          "reads": [{ "kind": "resource", "id": "probe_points" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "probe_points" },
+            "operator": "greater_or_equal",
+            "value": 1
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "change_resource", "resource": "probe_points", "amount": -1 },
+        { "kind": "create_entity", "entity": "probe_defender", "quantity": 1 }
+      ],
+      "feedback": [{ "channel": "visual", "message": "Show the new defender." }],
+      "timing": {}
+    }
+  },
+  "stateMachines": {
+    "probe_flow": {
+      "summary": "Starts and resolves the disposable probe.",
+      "initialState": "ready",
+      "states": {
+        "ready": { "summary": "Waiting to run." },
+        "running": { "summary": "The moving threat is visible." },
+        "complete": { "summary": "The smoke condition passed.", "terminal": true }
+      },
+      "transitions": [
+        {
+          "transitionId": "start_probe",
+          "from": "ready",
+          "to": "running",
+          "trigger": { "source": "timer" }
+        },
+        {
+          "transitionId": "finish_probe",
+          "from": "running",
+          "to": "complete",
+          "trigger": { "source": "system" }
+        }
+      ]
+    }
+  },
+  "resources": {
+    "probe_points": {
+      "summary": "Disposable input budget.",
+      "unit": "points",
+      "initial": 3,
+      "minimum": 0,
+      "maximum": 3,
+      "sinkActions": ["place_probe"]
+    }
+  },
+  "time": {
+    "progression": "realtime",
+    "fixedStepHz": 30,
+    "pausable": true,
+    "phases": {}
+  },
+  "technical": {
+    "productEnvelope": {
+      "sceneScale": "small",
+      "systemComplexity": "small",
+      "assetScale": "small",
+      "contentVolume": "small"
+    },
+    "platforms": ["windows"],
+    "performanceBudgets": { "activeEntities": 20 },
+    "saveRequirements": [],
+    "accessibilityRequirements": ["The input is available from keyboard and button UI."]
+  },
+  "acceptanceScenarios": {
+    "input_is_visible": {
+      "summary": "A placement input creates an observable response.",
+      "given": [{ "description": "The probe is running.", "expression": { "kind": "always" } }],
+      "when": [
+        {
+          "action": "place_probe",
+          "actor": { "kind": "entity", "id": "probe_cursor" },
+          "targets": [{ "kind": "entity", "id": "probe_defender" }]
+        }
+      ],
+      "then": [{ "description": "A defender is visible.", "expression": { "kind": "always" } }]
+    }
+  },
+  "traceLinks": {
+    "promise_to_smoke": {
+      "source": { "kind": "intent", "id": "visible_response" },
+      "target": { "kind": "scenario", "id": "input_is_visible" },
+      "relation": "verifies",
+      "rationale": "The smoke scenario verifies the only disposable interaction promise."
+    }
+  },
+  "extensions": {}
+}

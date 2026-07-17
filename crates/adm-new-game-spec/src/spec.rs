@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{CapabilityProfile, ContentGeneration, SpaceTopology, SpecId, TimeProgression};
+use crate::{
+    CapabilityProfile, ContentGeneration, ProductEnvelope, SpaceTopology, SpecId, TimeProgression,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -307,7 +309,7 @@ pub enum EffectSpec {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpecRef {
     pub kind: SpecKind,
@@ -316,7 +318,7 @@ pub struct SpecRef {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SpecKind {
     Intent,
@@ -493,6 +495,7 @@ pub struct PresentationSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TechnicalConstraints {
+    pub product_envelope: ProductEnvelope,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_engine: Option<String>,
     #[serde(default)]
@@ -517,6 +520,12 @@ pub struct AcceptanceScenario {
     pub then: Vec<ConditionSpec>,
     #[serde(default)]
     pub failure_case: bool,
+    #[serde(default)]
+    pub manual_review_required: bool,
+    #[serde(default)]
+    pub performance_budget_refs: Vec<SpecId>,
+    #[serde(default)]
+    pub asset_validation_required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

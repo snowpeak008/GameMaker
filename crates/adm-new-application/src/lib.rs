@@ -8,10 +8,16 @@ pub mod project_environment;
 pub mod runtime;
 pub mod style_image;
 pub mod validation_tools;
+pub mod vlm_review;
 pub mod work_unit;
 
 pub use style_image::{AiStyleImageGenerator, style_image_generator_from_config};
-pub use work_unit::{AiDevelopmentWorkUnitExecutor, work_unit_executor_from_config};
+pub use vlm_review::{OpenAiVisionVlmReviewer, vlm_review_service_from_config};
+pub use work_unit::{
+    AI_DEVELOPMENT_EXECUTOR_PROHIBITED_CALLERS, AI_DEVELOPMENT_EXECUTOR_RETAINED_CALLERS,
+    AI_DEVELOPMENT_EXECUTOR_V2_REPLACEMENT, AiDevelopmentWorkUnitExecutor,
+    work_unit_executor_from_config, workspace_task_agent_from_config,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 

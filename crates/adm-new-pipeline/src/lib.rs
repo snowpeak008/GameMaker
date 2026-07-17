@@ -2,10 +2,13 @@
 
 mod artifact_view;
 mod checkpoint;
+pub mod cross_genre_evaluation;
 pub mod design_flow;
 mod development_registry;
+pub mod game_spec_v2_steps;
 pub mod generation;
 mod product_executor;
+pub mod r2_release;
 pub mod source;
 mod stage_result;
 pub mod stages;
@@ -20,11 +23,13 @@ pub use development_registry::default_development_registry;
 pub use product_executor::ProductPipelineExecutor;
 pub use style_image::{StyleImageGenerator, StyleImageRequest, StyleImageResult, StyleImageStatus};
 pub use work_units::{
-    OfflineVerifiedWorkUnitExecutor, SafeUnitJournal, StageWorkUnitReconcileStatus,
-    WorkUnitBatchOutcome, WorkUnitExecutionResult, WorkUnitExecutionStatus, WorkUnitExecutor,
-    WorkUnitJournalPhase, WorkUnitJournalRecord, WorkUnitKind, WorkUnitReconcileDecision,
-    WorkUnitRequest, WorkUnitRunOutcome, WorkUnitRunStatus, WorkUnitStopToken,
-    execute_work_unit_batch, reconcile_checkpoint_stage_from_journal,
+    GAME_SPEC_V2_PRODUCT_STEP11_USAGE, OfflineVerifiedWorkUnitExecutor, SafeUnitJournal,
+    StageWorkUnitReconcileStatus, WORK_UNIT_EXECUTOR_PROHIBITED_CALLERS,
+    WORK_UNIT_EXECUTOR_RETAINED_CALLERS, WORK_UNIT_EXECUTOR_V2_REPLACEMENT, WorkUnitBatchOutcome,
+    WorkUnitExecutionResult, WorkUnitExecutionStatus, WorkUnitExecutor, WorkUnitJournalPhase,
+    WorkUnitJournalRecord, WorkUnitKind, WorkUnitReconcileDecision, WorkUnitRequest,
+    WorkUnitRunOutcome, WorkUnitRunStatus, WorkUnitStopToken, execute_work_unit_batch,
+    reconcile_checkpoint_stage_from_journal,
 };
 
 use std::collections::{BTreeMap, BTreeSet};

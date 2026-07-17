@@ -11,9 +11,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod ai_interview;
+pub mod anti_overfit;
 pub mod art_pipeline;
 pub mod contracts;
 pub mod data_loader;
+pub mod decision_graph;
+pub mod game_spec_projection;
 pub mod handoff;
 pub mod semantic_pipeline;
 

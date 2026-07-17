@@ -346,6 +346,17 @@ pub trait PatchRunner {
     fn run(&self, record: &PatchRecord) -> AdmResult<PatchRunResult>;
 }
 
+pub const CODEX_PATCH_RUNNER_RETAINED_CALLERS: &[&str] =
+    &["cli_patch_apply", "r0_harness", "manual_patch_workflow"];
+pub const CODEX_PATCH_RUNNER_PROHIBITED_CALLERS: &[&str] = &[
+    "gamespec_v2_product_step11",
+    "gamespec_v2_product_step12",
+    "gamespec_v2_product_step13",
+    "gamespec_v2_product_step14",
+];
+pub const CODEX_PATCH_RUNNER_V2_REPLACEMENT: &str =
+    "adm_new_pipeline::stages::step11_v2::WorkspaceTaskAgent + WorkspaceChangeSet";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PatchRunResult {
     pub status: String,
@@ -377,6 +388,9 @@ impl PatchRunResult {
 }
 
 #[derive(Debug, Clone)]
+/// Legacy interactive patch runner retained for CLI patch workflows and R0
+/// regression. New GameSpec v2 Step11 execution is contract-first through
+/// `adm-new-pipeline::stages::step11_v2` and `WorkspaceChangeSet` validation.
 pub struct CodexPatchRunner<A> {
     project_root: PathBuf,
     adapter: A,
@@ -1532,6 +1546,14 @@ mod tests {
         assert!(result.errors[0].contains("changed while"));
         assert_eq!(fs::read_to_string(&target).unwrap(), "player-edit");
         cleanup(root);
+    }
+
+    #[test]
+    fn codex_patch_runner_retention_boundary_excludes_gamespec_v2_products() {
+        assert!(CODEX_PATCH_RUNNER_RETAINED_CALLERS.contains(&"cli_patch_apply"));
+        assert!(CODEX_PATCH_RUNNER_RETAINED_CALLERS.contains(&"r0_harness"));
+        assert!(CODEX_PATCH_RUNNER_PROHIBITED_CALLERS.contains(&"gamespec_v2_product_step11"));
+        assert!(CODEX_PATCH_RUNNER_V2_REPLACEMENT.contains("WorkspaceChangeSet"));
     }
 
     #[test]

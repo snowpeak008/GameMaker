@@ -5,6 +5,7 @@ members = [
     "apps/root-launcher",
     "crates/adm-new-foundation",
     "crates/adm-new-game-spec",
+    "crates/adm-new-change-kernel",
     "crates/adm-new-contracts",
     "crates/adm-new-governance",
     "crates/adm-new-config",
@@ -22,6 +23,9 @@ members = [
     "crates/adm-new-tauri-commands",
 ]
 resolver = "3"
+
+[workspace.dependencies]
+adm-new-game-spec = { path = "crates/adm-new-game-spec" }
 
 [workspace.package]
 version = "0.1.0"

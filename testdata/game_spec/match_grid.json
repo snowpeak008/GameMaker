@@ -83,6 +83,30 @@
       "timing": { "durationMs": 350 }
     }
   },
+  "stateMachines": {
+    "board_flow": {
+      "summary": "Tracks when the board accepts input and when it resolves chains.",
+      "initialState": "ready",
+      "states": {
+        "ready": { "summary": "The board is stable and accepts an exchange." },
+        "resolving": { "summary": "The board is resolving chains and refilling cells." }
+      },
+      "transitions": [
+        {
+          "transitionId": "start_resolution",
+          "from": "ready",
+          "to": "resolving",
+          "trigger": { "source": "action", "reference": { "kind": "action", "id": "exchange_symbols" } }
+        },
+        {
+          "transitionId": "finish_resolution",
+          "from": "resolving",
+          "to": "ready",
+          "trigger": { "source": "system" }
+        }
+      ]
+    }
+  },
   "resources": {
     "moves": {
       "summary": "Remaining exchanges in the current level.",
@@ -135,6 +159,12 @@
     }
   },
   "technical": {
+    "productEnvelope": {
+      "sceneScale": "small",
+      "systemComplexity": "small",
+      "assetScale": "small",
+      "contentVolume": "small"
+    },
     "platforms": ["android", "ios"],
     "performanceBudgets": { "frameTimeMicros": 16667 },
     "saveRequirements": ["Persist level progress."],
@@ -155,6 +185,33 @@
         }
       ],
       "then": [{ "description": "The board is stable before accepting new input.", "expression": { "kind": "always" } }]
+    },
+    "reject_when_no_moves": {
+      "summary": "An exchange is rejected when no moves remain.",
+      "given": [
+        {
+          "description": "The move counter is zero.",
+          "reads": [{ "kind": "resource", "id": "moves" }],
+          "expression": {
+            "kind": "compare",
+            "source": { "kind": "resource", "id": "moves" },
+            "operator": "less_or_equal",
+            "value": 0
+          }
+        }
+      ],
+      "when": [
+        {
+          "action": "exchange_symbols",
+          "actor": { "kind": "entity", "id": "board" },
+          "targets": [
+            { "kind": "entity", "id": "symbol" },
+            { "kind": "entity", "id": "symbol" }
+          ]
+        }
+      ],
+      "then": [{ "description": "No chain resolves and the move limit warning is shown.", "expression": { "kind": "always" } }],
+      "failureCase": true
     }
   },
   "traceLinks": {

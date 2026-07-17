@@ -1,6 +1,15 @@
 use std::{fs, path::PathBuf};
 
-const CORE_SOURCE_FILES: [&str; 4] = ["lib.rs", "id.rs", "capability.rs", "spec.rs"];
+const CORE_SOURCE_FILES: [&str; 8] = [
+    "lib.rs",
+    "id.rs",
+    "capability.rs",
+    "spec.rs",
+    "envelope.rs",
+    "canonical.rs",
+    "parse.rs",
+    "validation.rs",
+];
 
 #[test]
 fn core_vocabulary_has_no_fixture_or_engine_specific_defaults() {

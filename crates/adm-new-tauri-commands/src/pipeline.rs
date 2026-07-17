@@ -145,6 +145,50 @@ pub struct PipelineStageView {
     #[serde(default, skip_serializing)]
     pub artifacts: Vec<PipelineArtifactRecordView>,
     pub semantic_quality: PipelineSemanticQualityView,
+    pub bounded_completion: PipelineBoundedCompletionView,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PipelineBoundedCompletionView {
+    pub status: String,
+    #[serde(default)]
+    pub task_id: String,
+    #[serde(default)]
+    pub model_config_id: String,
+    #[serde(default)]
+    pub candidate_patch_id: Option<String>,
+    #[serde(default)]
+    pub risk: Option<String>,
+    #[serde(default)]
+    pub attempts: u32,
+    #[serde(default)]
+    pub confirmation_mode: Option<String>,
+    #[serde(default)]
+    pub confirmation_actor: Option<String>,
+    #[serde(default)]
+    pub confirmation_accepted: Option<bool>,
+    #[serde(default)]
+    pub error_count: usize,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+impl Default for PipelineBoundedCompletionView {
+    fn default() -> Self {
+        Self {
+            status: "not_called".to_string(),
+            task_id: String::new(),
+            model_config_id: String::new(),
+            candidate_patch_id: None,
+            risk: None,
+            attempts: 0,
+            confirmation_mode: None,
+            confirmation_actor: None,
+            confirmation_accepted: None,
+            error_count: 0,
+            errors: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -475,6 +519,7 @@ fn view_from_state(
                 })
                 .unwrap_or_default();
             let artifacts = artifact_records_from_outputs(&outputs);
+            let bounded_completion = bounded_completion_from_outputs(&outputs);
             PipelineStageView {
                 stage_id: stage_id.clone(),
                 title: spec
@@ -492,6 +537,7 @@ fn view_from_state(
                 warnings,
                 artifacts,
                 semantic_quality,
+                bounded_completion,
             }
         })
         .collect();
@@ -519,6 +565,208 @@ fn artifact_records_from_outputs(
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default()
+}
+
+fn bounded_completion_from_outputs(
+    outputs: &BTreeMap<String, Value>,
+) -> PipelineBoundedCompletionView {
+    let Some(value) = bounded_completion_output(outputs) else {
+        return PipelineBoundedCompletionView::default();
+    };
+    let mut errors = bounded_completion_errors(value);
+    let Some(object) = value.as_object() else {
+        let mut view = PipelineBoundedCompletionView::default();
+        view.status = value
+            .as_str()
+            .and_then(|status| normalize_completion_status(status, &mut errors))
+            .unwrap_or_else(|| {
+                errors.push("bounded completion record is not an object".to_string());
+                "failed".to_string()
+            });
+        view.error_count = errors.len();
+        view.errors = errors.into_iter().take(4).collect();
+        return view;
+    };
+
+    let null = Value::Null;
+    let audit = object.get("audit").unwrap_or(&null);
+    let confirmation = audit
+        .get("confirmation")
+        .or_else(|| value.get("confirmation"))
+        .unwrap_or(&null);
+    let status = string_any(value, &["status"])
+        .or_else(|| string_any(audit, &["status"]))
+        .and_then(|status| normalize_completion_status(&status, &mut errors))
+        .unwrap_or_else(|| {
+            errors.push("bounded completion record is missing status".to_string());
+            "failed".to_string()
+        });
+    let error_count = usize_any(value, &["error_count", "errorCount"])
+        .or_else(|| usize_any(audit, &["error_count", "errorCount"]))
+        .unwrap_or(errors.len());
+    PipelineBoundedCompletionView {
+        status,
+        task_id: string_any(value, &["task_id", "taskId", "id"])
+            .or_else(|| string_any(audit, &["task_id", "taskId"]))
+            .map(|text| safe_user_text(&text))
+            .unwrap_or_default(),
+        model_config_id: string_any(audit, &["model_config_id", "modelConfigId"])
+            .or_else(|| string_any(value, &["model_config_id", "modelConfigId"]))
+            .map(|text| safe_user_text(&text))
+            .unwrap_or_default(),
+        candidate_patch_id: string_any(value, &["candidate_patch_id", "candidatePatchId"])
+            .or_else(|| string_any(audit, &["candidate_patch_id", "candidatePatchId"]))
+            .map(|text| safe_user_text(&text)),
+        risk: risk_any(value)
+            .or_else(|| risk_any(audit))
+            .map(|text| safe_user_text(&text)),
+        attempts: u32_any(value, &["attempts"])
+            .or_else(|| u32_any(audit, &["attempts"]))
+            .unwrap_or(0),
+        confirmation_mode: string_any(confirmation, &["mode", "policy"])
+            .map(|text| safe_user_text(&text)),
+        confirmation_actor: string_any(
+            confirmation,
+            &["actor", "reviewer", "confirmed_by", "confirmedBy"],
+        )
+        .map(|text| safe_user_text(&text)),
+        confirmation_accepted: bool_any(confirmation, &["accepted", "approved", "confirmed"]),
+        error_count,
+        errors: errors.into_iter().take(4).collect(),
+    }
+}
+
+fn bounded_completion_output(outputs: &BTreeMap<String, Value>) -> Option<&Value> {
+    [
+        "bounded_completion",
+        "boundedCompletion",
+        "bounded_completion_run",
+        "boundedCompletionRun",
+        "completion_run",
+        "completionRun",
+        "ai_completion",
+        "aiCompletion",
+    ]
+    .iter()
+    .find_map(|key| outputs.get(*key))
+}
+
+fn normalize_completion_status(status: &str, errors: &mut Vec<String>) -> Option<String> {
+    let normalized = status.trim().to_ascii_lowercase().replace('-', "_");
+    match normalized.as_str() {
+        "not_called" | "failed" | "rejected" | "confirmed" | "committed" => Some(normalized),
+        "" => None,
+        _ => {
+            errors.push(format!(
+                "unknown bounded completion status: {}",
+                safe_user_text(status)
+            ));
+            Some("failed".to_string())
+        }
+    }
+}
+
+fn bounded_completion_errors(value: &Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    collect_completion_errors(value.get("errors"), &mut errors);
+    collect_completion_errors(
+        value.get("audit").and_then(|audit| audit.get("errors")),
+        &mut errors,
+    );
+    let mut seen = std::collections::BTreeSet::new();
+    errors.retain(|error| seen.insert(error.clone()));
+    errors
+}
+
+fn collect_completion_errors(value: Option<&Value>, errors: &mut Vec<String>) {
+    let Some(value) = value else {
+        return;
+    };
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_completion_error_item(item, errors);
+            }
+        }
+        item => collect_completion_error_item(item, errors),
+    }
+}
+
+fn collect_completion_error_item(value: &Value, errors: &mut Vec<String>) {
+    let message = value
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| {
+            string_any(
+                value,
+                &["message", "error", "reason", "summary", "detail", "details"],
+            )
+        })
+        .unwrap_or_else(|| value.to_string());
+    let safe = safe_user_text(&message);
+    if !safe.is_empty() {
+        errors.push(safe);
+    }
+}
+
+fn string_any(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_str))
+        .filter(|text| !text.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn risk_any(value: &Value) -> Option<String> {
+    value
+        .get("risk")
+        .and_then(|risk| {
+            risk.as_str().map(str::to_string).or_else(|| {
+                string_any(
+                    risk,
+                    &["level", "classification", "category", "name", "status"],
+                )
+            })
+        })
+        .or_else(|| string_any(value, &["risk_level", "riskLevel"]))
+}
+
+fn u32_any(value: &Value, keys: &[&str]) -> Option<u32> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(|item| {
+                item.as_u64()
+                    .or_else(|| item.as_str().and_then(|text| text.parse::<u64>().ok()))
+            })
+            .and_then(|number| u32::try_from(number).ok())
+    })
+}
+
+fn usize_any(value: &Value, keys: &[&str]) -> Option<usize> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(|item| {
+                item.as_u64()
+                    .or_else(|| item.as_str().and_then(|text| text.parse::<u64>().ok()))
+            })
+            .and_then(|number| usize::try_from(number).ok())
+    })
+}
+
+fn bool_any(value: &Value, keys: &[&str]) -> Option<bool> {
+    keys.iter().find_map(|key| {
+        value.get(*key).and_then(|item| {
+            item.as_bool().or_else(|| {
+                item.as_str()
+                    .and_then(|text| match text.trim().to_ascii_lowercase().as_str() {
+                        "true" | "yes" | "1" => Some(true),
+                        "false" | "no" | "0" => Some(false),
+                        _ => None,
+                    })
+            })
+        })
+    })
 }
 
 fn read_pipeline_artifact_inner(
@@ -1466,6 +1714,110 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_view_exposes_bounded_completion_five_states_without_raw_outputs() {
+        let service = PipelineApplicationService::new(PipelineRegistry {
+            stages: vec![
+                stage("00", vec![]),
+                stage("01", vec![]),
+                stage("02", vec![]),
+                stage("03", vec![]),
+                stage("04", vec![]),
+            ],
+        })
+        .unwrap();
+        let state = PipelineRunState {
+            stages: BTreeMap::from([
+                (
+                    "01".to_string(),
+                    completion_runtime(
+                        "01",
+                        "failed",
+                        serde_json::json!({
+                            "status": "failed",
+                            "task_id": "task-01",
+                            "candidate_patch_id": "patch-01",
+                            "risk": {"level": "high"},
+                            "audit": {
+                                "model_config_id": "local-codex",
+                                "attempts": 2,
+                                "confirmation": {
+                                    "mode": "attended",
+                                    "actor": "reviewer",
+                                    "accepted": false
+                                },
+                                "errors": [
+                                    "failed at https://example.test/run with token=secret"
+                                ]
+                            }
+                        }),
+                    ),
+                ),
+                (
+                    "02".to_string(),
+                    completion_runtime(
+                        "02",
+                        "rejected",
+                        serde_json::json!({"status": "rejected", "audit": {"attempts": 1}}),
+                    ),
+                ),
+                (
+                    "03".to_string(),
+                    completion_runtime(
+                        "03",
+                        "confirmed",
+                        serde_json::json!({"status": "confirmed", "audit": {"attempts": 1}}),
+                    ),
+                ),
+                (
+                    "04".to_string(),
+                    completion_runtime(
+                        "04",
+                        "committed",
+                        serde_json::json!({"status": "committed", "audit": {"attempts": 1}}),
+                    ),
+                ),
+            ]),
+            ..empty_state()
+        };
+
+        let view = load_pipeline_view(&service, &state).data.unwrap();
+        let by_id = |id: &str| {
+            view.stages
+                .iter()
+                .find(|stage| stage.stage_id == id)
+                .unwrap()
+        };
+        assert_eq!(by_id("00").bounded_completion.status, "not_called");
+        assert_eq!(by_id("01").bounded_completion.status, "failed");
+        assert_eq!(
+            by_id("01").bounded_completion.model_config_id,
+            "local-codex"
+        );
+        assert_eq!(by_id("01").bounded_completion.risk.as_deref(), Some("high"));
+        assert_eq!(by_id("01").bounded_completion.attempts, 2);
+        assert_eq!(
+            by_id("01").bounded_completion.confirmation_mode.as_deref(),
+            Some("attended")
+        );
+        assert_eq!(
+            by_id("01").bounded_completion.confirmation_accepted,
+            Some(false)
+        );
+        assert_eq!(by_id("02").bounded_completion.status, "rejected");
+        assert_eq!(by_id("03").bounded_completion.status, "confirmed");
+        assert_eq!(by_id("04").bounded_completion.status, "committed");
+        let serialized = serde_json::to_string(&view).unwrap();
+        assert!(serialized.contains("bounded_completion"));
+        assert!(serialized.contains("not_called"));
+        assert!(serialized.contains("committed"));
+        assert!(!serialized.contains("example.test"));
+        assert!(!serialized.contains("token=secret"));
+        let json: Value = serde_json::from_str(&serialized).unwrap();
+        assert!(json["stages"][1].get("outputs").is_none());
+        assert!(json["stages"][1].get("artifacts").is_none());
+    }
+
+    #[test]
     fn pipeline_artifact_read_returns_content_and_rejects_path_escape() {
         let root = temp_root("pipeline_artifact_read");
         let artifact_root = root.join("artifacts");
@@ -1731,6 +2083,26 @@ mod tests {
             current_stage_id: None,
             stages: BTreeMap::new(),
             ..PipelineRunState::default()
+        }
+    }
+
+    fn completion_runtime(
+        stage_id: &str,
+        message: &str,
+        completion: Value,
+    ) -> PipelineStageRuntime {
+        PipelineStageRuntime {
+            stage_id: stage_id.to_string(),
+            status: StageStatus::Success,
+            started_at: "unix:1".to_string(),
+            completed_at: "unix:2".to_string(),
+            result: Some(PipelineStageResult {
+                status: StageStatus::Success,
+                outputs: BTreeMap::from([("bounded_completion".to_string(), completion)]),
+                errors: Vec::new(),
+                warnings: Vec::new(),
+                message: message.to_string(),
+            }),
         }
     }
 
