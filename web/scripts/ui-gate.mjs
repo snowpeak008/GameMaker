@@ -30,6 +30,13 @@ const viewports = [
   { id: "narrow", width: 390, height: 844 },
 ];
 const languages = ["zh-CN", "en-US"];
+const browserUnsafePorts = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95,
+  101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143,
+  161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554,
+  556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045,
+  5060, 5061, 6000, 6566, 6697, 10080,
+]);
 
 const targets = [
   { id: "shell", query: "?route=design" },
@@ -120,8 +127,20 @@ await writeFile(join(gateDir, "ui-evidence-manifest.json"), `${JSON.stringify(ma
 
 console.log(`ui gate screenshots passed: ${evidence.map((item) => `${item.language}/${item.id}@${item.viewport}`).join(", ")}`);
 
-function startStaticServer(root) {
-  const server = createServer(async (request, response) => {
+async function startStaticServer(root) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const server = createStaticFileServer(root);
+    const port = await listenOnLoopback(server);
+    if (!isBrowserUnsafePort(port)) {
+      return { server, port };
+    }
+    await closeServer(server);
+  }
+  throw new Error("unable to allocate a browser-safe local port for ui-gate");
+}
+
+function createStaticFileServer(root) {
+  return createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://127.0.0.1");
       const relative = url.pathname === "/" ? "/index.html" : url.pathname;
@@ -140,11 +159,21 @@ function startStaticServer(root) {
       response.end("not found");
     }
   });
-  return new Promise((resolveServer) => {
+}
+
+function listenOnLoopback(server) {
+  return new Promise((resolveServer, rejectServer) => {
+    const onError = (error) => rejectServer(error);
+    server.once("error", onError);
     server.listen(0, "127.0.0.1", () => {
-      resolveServer({ server, port: server.address().port });
+      server.removeListener("error", onError);
+      resolveServer(server.address().port);
     });
   });
+}
+
+function isBrowserUnsafePort(port) {
+  return browserUnsafePorts.has(port) || (port >= 6665 && port <= 6669);
 }
 
 function closeServer(server) {

@@ -8,6 +8,13 @@ const webRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url
 const distRoot = join(webRoot, "dist");
 const indexPath = join(distRoot, "index.html");
 const languages = ["zh-CN", "en-US"];
+const browserUnsafePorts = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95,
+  101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143,
+  161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554,
+  556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045,
+  5060, 5061, 6000, 6566, 6697, 10080,
+]);
 const surfaces = [
   { id: "design", route: "design" },
   { id: "pipeline", route: "pipeline" },
@@ -327,8 +334,20 @@ async function launchBrowser(chromiumType) {
   throw new Error(`unable to launch a browser for language-gate:\n${failures.join("\n")}`);
 }
 
-function startStaticServer(root) {
-  const server = createServer(async (request, response) => {
+async function startStaticServer(root) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const server = createStaticFileServer(root);
+    const port = await listenOnLoopback(server);
+    if (!isBrowserUnsafePort(port)) {
+      return { server, port };
+    }
+    await closeServer(server);
+  }
+  throw new Error("unable to allocate a browser-safe local port for language-gate");
+}
+
+function createStaticFileServer(root) {
+  return createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://127.0.0.1");
       const relativePath = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
@@ -346,9 +365,21 @@ function startStaticServer(root) {
       response.end("not found");
     }
   });
-  return new Promise((resolveServer) => {
-    server.listen(0, "127.0.0.1", () => resolveServer({ server, port: server.address().port }));
+}
+
+function listenOnLoopback(server) {
+  return new Promise((resolveServer, rejectServer) => {
+    const onError = (error) => rejectServer(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", onError);
+      resolveServer(server.address().port);
+    });
   });
+}
+
+function isBrowserUnsafePort(port) {
+  return browserUnsafePorts.has(port) || (port >= 6665 && port <= 6669);
 }
 
 function closeServer(server) {
