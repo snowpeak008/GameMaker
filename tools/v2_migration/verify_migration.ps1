@@ -1,9 +1,10 @@
 ﻿# W6 T10 迁移产物机器校验（一次性工具，不进构建）：
 #   1. space validate 全绿（双包 + 新迁移的组织维度/选项数/外键规则）；
 #   2. 迁移模板能被 Rust `Template` 反序列化，且 Certified 最小形态可通过取用关卡预填。
-# 第 2 步在临时目录里把一份 universal 模板改挂到 lane_defense（预填要求 genre_pack 与项目一致），
-# 只为验证 schema 与认证形态，不改仓库内产物。
-#   用法：powershell -ExecutionPolicy Bypass -File V4\tools\v2_migration\verify_migration.ps1
+# 第 2 步在临时目录里把一份 universal 模板改挂到 lane_defense，只为验证 schema 与认证形态，
+# 不改仓库内产物。（F3 起 universal 模板本就可跨包预填，改挂只是为了同时覆盖「本包模板」这条路径；
+# 跨包预填本身由 scripts\cli_smoke.ps1 §8b 覆盖。）
+#   用法（须在 V4 目录下执行）：powershell -ExecutionPolicy Bypass -File tools\v2_migration\verify_migration.ps1
 
 $ErrorActionPreference = 'Continue'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)

@@ -157,15 +157,21 @@ pub fn badge_of(point: &DecisionPointView) -> (&'static str, &'static str) {
     }
 }
 
-/// 决策点副标题：层级 · MDA 层 · 选择模式 · 基线标记 · id。
+/// 决策点副标题：层级 · MDA 层 · 选择模式 · 必做性标记 · id。
 pub fn decision_meta(point: &DecisionPointView) -> String {
     let mut parts = vec![point.level.label().to_string()];
     if let Some(layer) = &point.mda_layer {
         parts.push(format!("MDA {layer}"));
     }
     parts.push(selection_mode_label(point.selection_mode).to_string());
-    if matches!(point.requirement, adm4_decision::PointRequirement::Baseline) {
-        parts.push("基线点（可理由码跳过）".to_string());
+    match point.requirement {
+        adm4_decision::PointRequirement::Baseline => {
+            parts.push("基线点（可理由码跳过）".to_string());
+        }
+        adm4_decision::PointRequirement::Optional => {
+            parts.push("非必做（不进完成度分母）".to_string());
+        }
+        adm4_decision::PointRequirement::Unlocked => {}
     }
     parts.push(point.decision_id.clone());
     parts.join(" · ")
@@ -846,6 +852,7 @@ mod tests {
             confirmed,
             applicable,
             not_applicable: na,
+            optional_skipped: 0,
             total_points: total,
         }
     }
@@ -870,6 +877,8 @@ mod tests {
             mda_layer: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            requirement_label: PointRequirement::Unlocked.label().into(),
+            optional: false,
             applicability: applicability.into(),
             confirmed,
             options: vec![DecisionOptionView {
@@ -895,6 +904,7 @@ mod tests {
                 done: 1,
                 total: 3,
                 percent: 33,
+                optional_skipped: 0,
                 domains: vec![DomainProgress {
                     domain_id: "gameplay".into(),
                     name: "玩法系统设计".into(),

@@ -2,6 +2,12 @@ use adm4_decision::{DecisionId, DesignLevel, GenrePackId, OptionId, ParameterVal
 use adm4_foundation::{Adm4Error, Adm4Result, UtcTimestamp};
 use serde::{Deserialize, Serialize};
 
+/// 通用层模板的 `genre_pack` 取值（同时是设计空间通用层目录名）。
+///
+/// 这类模板不绑定任何品类包：它们逆向的是跨品类的通用层决策点，因此可以预填到**任何**
+/// 品类包的项目里（品类专属点不在答卷内，自然不会被写入）。
+pub const UNIVERSAL_GENRE_PACK: &str = "universal";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceType {
@@ -29,7 +35,31 @@ pub struct Evidence {
     pub confidence: Confidence,
 }
 
-/// 逆向答卷条目：该游戏在某决策点「选了哪个选项、填了什么参数」。
+/// 逆向答卷上的一个附加已选选项（首个已选选项仍平铺在 `TemplateAnswer` 上，保持旧档兼容）。
+///
+/// 结构与项目态的 `adm4_decision::SelectedOption` 对齐，但不带 `rationale`/`template_original`：
+/// 模板是「这个游戏怎么选的」的证据，理由与换皮原值属于项目态。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct TemplateSelectedOption {
+    pub option_id: OptionId,
+    #[serde(default)]
+    pub parameters: ParameterValues,
+}
+
+/// 答卷上一个已选选项的只读视图（主选在前），让预填/对照按已选选项逐个处理。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TemplateSelectedOptionRef<'a> {
+    pub option_id: &'a str,
+    pub parameters: &'a ParameterValues,
+    /// 多选点的主选标记（单选答案恒 false）。
+    pub is_primary: bool,
+}
+
+/// 逆向答卷条目：该游戏在某决策点「选了哪些选项、哪个是主选、填了什么参数」。
+///
+/// 多选是扩展出来的：`option_id` 仍是首个已选选项（旧档兼容锚点，单值文件原样可读），
+/// 其余选项落 `additional_options`、主选落 `primary_option`——两个键都 `serde(default)`，
+/// 因此二版迁移出的旧格式答卷文件一字节不改也能反序列化。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TemplateAnswer {
     pub decision_id: DecisionId,
@@ -42,6 +72,55 @@ pub struct TemplateAnswer {
     /// S3 交叉核验结论（None=未核验；true=一致；false=冲突待人工）。
     #[serde(default)]
     pub crosscheck_agreed: Option<bool>,
+    /// 多选点的其余已选选项（单选点恒空）。
+    #[serde(default)]
+    pub additional_options: Vec<TemplateSelectedOption>,
+    /// 多选点的主选选项 id；必须落在已选集合内（预填时校验）。
+    #[serde(default)]
+    pub primary_option: Option<OptionId>,
+}
+
+impl TemplateAnswer {
+    /// 全部已选选项，**主选排在最前**，其余保持声明顺序；单选答案返回 1 条。
+    pub fn selected_options(&self) -> Vec<TemplateSelectedOptionRef<'_>> {
+        let is_primary = |option_id: &str| self.primary_option.as_deref() == Some(option_id);
+        let mut refs = Vec::with_capacity(1 + self.additional_options.len());
+        refs.push(TemplateSelectedOptionRef {
+            option_id: self.option_id.as_str(),
+            parameters: &self.parameters,
+            is_primary: is_primary(&self.option_id),
+        });
+        for extra in &self.additional_options {
+            refs.push(TemplateSelectedOptionRef {
+                option_id: extra.option_id.as_str(),
+                parameters: &extra.parameters,
+                is_primary: is_primary(&extra.option_id),
+            });
+        }
+        refs.sort_by_key(|item| !item.is_primary);
+        refs
+    }
+
+    /// 已选选项 id（顺序同 `selected_options`）。
+    pub fn selected_option_ids(&self) -> Vec<&str> {
+        self.selected_options()
+            .into_iter()
+            .map(|item| item.option_id)
+            .collect()
+    }
+
+    pub fn contains_option(&self, option_id: &str) -> bool {
+        self.option_id == option_id
+            || self
+                .additional_options
+                .iter()
+                .any(|extra| extra.option_id == option_id)
+    }
+
+    /// 已选选项数量（≥1）。
+    pub fn selected_count(&self) -> usize {
+        1 + self.additional_options.len()
+    }
 }
 
 /// 认证状态：产线固定流转 `Draft→Mapped→CrossChecked→HumanReviewed→Certified`（决定 D8）。
@@ -174,10 +253,92 @@ impl Template {
         self.is_certified()
     }
 
+    /// 通用层模板：不绑定品类包，可预填到任何包的项目。
+    pub fn is_universal(&self) -> bool {
+        self.genre_pack == UNIVERSAL_GENRE_PACK
+    }
+
     /// 换皮词表贡献。
     pub fn skin_words(&self) -> Vec<String> {
         let mut words = vec![self.game_name.clone()];
         words.extend(self.aliases.clone());
         words
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 旧格式答卷（只有单个 `option_id`，没有多选键）必须原样反序列化，
+    /// 且默认值与扩展前逐字节等价——T10 已落盘的 26 份模板文件不能因为加字段而读不出来。
+    #[test]
+    fn legacy_single_option_answer_still_parses() {
+        let legacy = r#"{
+          "decision_id": "u.genre",
+          "option_id": "lane_defense",
+          "evidence": [
+            {"source_url": "adm4://v2-builtin/x.json", "source_type": "inference", "confidence": "low"}
+          ],
+          "notes": "旧档"
+        }"#;
+        let answer: TemplateAnswer = serde_json::from_str(legacy).expect("旧格式答卷应可解析");
+        assert_eq!(answer.option_id, "lane_defense");
+        assert!(answer.additional_options.is_empty());
+        assert!(answer.primary_option.is_none());
+        assert_eq!(answer.selected_count(), 1);
+        assert_eq!(answer.selected_option_ids(), vec!["lane_defense"]);
+        assert!(!answer.selected_options()[0].is_primary);
+        // 回写后不含多选键（旧档往返不长胖）。
+        let json = serde_json::to_string(&answer).expect("序列化");
+        assert!(json.contains(r#""additional_options":[]"#), "{json}");
+        assert!(json.contains(r#""primary_option":null"#), "{json}");
+        let round_trip: TemplateAnswer = serde_json::from_str(&json).expect("往返");
+        assert_eq!(round_trip, answer);
+    }
+
+    /// 多选答卷：全部已选选项可读，主选排在最前。
+    #[test]
+    fn multi_option_answer_orders_primary_first() {
+        let multi = r#"{
+          "decision_id": "v2.gameplay_system_scope",
+          "option_id": "action_rule",
+          "evidence": [
+            {"source_url": "adm4://v2-builtin/x.json", "source_type": "inference", "confidence": "low"}
+          ],
+          "additional_options": [
+            {"option_id": "objective"},
+            {"option_id": "settlement"}
+          ],
+          "primary_option": "settlement"
+        }"#;
+        let answer: TemplateAnswer = serde_json::from_str(multi).expect("多选答卷应可解析");
+        assert_eq!(answer.selected_count(), 3);
+        assert_eq!(
+            answer.selected_option_ids(),
+            vec!["settlement", "action_rule", "objective"]
+        );
+        assert!(answer.selected_options()[0].is_primary);
+        assert!(answer.contains_option("objective"));
+        assert!(!answer.contains_option("liveops_event"));
+    }
+
+    #[test]
+    fn universal_pack_is_recognized() {
+        let mut template = Template {
+            template_id: "tpl".into(),
+            game_name: "虚构甲".into(),
+            aliases: Vec::new(),
+            genre_pack: UNIVERSAL_GENRE_PACK.into(),
+            pack_version: "0.1.0".into(),
+            depth_reached: crate::model::DesignLevel::L4,
+            answers: Vec::new(),
+            certification: Certification::default(),
+            mapping_hash: String::new(),
+            crosscheck_proof: None,
+        };
+        assert!(template.is_universal());
+        template.genre_pack = "lane_defense".into();
+        assert!(!template.is_universal());
     }
 }

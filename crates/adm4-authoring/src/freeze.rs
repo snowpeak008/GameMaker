@@ -35,6 +35,10 @@ pub struct FreezeGateReport {
     pub gates: Vec<GateResult>,
     pub custom_option_count: usize,
     pub na_counts: Vec<(String, usize)>,
+    /// 非必做（`requirement=Optional`）且未作答、因此未进完成度分母的适用点数。
+    /// 旧存档没有该字段（`serde(default)` → 0）。
+    #[serde(default)]
+    pub optional_skipped: usize,
     pub evaluated_at: String,
 }
 
@@ -112,10 +116,7 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
         .not_applicable
         .iter()
         .map(|(decision_id, justification)| {
-            let signature = match state.na_signoffs.get(decision_id) {
-                Some(signoff) => format!("署名 {}（{}）", signoff.actor, signoff.at),
-                None => "无署名（baseline 理由码跳过）".to_string(),
-            };
+            let signature = justification.signature_label();
             let note = if justification.note.trim().is_empty() {
                 String::new()
             } else {
@@ -132,9 +133,20 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
         .collect();
     let gate1_passed = gate1_findings.is_empty();
     gate1_findings.append(&mut na_findings);
+    // 非必做点未作答：同样是可见性条目（不进分母、不拦截），但必须在门报告里数得出来，
+    // 否则「完成度 100%」会掩盖「有一批点根本没看」。
+    if completeness.optional_skipped > 0 {
+        gate1_findings.push(GateFinding {
+            code: "optional_not_answered".into(),
+            message: format!(
+                "{} 个非必做点未作答（requirement=optional，不进完成度分母也不拦截冻结）",
+                completeness.optional_skipped
+            ),
+        });
+    }
     gates.push(GateResult {
         gate: "gate1_completeness".into(),
-        // N/A 明细是可见性条目，不参与通过判定。
+        // N/A 与非必做明细是可见性条目，不参与通过判定。
         passed: gate1_passed,
         findings: gate1_findings,
     });
@@ -387,6 +399,7 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
             .iter()
             .map(|(code, count)| (code.clone(), *count))
             .collect(),
+        optional_skipped: completeness.optional_skipped,
         evaluated_at: UtcTimestamp::now().to_iso8601(),
     }
 }

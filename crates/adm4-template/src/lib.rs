@@ -27,5 +27,5 @@ pub use library::{SkinWordlist, TemplateLibrary, load_skin_wordlist, save_skin_w
 pub use mapping::{MAPPING_PURPOSE, MappingService};
 pub use model::{
     Certification, CertificationStatus, Confidence, CrossCheckProof, Evidence, SourceType,
-    Template, TemplateAnswer,
+    Template, TemplateAnswer, TemplateSelectedOption, TemplateSelectedOptionRef,
 };

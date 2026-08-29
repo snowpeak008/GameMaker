@@ -532,6 +532,84 @@ fn crosscheck_rejects_replay_of_mapping_session() {
 }
 
 // ---------------------------------------------------------------------------
+// 通用层模板的跨包取用（F3-3）：列表可见 + 解析可取 + 认证关卡照旧生效
+// ---------------------------------------------------------------------------
+
+#[test]
+fn universal_templates_are_listed_and_resolvable_from_any_pack() {
+    let root = temp_root("universal");
+    let space = root.join("design_space");
+    let library = TemplateLibrary::new(&space);
+
+    // 本包一份（Certified）+ 通用层一份（Certified）+ 通用层一份草稿。
+    let mut own = draft_template();
+    own.certification.status = CertificationStatus::Certified;
+    library.save_draft(&own).unwrap();
+
+    let mut universal = draft_template();
+    universal.template_id = "builtin_universal_ok".into();
+    universal.game_name = "虚构通用甲".into();
+    universal.genre_pack = "universal".into();
+    universal.certification.status = CertificationStatus::Certified;
+    library.save_draft(&universal).unwrap();
+
+    let mut universal_draft = draft_template();
+    universal_draft.template_id = "builtin_universal_draft".into();
+    universal_draft.game_name = "虚构通用乙".into();
+    universal_draft.genre_pack = "universal".into();
+    library.save_draft(&universal_draft).unwrap();
+
+    // list 严格按目录（逆向产线要写回本包目录，不能混进通用层的）。
+    let own_only = library.list("lane_test").unwrap();
+    assert_eq!(own_only.len(), 1);
+    assert_eq!(own_only[0].template_id, "tpl_galaxy");
+
+    // list_available = 本包 + 通用层（这才是 UI 选模板/预填该看的集合）。
+    let available = library.list_available("lane_test").unwrap();
+    let ids: Vec<&str> = available
+        .iter()
+        .map(|template| template.template_id.as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        vec![
+            "tpl_galaxy",
+            "builtin_universal_draft",
+            "builtin_universal_ok"
+        ]
+    );
+    assert!(available[1].is_universal());
+    // pack_id 本身是通用层时不重复列出。
+    assert_eq!(library.list_available("universal").unwrap().len(), 2);
+
+    // resolve：本包找不到就落通用层；两处都没有 → 报本包的 not-found（不掩盖真实路径）。
+    assert_eq!(
+        library
+            .resolve("lane_test", "builtin_universal_ok")
+            .unwrap()
+            .genre_pack,
+        "universal"
+    );
+    assert!(library.get("lane_test", "builtin_universal_ok").is_err());
+    assert!(library.resolve("lane_test", "no_such_template").is_err());
+
+    // 取用关卡照旧：通用层未认证模板同样被拒（跨包不等于放宽认证）。
+    assert_eq!(
+        library
+            .approved_for_prefill("lane_test", "builtin_universal_ok")
+            .unwrap()
+            .template_id,
+        "builtin_universal_ok"
+    );
+    let blocked = library
+        .approved_for_prefill("lane_test", "builtin_universal_draft")
+        .unwrap_err();
+    assert_eq!(blocked.kind, Adm4ErrorKind::Blocked);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+// ---------------------------------------------------------------------------
 // 人工审核证明（R3）
 // ---------------------------------------------------------------------------
 

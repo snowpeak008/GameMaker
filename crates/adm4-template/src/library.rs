@@ -1,4 +1,4 @@
-use crate::model::{CertificationStatus, Template};
+use crate::model::{CertificationStatus, Template, UNIVERSAL_GENRE_PACK};
 use adm4_foundation::{Adm4Error, Adm4Result, read_json_file, write_json_file};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -46,8 +46,37 @@ impl TemplateLibrary {
         Ok(templates)
     }
 
+    /// 某项目可取用的全部模板：本包模板 + 通用层模板（`genre_pack=universal`）。
+    ///
+    /// `list` 严格按目录取，通用层模板会被过滤掉——那对逆向产线是对的（产线要写回本包目录），
+    /// 但对「选一份模板预填/对照」是错的：通用层模板本就跨包可用，滤掉等于在 UI 里既不可选
+    /// 也不可预填。展示与预填一律用本方法。
+    ///
+    /// 排序：先本包（`list` 的文件名序），再通用层；`pack_id` 本身就是通用层时不重复列出。
+    pub fn list_available(&self, pack_id: &str) -> Adm4Result<Vec<Template>> {
+        let mut templates = self.list(pack_id)?;
+        if pack_id != UNIVERSAL_GENRE_PACK {
+            templates.extend(self.list(UNIVERSAL_GENRE_PACK)?);
+        }
+        Ok(templates)
+    }
+
     pub fn get(&self, pack_id: &str, template_id: &str) -> Adm4Result<Template> {
         read_json_file(&self.template_path(pack_id, template_id))
+    }
+
+    /// 取用解析：先在 `pack_id` 目录里找，找不到再落到通用层目录。
+    ///
+    /// 预填/对照的入口用它（而不是 `get`），这样调用方不必知道一份模板是本包的还是通用的；
+    /// 逆向产线仍用 `get`——产线要按 `template.genre_pack` 写回原目录，不能落错地方。
+    pub fn resolve(&self, pack_id: &str, template_id: &str) -> Adm4Result<Template> {
+        match self.get(pack_id, template_id) {
+            Ok(template) => Ok(template),
+            Err(error) if pack_id != UNIVERSAL_GENRE_PACK => self
+                .get(UNIVERSAL_GENRE_PACK, template_id)
+                .map_err(|_| error),
+            Err(error) => Err(error),
+        }
     }
 
     /// 保存草稿或审核中的答卷。
@@ -89,8 +118,9 @@ impl TemplateLibrary {
     }
 
     /// 模板取用的强制关卡：只有 Certified 模板可用于预填（决定 D8）。
+    /// 模板按 `resolve` 查找——本包找不到就落通用层（universal 模板跨包可用）。
     pub fn approved_for_prefill(&self, pack_id: &str, template_id: &str) -> Adm4Result<Template> {
-        let template = self.get(pack_id, template_id)?;
+        let template = self.resolve(pack_id, template_id)?;
         if !template.is_certified() {
             return Err(Adm4Error::blocked(format!(
                 "模板 {template_id} 未完成认证（当前状态 {:?}），只有 Certified 模板可用于预填",

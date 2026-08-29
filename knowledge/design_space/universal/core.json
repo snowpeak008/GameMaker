@@ -11,7 +11,8 @@
       "requirement": "baseline",
       "options": [
         { "id": "premium", "label": "买断制", "summary": "一次性付费获得完整内容", "implications": ["无内购系统", "内容一次交付"] },
-        { "id": "free_demo", "label": "免费试玩+完整版", "summary": "试玩章节免费，完整版付费解锁", "implications": ["需要试玩边界设计"] }
+        { "id": "free_demo", "label": "免费试玩+完整版", "summary": "试玩章节免费，完整版付费解锁", "implications": ["需要试玩边界设计"] },
+        { "id": "free_to_play", "label": "免费下载+内购/广告", "summary": "零门槛进入，靠内购或广告变现", "implications": ["需要付费点与公平性设计", "需要留存与经济平衡"] }
       ]
     },
     {
@@ -24,7 +25,132 @@
       "requirement": "baseline",
       "options": [
         { "id": "pc_single", "label": "PC 单机", "summary": "Windows 桌面单机", "implications": ["键鼠交互", "离线运行"] },
-        { "id": "mobile", "label": "移动端", "summary": "触屏优先", "implications": ["触控交互", "竖屏或横屏决策"] }
+        { "id": "mobile", "label": "移动端", "summary": "触屏优先", "implications": ["触控交互", "竖屏或横屏决策"] },
+        { "id": "pc_console", "label": "PC + 主机", "summary": "桌面与家用主机同为主平台", "implications": ["手柄与键鼠双套操作映射", "主机认证与性能档位"] },
+        { "id": "cross_platform", "label": "全平台互通", "summary": "PC / 主机 / 移动同账号跨端", "implications": ["跨端存档与进度同步", "输入与界面需按端自适应"] }
+      ]
+    },
+    {
+      "id": "u.platform_scope",
+      "node_id": "platform_play_context_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "项目的平台覆盖范围是什么？",
+      "design_question": "这一作只在一个端上活，还是要在多个端上同时活？",
+      "requirement": "optional",
+      "options": [
+        { "id": "single_platform", "label": "单平台", "summary": "只发布在一个平台", "implications": ["交互与性能只需对一档设备负责"] },
+        { "id": "multi_platform", "label": "多平台", "summary": "同期发布在多个平台", "implications": ["需要多端输入映射与性能档位", "上架材料与合规按端各一套"] }
+      ]
+    },
+    {
+      "id": "u.operation_model",
+      "node_id": "business_goal_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "上线后的运营模式是什么？",
+      "design_question": "上线是终点，还是长期供给内容的起点？",
+      "requirement": "optional",
+      "options": [
+        { "id": "one_time_release", "label": "一次性发布", "summary": "上线即完整交付，后续只做修复", "implications": ["无版本节奏压力", "内容量必须在上线前满配"] },
+        { "id": "content_updates", "label": "持续内容更新", "summary": "按期追加关卡/角色等内容包", "implications": ["需要内容供给结构与版本节奏"] },
+        { "id": "live_service", "label": "长线运营服务", "summary": "常驻活动、赛季与在线数据驱动迭代", "implications": ["需要 LiveOps 活动结构与数据验证闭环", "需要长期经济平衡治理"] }
+      ]
+    },
+    {
+      "id": "u.social_model",
+      "node_id": "social_relationship_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "项目的社交形态是什么？",
+      "design_question": "别的玩家在这一作里以什么方式存在？",
+      "requirement": "optional",
+      "options": [
+        { "id": "solo", "label": "纯单人", "summary": "没有其它玩家的存在感", "implications": ["无需社交系统与在线服务"] },
+        { "id": "async_light", "label": "轻异步社交", "summary": "排行榜、留言、幽灵数据等非实时互动", "implications": ["需要轻量在线数据但无实时同步"] },
+        { "id": "community_driven", "label": "社区驱动", "summary": "创作分享与社区讨论构成长期动力", "implications": ["需要创作/分享入口与社区安全治理"] },
+        { "id": "multiplayer", "label": "实时多人", "summary": "同场对抗或协作", "implications": ["需要实时同步与匹配", "需要对抗公平性与反作弊"] }
+      ]
+    },
+    {
+      "id": "u.session_band",
+      "node_id": "session_rhythm_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "目标玩家的单次会话时长带是多少？",
+      "design_question": "玩家一次坐下来，打算花多久？",
+      "requirement": "optional",
+      "options": [
+        { "id": "session_1_3", "label": "1-3 分钟", "summary": "碎片时间即开即走", "implications": ["单局必须自闭环", "读取与前置流程要极短"] },
+        { "id": "session_3_10", "label": "3-10 分钟", "summary": "一局一段的通勤时长", "implications": ["需要清晰的单局目标与结算"] },
+        { "id": "session_10_20", "label": "10-20 分钟", "summary": "一小段完整体验", "implications": ["单次会话内要有一次完整起落"] },
+        { "id": "session_20_40", "label": "20-40 分钟", "summary": "一次坐下来的完整段落", "implications": ["需要中途存档或段落切分"] },
+        { "id": "session_40_plus", "label": "40 分钟以上", "summary": "长时段沉浸", "implications": ["需要长时段节奏调度与疲劳缓解"] }
+      ]
+    },
+    {
+      "id": "u.target_scale",
+      "node_id": "project_scope_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "项目的规模档位是什么？",
+      "design_question": "这一作按什么体量做——内容量、团队与周期都受它约束？",
+      "requirement": "optional",
+      "options": [
+        { "id": "iaa_hypercasual", "label": "超休闲/广告变现体量", "summary": "极小体量、极快验证", "implications": ["单一核心玩法即可成立", "美术与内容量刻意极简"] },
+        { "id": "midcore", "label": "中核体量", "summary": "多系统组合、中等内容量", "implications": ["需要系统间平衡", "需要中期目标供给"] },
+        { "id": "indie", "label": "独立体量", "summary": "小团队、强特色、可控内容量", "implications": ["范围必须收紧到一个强特色上", "不依赖大型团队生产结构"] },
+        { "id": "triple_a", "label": "大制作体量", "summary": "高投入、高内容量、多职能协同", "implications": ["需要完整生产管线与跨职能沟通机制"] },
+        { "id": "large_service", "label": "大型长线服务体量", "summary": "长期运营、持续供给、规模化玩家群", "implications": ["需要服务端能力与长期治理", "需要持续内容与活动产能"] }
+      ]
+    },
+    {
+      "id": "u.content_rating",
+      "node_id": "compliance_age_rating_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "目标内容分级是什么？",
+      "design_question": "内容尺度的上限画在哪，谁被明确排除在目标受众之外？",
+      "requirement": "optional",
+      "options": [
+        { "id": "all_ages", "label": "全年龄", "summary": "无暴力血腥与敏感内容", "implications": ["表现尺度受限", "低龄可访问性要求更高"] },
+        { "id": "teen", "label": "青少年（13+）", "summary": "允许轻度冲突与紧张感", "implications": ["需要尺度审查基线"] },
+        { "id": "mature_17_plus", "label": "成人（17+）", "summary": "允许强烈表现与成人题材", "implications": ["需要分级合规与年龄验证", "不适配低龄目标年龄段"] }
+      ]
+    },
+    {
+      "id": "u.region_scope",
+      "node_id": "release_regional_experience_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "发行区域范围是什么？",
+      "design_question": "第一版要面向哪些区域的玩家？",
+      "requirement": "optional",
+      "options": [
+        { "id": "single_region", "label": "单区域", "summary": "先做一个区域市场", "implications": ["单语种文案即可上线"] },
+        { "id": "global", "label": "全球发行", "summary": "多区域同期上线", "implications": ["需要多语种与本地化审查", "不应把单语种锁定作为发布前提"] }
+      ]
+    },
+    {
+      "id": "u.dimension",
+      "node_id": "art_direction_decision",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "表现维度是什么？",
+      "design_question": "画面与玩法的空间维度是几维，玩家的空间理解建立在什么之上？",
+      "requirement": "optional",
+      "options": [
+        { "id": "two_d", "label": "2D", "summary": "平面视角与平面素材", "implications": ["资源以序列帧/图集为主", "空间关系靠层次与构图表达"] },
+        { "id": "two_point_five_d", "label": "2.5D", "summary": "3D 素材配平面玩法视角", "implications": ["表现走 3D 管线但玩法约束在平面"] },
+        { "id": "three_d", "label": "3D", "summary": "立体空间视角与玩法", "implications": ["需要相机与空间可读性设计", "资源走完整 3D 管线"] }
       ]
     },
     {

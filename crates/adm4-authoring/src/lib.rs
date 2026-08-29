@@ -6,7 +6,7 @@ mod freeze;
 mod interview;
 mod state;
 
-pub use engine::AuthoringEngine;
+pub use engine::{AuthoringEngine, PrefillReport, PrefillSkip};
 pub use freeze::{
     FreezeGateReport, FrozenDesign, GateFinding, GateResult, evaluate_freeze_gates, execute_freeze,
     run_red_team,

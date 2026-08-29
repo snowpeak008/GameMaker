@@ -66,13 +66,15 @@ pub struct RedTeamRecord {
     pub reviewed_revision: u64,
 }
 
-/// 人工豁免的署名（R3）：谁在何时把一个适用的决策点判为「不适用」。
+/// 【遗留结构，只读兼容】人工豁免的署名。
 ///
-/// 与 `NaJustification`（结构化理由码 + 说明）配套：理由说「为什么」，署名说「谁负责」。
+/// F3 起署名合并进 `NaJustification::actor`/`at`（见该结构的说明）：并行 map 要求两处键
+/// 始终同步，漏删就会留下「豁免已解除但署名还在」的幽灵记录。本结构只用于反序列化 F3
+/// 之前的存档，`AuthoringState::adopt_legacy_na_signoffs` 把它合并进 `not_applicable`
+/// 之后即清空，新代码不再写入。
+///
 /// 单条豁免不走 `ReviewProof`——那是批量评审的工作量证明（需要 reviewed/upstream 计数
 /// 与逐类证据）；一条豁免的可追责性由「非空理由 + 非空说明 + 署名 + 时间」构成。
-/// 旧存档没有本记录（`serde(default)` → 空表），其 N/A 视为无署名的历史条目，
-/// 冻结门第 1 道会照实标注。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NaSignoff {
     /// 署名（人名/账号），不得为空。
@@ -88,11 +90,14 @@ pub struct AuthoringState {
     pub pack_version: String,
     pub depth_profile: DepthProfile,
     pub selections: BTreeMap<DecisionId, Selection>,
+    /// 显式 N/A（含理由码、说明与人工豁免署名，署名自 F3 起并入 `NaJustification`）。
     #[serde(default)]
     pub not_applicable: BTreeMap<DecisionId, NaJustification>,
-    /// 人工豁免的署名，键与 `not_applicable` 同步（`set_not_applicable` 写、
-    /// `clear_not_applicable` 删）。baseline 点的理由码跳过不落署名。
-    #[serde(default)]
+    /// 【遗留字段，只读兼容】F3 之前的人工豁免署名并行 map。
+    ///
+    /// 反序列化后由 [`AuthoringState::adopt_legacy_na_signoffs`] 合并进 `not_applicable`
+    /// 并清空；为空时不再序列化，因此新存档里不会出现这个键。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub na_signoffs: BTreeMap<DecisionId, NaSignoff>,
     /// 按节点的设计说明（二版节点文本「设计说明」的归宿）。
     /// 决策点级的设计说明仍是 `Selection::rationale`，二者层级不同、互不替代。
@@ -142,5 +147,28 @@ impl AuthoringState {
 
     pub fn bump_revision(&mut self) {
         self.revision += 1;
+    }
+
+    /// 把 F3 之前的 `na_signoffs` 并行 map 合并进 `not_applicable` 的署名字段并清空它。
+    ///
+    /// 读入存档后立刻调用（`AuthoringEngine::new` 与 `AppServices::load_authoring_state`
+    /// 各调一次），使「署名只有一个真相源」这件事对上层完全透明。
+    /// 已有署名的条目不覆盖；`not_applicable` 里已没有的键直接丢弃（豁免已解除的幽灵署名）。
+    /// 返回合并条数，便于调用方在日志里说明。
+    pub fn adopt_legacy_na_signoffs(&mut self) -> usize {
+        if self.na_signoffs.is_empty() {
+            return 0;
+        }
+        let mut adopted = 0;
+        for (decision_id, signoff) in std::mem::take(&mut self.na_signoffs) {
+            if let Some(justification) = self.not_applicable.get_mut(&decision_id)
+                && !justification.is_signed()
+            {
+                justification.actor = signoff.actor;
+                justification.at = signoff.at;
+                adopted += 1;
+            }
+        }
+        adopted
     }
 }

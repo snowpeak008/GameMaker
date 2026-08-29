@@ -6,13 +6,14 @@ use adm4_archive::{
 };
 use adm4_authoring::{
     AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, GateFinding,
-    InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, evaluate_freeze_gates,
-    execute_freeze, run_red_team,
+    InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
+    evaluate_freeze_gates, execute_freeze, run_red_team,
 };
 use adm4_contracts::SkinScanner;
 use adm4_decision::{
     DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress, ParameterValues,
     PointApplicability, PointRequirement, ProgressCounts, SelectionMode, check_row_references,
+    counts_toward_completeness,
 };
 use adm4_foundation::{
     Adm4Error, Adm4Result, ensure_dir, ensure_within_root, new_id, read_json_file, write_json_file,
@@ -27,6 +28,7 @@ use adm4_template::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// 应用服务门面：GUI/CLI 的唯一入口。
 pub struct AppServices {
@@ -36,6 +38,17 @@ pub struct AppServices {
     pub log: RunLog,
     space_root: DesignSpaceRoot,
     templates: TemplateLibrary,
+    /// 已装配设计空间的进程内缓存，键 = `pack_id`。
+    ///
+    /// 迁移后通用层清单达 4.7MB，一次 `load_design_space` 的解析 + 校验在 100-150ms 量级，
+    /// 而工作台的一次交互要装载 4 次（`decision_points` / `project_profile` /
+    /// `workbench_overview` / `open_engine`）。设计空间运行期只读（唯一写入者是离线迁移
+    /// 工具与手改清单，都要求重启），所以缓存**没有失效问题**：进程存活期内一装到底。
+    ///
+    /// 用 `Mutex` 而不是 `RefCell`：`AppServices` 现状是 `Send + Sync`（桌面端 `Rc` 单线程用，
+    /// 测试里直接用），换成 `RefCell` 会静默摘掉 `Sync`；`Mutex` 保住原有约束又足够简单。
+    /// 缓存 `Arc<DesignSpace>` 让「命中 → 克隆出所有权」只付一次结构克隆，不再付解析与校验。
+    space_cache: Mutex<BTreeMap<String, Arc<DesignSpace>>>,
 }
 
 impl AppServices {
@@ -55,6 +68,7 @@ impl AppServices {
             log,
             space_root,
             templates,
+            space_cache: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -66,8 +80,31 @@ impl AppServices {
         self.space_root.list_packs()
     }
 
+    /// 装载设计空间（进程内缓存；语义与直接 `load_design_space` 完全等价）。
     pub fn load_space(&self, pack_id: &str) -> Adm4Result<DesignSpace> {
-        load_design_space(&self.space_root, pack_id)
+        Ok((*self.load_space_shared(pack_id)?).clone())
+    }
+
+    /// 装载设计空间并共享所有权：只读用途（不需要 `DesignSpace` 所有权）走这里，连结构克隆都免了。
+    pub fn load_space_shared(&self, pack_id: &str) -> Adm4Result<Arc<DesignSpace>> {
+        {
+            let cache = self.lock_space_cache()?;
+            if let Some(space) = cache.get(pack_id) {
+                return Ok(Arc::clone(space));
+            }
+        }
+        // 校验失败照旧上抛（fail-closed）：只有装配成功的空间进缓存，不缓存错误。
+        let space = Arc::new(load_design_space(&self.space_root, pack_id)?);
+        let mut cache = self.lock_space_cache()?;
+        Ok(Arc::clone(
+            cache.entry(pack_id.to_string()).or_insert(space),
+        ))
+    }
+
+    fn lock_space_cache(&self) -> Adm4Result<MutexGuard<'_, BTreeMap<String, Arc<DesignSpace>>>> {
+        self.space_cache.lock().map_err(|error| {
+            Adm4Error::internal(format!("设计空间缓存锁被污染（前一次持锁 panic）：{error}"))
+        })
     }
 
     pub fn templates(&self) -> &TemplateLibrary {
@@ -98,7 +135,7 @@ impl AppServices {
         depth: DesignLevel,
         template_id: Option<&str>,
     ) -> Adm4Result<String> {
-        let space = self.load_space(pack_id)?;
+        let space = self.load_space_shared(pack_id)?;
         let depth_profile = DepthProfile::new(depth).map_err(Adm4Error::invalid_input)?;
         let mut state = AuthoringState::new(
             project_name,
@@ -109,11 +146,24 @@ impl AppServices {
         if let Some(template_id) = template_id {
             let template = self.templates.approved_for_prefill(pack_id, template_id)?;
             let mut engine = AuthoringEngine::new(space, state)?;
-            let applied = engine.prefill_from_template(&template)?;
+            let report = engine.prefill_from_template(&template)?;
             self.log.append(
                 "project",
-                &format!("模板 {template_id} 预填 {applied} 条（需换皮与逐条确认）"),
+                &format!(
+                    "模板 {template_id}（包 {}）预填：{}（需换皮与逐条确认）",
+                    template.genre_pack,
+                    report.summary()
+                ),
             )?;
+            for skip in &report.skipped {
+                self.log.append(
+                    "project",
+                    &format!(
+                        "模板 {template_id} 跳过 {}/{}：{}",
+                        skip.decision_id, skip.option_id, skip.reason
+                    ),
+                )?;
+            }
             state = engine.into_state();
         }
         let session_id = new_id("session");
@@ -141,13 +191,17 @@ impl AppServices {
                 "存档 {archive_id} 不存在（可用 project list 查看现有项目）"
             )));
         }
-        read_json_file(&content.join("authoring_state.json"))
+        let mut state: AuthoringState = read_json_file(&content.join("authoring_state.json"))?;
+        // 旧存档的豁免署名并行 map 就地合并（与 AuthoringEngine::new 同一处理，只读路径也生效）。
+        state.adopt_legacy_na_signoffs();
+        Ok(state)
     }
 
     /// 打开项目为创作引擎（加载状态 + 设计空间）。
+    /// 设计空间取缓存里的共享句柄——引擎按 `Arc` 持有，因此这里连结构克隆都不发生。
     pub fn open_engine(&self, archive_id: &str) -> Adm4Result<AuthoringEngine> {
         let state = self.load_authoring_state(archive_id)?;
-        let space = self.load_space(&state.genre_pack)?;
+        let space = self.load_space_shared(&state.genre_pack)?;
         AuthoringEngine::new(space, state)
     }
 
@@ -157,7 +211,21 @@ impl AppServices {
         archive_id: &str,
         operation: impl FnOnce(&mut AuthoringEngine) -> Adm4Result<T>,
     ) -> Adm4Result<T> {
+        self.with_project_named(archive_id, None, operation)
+    }
+
+    /// `with_project` 的内部形态：`manifest_name` 非 None 时同时更新存档 manifest 的展示名。
+    ///
+    /// 只有重命名需要动 manifest；其余变更沿用原名（避免把 `import_project` 等场景下
+    /// manifest 名与创作状态名不一致的历史数据在无关操作里被悄悄改写）。
+    fn with_project_named<T>(
+        &self,
+        archive_id: &str,
+        manifest_name: Option<&str>,
+        operation: impl FnOnce(&mut AuthoringEngine) -> Adm4Result<T>,
+    ) -> Adm4Result<T> {
         let manifest = self.archives.manifest(archive_id)?;
+        let commit_name = manifest_name.unwrap_or(manifest.project_name.as_str());
         let session_id = new_id("session");
         let archive_dir = self.data_root.archive_dir(archive_id);
         let lock = ArchiveLock::acquire(&archive_dir, &session_id)?;
@@ -165,16 +233,66 @@ impl AppServices {
             self.archives.create_draft(&session_id, Some(archive_id))?;
             let content = self.archives.draft_content_dir(&session_id);
             let state: AuthoringState = read_json_file(&content.join("authoring_state.json"))?;
-            let space = self.load_space(&state.genre_pack)?;
+            let space = self.load_space_shared(&state.genre_pack)?;
             let mut engine = AuthoringEngine::new(space, state)?;
             let value = operation(&mut engine)?;
             write_json_file(&content.join("authoring_state.json"), engine.state())?;
             self.archives
-                .commit_draft(&session_id, &manifest.project_name, Some(archive_id))?;
+                .commit_draft(&session_id, commit_name, Some(archive_id))?;
             Ok(value)
         })();
         lock.release()?;
         result
+    }
+
+    /// 项目重命名（校验非空白）：创作状态与存档 manifest 的展示名一起改，并落运行日志。
+    ///
+    /// 名称校验（非空白 + trim）在引擎里做，manifest 用引擎 trim 后的结果，
+    /// 因此 `project list` 与工作台摘要不会出现两个不同的项目名。
+    pub fn project_rename(&self, archive_id: &str, project_name: &str) -> Adm4Result<()> {
+        // 先规范化（空白名在开事务前就被拒），再一次事务同时写创作状态与 manifest 展示名。
+        let renamed = AuthoringEngine::normalize_project_name(project_name)?;
+        let previous = self.load_authoring_state(archive_id)?.project_name;
+        self.with_project_named(archive_id, Some(&renamed), |engine| {
+            engine.set_project_name(&renamed)
+        })?;
+        self.log.append(
+            "project",
+            &format!("项目 {archive_id} 重命名：{previous} → {renamed}"),
+        )
+    }
+
+    /// 认证模板预填到已有项目：走取用关卡（`approved_for_prefill`，含 universal 跨包解析）
+    /// + 引擎预填，跳过的答卷条目逐条进运行日志（R2：不静默丢弃）。
+    pub fn project_prefill_template(
+        &self,
+        archive_id: &str,
+        template_id: &str,
+    ) -> Adm4Result<PrefillReport> {
+        let state = self.load_authoring_state(archive_id)?;
+        let template = self
+            .templates
+            .approved_for_prefill(&state.genre_pack, template_id)?;
+        let report =
+            self.with_project(archive_id, |engine| engine.prefill_from_template(&template))?;
+        self.log.append(
+            "project",
+            &format!(
+                "项目 {archive_id} 用模板 {template_id}（包 {}）预填：{}",
+                template.genre_pack,
+                report.summary()
+            ),
+        )?;
+        for skip in &report.skipped {
+            self.log.append(
+                "project",
+                &format!(
+                    "模板 {template_id} 跳过 {}/{}：{}",
+                    skip.decision_id, skip.option_id, skip.reason
+                ),
+            )?;
+        }
+        Ok(report)
     }
 
     pub fn export_project(&self, archive_id: &str, output: &Path) -> Adm4Result<usize> {
@@ -359,14 +477,11 @@ impl AppServices {
                     Some(ExemptionView {
                         reason_code: justification.reason_code.clone(),
                         note: justification.note.clone(),
-                        actor: state
-                            .na_signoffs
-                            .get(&point.id)
-                            .map(|signoff| signoff.actor.clone()),
-                        at: state
-                            .na_signoffs
-                            .get(&point.id)
-                            .map(|signoff| signoff.at.clone()),
+                        // 无署名（baseline 理由码跳过 / 旧存档条目）→ None，UI 照实标注。
+                        actor: justification
+                            .is_signed()
+                            .then(|| justification.actor.clone()),
+                        at: justification.is_signed().then(|| justification.at.clone()),
                     }),
                 ),
                 None => ("unknown", None),
@@ -394,6 +509,8 @@ impl AppServices {
                 mda_layer: point.mda_layer.map(|layer| layer.label().to_string()),
                 selection_mode: point.selection_mode,
                 requirement: point.requirement,
+                requirement_label: point.requirement.label().to_string(),
+                optional: point.requirement.is_optional(),
                 applicability: status.to_string(),
                 confirmed: selection.is_some_and(|item| item.confirmed_by_user),
                 options,
@@ -479,6 +596,7 @@ impl AppServices {
             done: completeness.done,
             total: completeness.total,
             percent: completeness.percent(),
+            optional_skipped: completeness.optional_skipped,
             domains: progress.domains.clone(),
             nodes: progress.nodes.clone(),
             counts: progress.total,
@@ -494,10 +612,8 @@ impl AppServices {
         }
         let mut missing_by_domain: BTreeMap<String, Vec<MissingEntry>> = BTreeMap::new();
         for point in space.graph.points() {
-            if !matches!(
-                applicability.get(&point.id),
-                Some(PointApplicability::Active)
-            ) {
+            // 与完成度分母同口径：未作答的非必做点不算缺失项（它们的计数走 summary.optional_skipped）。
+            if !counts_toward_completeness(point, &applicability, &state.selections) {
                 continue;
             }
             let selection = state.selections.get(&point.id);
@@ -693,7 +809,7 @@ impl AppServices {
 
     fn artifact_store(&self, archive_id: &str, version: u32) -> Adm4Result<ArtifactStore> {
         let state = self.load_authoring_state(archive_id)?;
-        let space = self.load_space(&state.genre_pack)?;
+        let space = self.load_space_shared(&state.genre_pack)?;
         let scanner = self.skin_scanner(&space)?;
         let root = self
             .archives
@@ -724,7 +840,7 @@ impl AppServices {
     ) -> Adm4Result<PipelineRunState> {
         let version = self.latest_frozen_version(archive_id)?;
         let frozen = self.load_frozen(archive_id, version)?;
-        let space = self.load_space(&frozen.genre_pack)?;
+        let space = self.load_space_shared(&frozen.genre_pack)?;
         let store = self.artifact_store(archive_id, version)?;
         let runner = PipelineRunner::new();
         let ctx = RunnerContext {
@@ -792,7 +908,7 @@ impl AppServices {
                 "逆向目标游戏名不能为空（认证时登记换皮词表的来源）",
             ));
         }
-        let space = self.load_space(pack_id)?;
+        let space = self.load_space_shared(pack_id)?;
         if self.templates.get(pack_id, template_id).is_ok() {
             return Err(Adm4Error::conflict(format!(
                 "模板 {pack_id}/{template_id} 已存在，不能重复建草稿（防止覆盖产线进度）"
@@ -890,7 +1006,7 @@ impl AppServices {
                 "模板 {pack_id}/{template_id} 没有任何证据候选：请先执行语料检索（S1）——无证据不可映射（R1）"
             )));
         }
-        let space = self.load_space(pack_id)?;
+        let space = self.load_space_shared(pack_id)?;
         let mapped = MappingService::map_answers(
             provider,
             &mut template,
@@ -925,7 +1041,7 @@ impl AppServices {
     ) -> Adm4Result<CrossCheckReport> {
         check_template_ref(pack_id, template_id)?;
         let mut template = self.templates.get(pack_id, template_id)?;
-        let space = self.load_space(pack_id)?;
+        let space = self.load_space_shared(pack_id)?;
         let report = CrossCheckService::cross_check(provider, &mut template, space.graph.points())?;
         self.templates.save_draft(&template)?;
         self.log.append(
@@ -995,6 +1111,12 @@ impl AppServices {
                 TemplateCompareEntry {
                     decision_id: answer.decision_id.clone(),
                     template_option: answer.option_id.clone(),
+                    template_options: answer
+                        .selected_option_ids()
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect(),
+                    template_primary: answer.primary_option.clone(),
                     template_parameters: answer.parameters.clone(),
                     template_notes: answer.notes.clone(),
                     project_option: selection.map(|current| current.option_id.clone()),
@@ -1196,6 +1318,10 @@ pub struct DecisionPointView {
     pub mda_layer: Option<String>,
     pub selection_mode: SelectionMode,
     pub requirement: PointRequirement,
+    /// `requirement` 的中文展示名（UI 不必自己映射枚举）。
+    pub requirement_label: String,
+    /// 非必做点（`requirement=optional`）：未作答不进完成度分母、不拦冻结。
+    pub optional: bool,
     /// `active` / `inactive` / `not_applicable` / `beyond_depth`。
     pub applicability: String,
     pub confirmed: bool,
@@ -1250,6 +1376,8 @@ pub struct WorkbenchSummary {
     pub done: usize,
     pub total: usize,
     pub percent: u8,
+    /// 非必做且未作答的适用点数（不进 total，仅在案可见）。
+    pub optional_skipped: usize,
     pub domains: Vec<DomainProgress>,
     pub nodes: Vec<NodeProgress>,
     /// 各领域计数求和（与 done/total 同源）。
@@ -1347,7 +1475,14 @@ pub struct WorkbenchOverview {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TemplateCompareEntry {
     pub decision_id: String,
+    /// 答卷首选项（单选答案即唯一选项；多选答案为主选优先序列的第一项）。
     pub template_option: String,
+    /// 答卷的全部已选选项（主选在前）；单选答案只有一项。
+    #[serde(default)]
+    pub template_options: Vec<String>,
+    /// 答卷标记的主选（单选答案为 None）。
+    #[serde(default)]
+    pub template_primary: Option<String>,
     #[serde(default)]
     pub template_parameters: ParameterValues,
     #[serde(default)]

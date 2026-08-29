@@ -7,7 +7,8 @@ use adm4_archive::DataRoot;
 use adm4_authoring::TemplateMode;
 use adm4_contracts::{MatrixCell, TypedValue};
 use adm4_decision::{
-    DesignLevel, NaJustification, ParameterValues, Provenance, SelectionMode, UNASSIGNED_DOMAIN_ID,
+    DesignLevel, NaJustification, ParameterValues, PointRequirement, Provenance, SelectionMode,
+    UNASSIGNED_DOMAIN_ID,
 };
 use adm4_pipeline::StageStatus;
 use adm4_template::{CROSSCHECK_PURPOSE, CertificationStatus, MAPPING_PURPOSE, load_skin_wordlist};
@@ -407,14 +408,19 @@ fn red_lines_hold_in_end_to_end_paths() {
                 .select_option("u.genre", "lane_defense", Provenance::UserManual)
                 .unwrap();
             // baseline 点显式 N/A 需要结构化理由码。
-            let bad = engine.mark_not_applicable(
+            let bad = engine.mark_not_applicable("u.business_model", NaJustification::default());
+            assert!(bad.is_err());
+            // baseline 跳过通道不接受署名（署名走 set_not_applicable，F3 合并后同一结构承载）。
+            let signed = engine.mark_not_applicable(
                 "u.business_model",
                 NaJustification {
-                    reason_code: "  ".into(),
-                    note: String::new(),
+                    reason_code: "out_of_scope".into(),
+                    note: "本期不做".into(),
+                    actor: "主策划".into(),
+                    at: String::new(),
                 },
             );
-            assert!(bad.is_err());
+            assert!(signed.is_err());
             Ok(())
         })
         .unwrap();
@@ -1369,6 +1375,346 @@ fn workbench_aggregates_work_on_migrated_space() {
         "{:?}",
         after.missing[0].items
     );
+
+    // F3-1：仓内通用层有 8 个 requirement=optional 的画像点（u.platform_scope 等）。
+    // 它们恒适用（L0 根点）但未作答，因此不进分母、不进缺失项，只在 optional_skipped 计数。
+    assert!(
+        after.summary.optional_skipped >= 8,
+        "迁移后的画像点应作为非必做点被移出分母，实际 {}",
+        after.summary.optional_skipped
+    );
+    let optional_views: Vec<&adm4_app::DecisionPointView> = views
+        .iter()
+        .filter(|view| view.optional && view.applicability == "active")
+        .collect();
+    assert!(
+        optional_views
+            .iter()
+            .any(|view| view.decision_id == "u.dimension"),
+        "u.dimension 应是非必做点：{:?}",
+        optional_views
+            .iter()
+            .map(|view| view.decision_id.as_str())
+            .collect::<Vec<_>>()
+    );
+    for view in &optional_views {
+        assert_eq!(view.requirement, PointRequirement::Optional);
+        assert_eq!(view.requirement_label, "非必做");
+        assert!(
+            after
+                .missing
+                .iter()
+                .flat_map(|group| group.items.iter())
+                .all(|item| item.decision_id != view.decision_id),
+            "未作答的非必做点不该进缺失项：{}",
+            view.decision_id
+        );
+    }
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F3 场景：通用层模板跨包预填（含跳过计数）+ 项目重命名 + 设计空间缓存等价性。
+//
+// 三项都走门面 `AppServices`（GUI/CLI 的唯一入口），用仓内真实设计空间的隔离副本，
+// 从而同时验证「T10 迁入的 26 份 universal 模板确实可用」。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn universal_template_prefills_across_packs_via_services() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f3_prefill_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+
+    // 取一份 T10 迁入的通用层内置模板（Certified，答卷含 u.* 画像点与 v2.* 检查单点）。
+    let universal = services.templates().list("universal").unwrap();
+    assert!(
+        universal.len() >= 25,
+        "T10 应迁入 25+ 份通用层模板，实际 {}",
+        universal.len()
+    );
+    let template = universal
+        .iter()
+        .find(|template| template.template_id == "builtin_midcore_arknights")
+        .expect("应能取到内置模板");
+    assert!(template.is_universal());
+    assert_eq!(
+        template.certification.status,
+        CertificationStatus::Certified
+    );
+    let template_id = template.template_id.clone();
+
+    // 列表接口：lane_defense 的可取用集合必须包含通用层模板（此前被按包过滤掉）。
+    let available = services.templates().list_available("lane_defense").unwrap();
+    assert!(
+        available
+            .iter()
+            .any(|item| item.template_id == template_id && item.is_universal()),
+        "通用层模板必须出现在品类包的可取用列表里"
+    );
+    // 严格按目录的 list 里不该有它（逆向产线仍按 genre_pack 写回原目录）。
+    assert!(
+        services
+            .templates()
+            .list("lane_defense")
+            .unwrap()
+            .iter()
+            .all(|item| item.template_id != template_id)
+    );
+
+    // 跨包预填：模板包是 universal，项目包是 lane_defense。
+    let archive_id = services
+        .project_new("通用模板预填验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    let report = services
+        .project_prefill_template(&archive_id, &template_id)
+        .unwrap();
+
+    // 通用层答卷全是通用层决策点，而通用层对每个品类包都装配在内，因此整卷可用、零跳过。
+    assert_eq!(report.applied, template.answers.len());
+    assert_eq!(report.skipped_count(), 0, "{:?}", report.skipped);
+    assert!(
+        report.multi_options_applied > 0,
+        "v2.gameplay_system_scope 是 multi+allow_primary 点，附加系统应随模板写入"
+    );
+
+    let state = services.load_authoring_state(&archive_id).unwrap();
+    assert!(matches!(
+        state.template_mode,
+        TemplateMode::Prefilled { .. }
+    ));
+    // 画像点（F3-4 新补）确实被写入：证明补选项后 V2 画像答案不再全军覆没。
+    let profile_written: Vec<&String> = state
+        .selections
+        .keys()
+        .filter(|id| id.starts_with("u."))
+        .collect();
+    assert!(
+        profile_written.len() >= 5,
+        "补齐选项后画像答案应能落地，实际写入 {:?}",
+        profile_written
+    );
+    // 多选点：附加选项与主选按模板落库。
+    let scope = state
+        .selections
+        .get("v2.gameplay_system_scope")
+        .expect("玩法系统范围点应被预填");
+    assert!(scope.selected_count() > 1);
+    assert!(scope.primary_option.is_some());
+    assert!(scope.contains_option(scope.primary_option.as_deref().unwrap()));
+    // 预填一律未确认（逐条确认 + 换皮门照旧）。
+    assert!(
+        state
+            .selections
+            .values()
+            .all(|item| !item.confirmed_by_user)
+    );
+
+    // ---- 跳过计数：造一份含「本包装配空间外条目」的通用层模板，验证逐条跳过 + 落日志 ----
+    // 真实迁移模板整卷可用（上面已断言零跳过），所以这条路径必须专门造数据来覆盖：
+    // 静默丢弃是 R2 红线，不能只靠单元测试保。
+    let mut patched = template.clone();
+    patched.template_id = "tpl_f3_skip_probe".into();
+    patched.game_name = "虚构探针甲".into();
+    patched.answers.truncate(2);
+    let evidence = patched.answers[0].evidence.clone();
+    let probe = |decision_id: &str, option_id: &str| adm4_template::TemplateAnswer {
+        decision_id: decision_id.into(),
+        option_id: option_id.into(),
+        parameters: ParameterValues::None,
+        evidence: evidence.clone(),
+        notes: String::new(),
+        crosscheck_agreed: None,
+        additional_options: Vec::new(),
+        primary_option: None,
+    };
+    // 1. 决策点不存在（其它品类包的专属点）；2. 选项不存在。
+    patched.answers.push(probe("gs.grid_shape", "hex_grid"));
+    patched.answers.push(probe("u.platform", "ghost_option"));
+    services.templates().save_draft(&patched).unwrap();
+
+    let probe_archive = services
+        .project_new("跳过计数验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    let probe_report = services
+        .project_prefill_template(&probe_archive, "tpl_f3_skip_probe")
+        .unwrap();
+    assert_eq!(probe_report.applied, 2);
+    assert_eq!(
+        probe_report.skipped_count(),
+        2,
+        "{:?}",
+        probe_report.skipped
+    );
+    let skipped: Vec<(&str, &str)> = probe_report
+        .skipped
+        .iter()
+        .map(|skip| (skip.decision_id.as_str(), skip.option_id.as_str()))
+        .collect();
+    assert!(
+        skipped.contains(&("gs.grid_shape", "hex_grid")),
+        "{skipped:?}"
+    );
+    assert!(
+        skipped.contains(&("u.platform", "ghost_option")),
+        "{skipped:?}"
+    );
+    assert!(
+        probe_report
+            .skipped
+            .iter()
+            .all(|skip| !skip.reason.trim().is_empty()),
+        "每条跳过都必须给出原因"
+    );
+    assert!(probe_report.summary().contains("跳过 2 条"));
+    // 被跳过的点不能留下任何选择（禁止半写入）。
+    let probe_state = services.load_authoring_state(&probe_archive).unwrap();
+    assert!(!probe_state.selections.contains_key("gs.grid_shape"));
+    assert!(!probe_state.selections.contains_key("u.platform"));
+
+    // 跳过明细进了运行日志（不只在返回值里）。
+    let logs = services.log.tail(400).unwrap();
+    assert!(
+        logs.iter().any(|entry| entry.message.contains("跳过")
+            && entry.message.contains("tpl_f3_skip_probe")
+            && entry.message.contains("gs.grid_shape")),
+        "跳过明细必须落运行日志"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+#[test]
+fn project_rename_validates_and_logs() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f3_rename_{}", std::process::id()));
+    std::fs::remove_dir_all(&temp).ok();
+    let data_root = DataRoot::new(&temp).unwrap();
+    save_config(
+        &data_root,
+        &AppConfig {
+            design_space_root: design_space_root().to_string_lossy().into_owned(),
+            ai_provider: None,
+        },
+    )
+    .unwrap();
+    let services = AppServices::open(Some(temp.clone())).unwrap();
+    let archive_id = services
+        .project_new("旧名字", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+
+    // 空白名称被拒，且状态不变。
+    assert!(services.project_rename(&archive_id, "   ").is_err());
+    assert_eq!(
+        services
+            .load_authoring_state(&archive_id)
+            .unwrap()
+            .project_name,
+        "旧名字"
+    );
+
+    services
+        .project_rename(&archive_id, "  霜落峡谷防卫计划 ")
+        .unwrap();
+    let state = services.load_authoring_state(&archive_id).unwrap();
+    assert_eq!(state.project_name, "霜落峡谷防卫计划");
+    // 工作台摘要/画像读的都是创作状态，重命名即刻可见。
+    assert_eq!(
+        services.project_profile(&archive_id).unwrap().project_name,
+        "霜落峡谷防卫计划"
+    );
+    assert_eq!(
+        services
+            .workbench_overview(&archive_id)
+            .unwrap()
+            .summary
+            .project_name,
+        "霜落峡谷防卫计划"
+    );
+    // 存档 manifest 的展示名同步跟随（project list 与工作台不会出现两个名字）。
+    assert_eq!(
+        services
+            .project_list()
+            .unwrap()
+            .iter()
+            .find(|manifest| manifest.archive_id == archive_id)
+            .map(|manifest| manifest.project_name.as_str()),
+        Some("霜落峡谷防卫计划")
+    );
+    assert!(
+        services
+            .log
+            .tail(50)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.message.contains("重命名") && entry.message.contains("旧名字")),
+        "重命名必须落运行日志"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+#[test]
+fn design_space_cache_is_hit_and_behaviourally_equivalent() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f3_cache_{}", std::process::id()));
+    std::fs::remove_dir_all(&temp).ok();
+    let data_root = DataRoot::new(&temp).unwrap();
+    save_config(
+        &data_root,
+        &AppConfig {
+            design_space_root: design_space_root().to_string_lossy().into_owned(),
+            ai_provider: None,
+        },
+    )
+    .unwrap();
+    let services = AppServices::open(Some(temp.clone())).unwrap();
+
+    // 命中判定不看耗时（会 flaky），看是不是同一份 Arc。
+    let first = services.load_space_shared("lane_defense").unwrap();
+    let second = services.load_space_shared("lane_defense").unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&first, &second),
+        "同一包的第二次装载必须命中缓存"
+    );
+    let other = services.load_space_shared("grid_strategy").unwrap();
+    assert!(!std::sync::Arc::ptr_eq(&first, &other), "不同包各自一份");
+
+    // 行为等价：缓存返回的空间与直接装载的完全一致（决策点集合、组织维度、包元数据）。
+    let owned = services.load_space("lane_defense").unwrap();
+    assert_eq!(owned.pack, first.pack);
+    assert_eq!(owned.universal_version, first.universal_version);
+    assert_eq!(owned.graph.points().len(), first.graph.points().len());
+    assert_eq!(
+        owned
+            .graph
+            .points()
+            .iter()
+            .map(|point| point.id.as_str())
+            .collect::<Vec<_>>(),
+        first
+            .graph
+            .points()
+            .iter()
+            .map(|point| point.id.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        owned
+            .organization
+            .domains()
+            .iter()
+            .map(|domain| domain.id.as_str())
+            .collect::<Vec<_>>(),
+        first
+            .organization
+            .domains()
+            .iter()
+            .map(|domain| domain.id.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    // 不存在的包仍旧 fail-closed，且失败不进缓存（重复调用照旧报错）。
+    assert!(services.load_space_shared("no_such_pack").is_err());
+    assert!(services.load_space("no_such_pack").is_err());
 
     std::fs::remove_dir_all(&temp).ok();
 }

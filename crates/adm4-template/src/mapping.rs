@@ -177,6 +177,9 @@ fn parse_answer(
         evidence,
         notes,
         crosscheck_agreed: None,
+        // S2 映射当前只产出单选答案（AI 提示词不含多选契约）；多选答卷来自批量迁移通道。
+        additional_options: Vec::new(),
+        primary_option: None,
     })
 }
 

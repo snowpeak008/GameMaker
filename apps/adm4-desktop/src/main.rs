@@ -55,6 +55,9 @@ struct UiState {
     pending_turn: Option<InterviewTurnDto>,
     reverse_pack: Option<String>,
     reverse_template: Option<String>,
+    /// 选中模板的**所属包**：通用层模板为 `universal`，与左栏选中的包可以不同。
+    /// 逆向产线按它读写模板文件（`refresh_reverse` 每次刷新时同步）。
+    reverse_template_pack: Option<String>,
 }
 
 impl UiState {
@@ -1459,7 +1462,7 @@ fn hook_reverse_callbacks(
     }
 }
 
-/// 认证模板预填到当前项目：走既有取用关卡（`approved_for_prefill`）+ 引擎预填。
+/// 认证模板预填到当前项目：走门面的 `project_prefill_template`（取用关卡 + 跳过计数 + 日志）。
 /// 预填结果 provenance=Template、confirmed=false——必须逐条确认，且换皮门会拦截含原游戏名的理由。
 fn template_prefill(services: &AppServices, state: &Rc<RefCell<UiState>>) -> Adm4Result<String> {
     let (archive, template_id) = {
@@ -1475,22 +1478,24 @@ fn template_prefill(services: &AppServices, state: &Rc<RefCell<UiState>>) -> Adm
     let Some(template_id) = template_id else {
         return Err(Adm4Error::invalid_input("请先在左侧选择模板"));
     };
-    let project = services.load_authoring_state(&archive)?;
-    let template = services
-        .templates()
-        .approved_for_prefill(&project.genre_pack, &template_id)?;
-    let applied =
-        services.with_project(&archive, |engine| engine.prefill_from_template(&template))?;
+    let report = services.project_prefill_template(&archive, &template_id)?;
     Ok(format!(
-        "模板 {template_id} 预填 {applied} 条（未确认状态：请逐条确认，并重写含原游戏名的理由以过换皮门）"
+        "模板 {template_id} 预填：{}（未确认状态：请逐条确认，并重写含原游戏名的理由以过换皮门）",
+        report.summary()
     ))
 }
 
 /// 逆向操作的前置：已选品类包与模板，缺一即报错并中止。
+///
+/// 返回的包是**模板所属包**（通用层模板即 `universal`），不是左栏选中的包——
+/// 产线五步都要按模板所在目录读写。
 fn reverse_pair(window: &MainWindow, state: &Rc<RefCell<UiState>>) -> Option<(String, String)> {
     let borrowed = state.borrow();
     match (
-        borrowed.reverse_pack.clone(),
+        borrowed
+            .reverse_template_pack
+            .clone()
+            .or_else(|| borrowed.reverse_pack.clone()),
         borrowed.reverse_template.clone(),
     ) {
         (Some(pack), Some(template)) => Some((pack, template)),
@@ -1511,6 +1516,10 @@ fn clear_reverse_results(window: &MainWindow) {
 }
 
 /// 刷新模板列表 + 选中模板的产线五步状态与已持久化的冲突清单。
+///
+/// 列表用 `list_available`：本包模板 + 通用层模板（`genre_pack=universal`）。后者跨包可用，
+/// 按包过滤会让 T10 迁入的 26 份内置模板在 UI 里既看不见也选不中。
+/// 选中模板的**所属包**另记在 `reverse_template_pack`——逆向产线要写回原目录，不能按左栏包走。
 fn refresh_reverse(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
     let Some(pack) = state.borrow().reverse_pack.clone() else {
         window.set_template_list(ModelRc::new(VecModel::from(Vec::<TemplateRow>::new())));
@@ -1518,7 +1527,7 @@ fn refresh_reverse(window: &MainWindow, services: &AppServices, state: &Rc<RefCe
         window.set_reverse_selected(SharedString::from("（请先选择品类包）"));
         return;
     };
-    let templates = match services.templates().list(&pack) {
+    let templates = match services.templates().list_available(&pack) {
         Ok(templates) => templates,
         Err(error) => {
             window.set_template_list(ModelRc::new(VecModel::from(Vec::<TemplateRow>::new())));
@@ -1531,15 +1540,24 @@ fn refresh_reverse(window: &MainWindow, services: &AppServices, state: &Rc<RefCe
         .iter()
         .map(|template| {
             let conflicts = persisted_conflict_count(template);
+            let scope = if template.is_universal() {
+                "通用层"
+            } else {
+                "本包"
+            };
             TemplateRow {
                 id: template.template_id.clone().into(),
                 game: template.game_name.clone().into(),
                 status: status_label(template.certification.status).into(),
                 depth: format!("{:?}", template.depth_reached).into(),
                 answers: if conflicts == 0 {
-                    format!("答卷 {} 条", template.answers.len()).into()
+                    format!("{scope} · 答卷 {} 条", template.answers.len()).into()
                 } else {
-                    format!("答卷 {} 条，冲突 {conflicts} 条", template.answers.len()).into()
+                    format!(
+                        "{scope} · 答卷 {} 条，冲突 {conflicts} 条",
+                        template.answers.len()
+                    )
+                    .into()
                 },
                 active: selected_id.as_deref() == Some(template.template_id.as_str()),
             }
@@ -1547,18 +1565,23 @@ fn refresh_reverse(window: &MainWindow, services: &AppServices, state: &Rc<RefCe
         .collect();
     window.set_template_list(ModelRc::new(VecModel::from(rows)));
 
-    let selected =
-        selected_id.and_then(|id| templates.iter().find(|template| template.template_id == id));
+    let selected = selected_id
+        .and_then(|id| templates.iter().find(|template| template.template_id == id))
+        .cloned();
+    state.borrow_mut().reverse_template_pack = selected
+        .as_ref()
+        .map(|template| template.genre_pack.clone());
     match selected {
         Some(template) => {
             window.set_reverse_selected(SharedString::from(format!(
-                "{pack}/{} · {} · 状态：{}",
+                "{}/{} · {} · 状态：{}",
+                template.genre_pack,
                 template.template_id,
                 template.game_name,
                 status_label(template.certification.status)
             )));
             window.set_template_steps(step_rows(template.certification.status));
-            window.set_template_conflicts(persisted_conflicts(template));
+            window.set_template_conflicts(persisted_conflicts(&template));
         }
         None => {
             window.set_reverse_selected(SharedString::from(format!(
@@ -1856,7 +1879,7 @@ fn load_workbench_data(services: &AppServices, archive: &str) -> Adm4Result<Work
     let points = services.decision_points(archive)?;
     let profile = services.project_profile(archive)?;
     let domains = services
-        .load_space(&project.genre_pack)?
+        .load_space_shared(&project.genre_pack)?
         .organization
         .domains()
         .to_vec();

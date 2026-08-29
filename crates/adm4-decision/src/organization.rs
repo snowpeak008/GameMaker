@@ -251,6 +251,10 @@ pub struct ProgressCounts {
     pub applicable: usize,
     /// 显式 N/A 的决策点数（不进分母，但要在案可见）。
     pub not_applicable: usize,
+    /// 非必做（`requirement=Optional`）且未作答的适用点数：不进分母，在案可见。
+    /// 与 `compute_completeness` 的 `optional_skipped` 同源同义。
+    #[serde(default)]
+    pub optional_skipped: usize,
     /// 该单元下的决策点总数（含未激活/超深度档，供「这个领域一共多少事」展示）。
     pub total_points: usize,
 }
@@ -344,11 +348,14 @@ pub fn aggregate_progress(
         entry.1.push(point.id.clone());
         match applicability.get(&point.id) {
             Some(PointApplicability::Active) => {
+                let selection = selections.get(&point.id);
+                // 与 `compute_completeness` 同一口径：非必做点未作答不进分母。
+                if crate::completeness::optional_unanswered(point, selections) {
+                    entry.0.optional_skipped += 1;
+                    continue;
+                }
                 entry.0.applicable += 1;
-                if selections
-                    .get(&point.id)
-                    .is_some_and(|selection| selection.confirmed_by_user)
-                {
+                if selection.is_some_and(|selection| selection.confirmed_by_user) {
                     entry.0.confirmed += 1;
                 }
             }
@@ -370,6 +377,7 @@ pub fn aggregate_progress(
         domain_counts.confirmed += counts.confirmed;
         domain_counts.applicable += counts.applicable;
         domain_counts.not_applicable += counts.not_applicable;
+        domain_counts.optional_skipped += counts.optional_skipped;
         domain_counts.total_points += counts.total_points;
         *domain_node_counts.entry(domain_id).or_default() += 1;
         nodes.push(NodeProgress {
@@ -393,6 +401,7 @@ pub fn aggregate_progress(
         total.confirmed += counts.confirmed;
         total.applicable += counts.applicable;
         total.not_applicable += counts.not_applicable;
+        total.optional_skipped += counts.optional_skipped;
         total.total_points += counts.total_points;
         domains.push(DomainProgress {
             domain_id: domain.id.clone(),
@@ -555,6 +564,35 @@ mod tests {
         assert_eq!(progress.total.confirmed, 1);
         let reserved_node = progress.node(UNASSIGNED_NODE_ID).expect("保留节点应出现");
         assert_eq!(reserved_node.decision_ids, vec!["u.legacy".to_string()]);
+    }
+
+    /// 领域/节点聚合与完成度同口径：未作答的非必做点进 `optional_skipped`，不进 `applicable`。
+    #[test]
+    fn optional_points_are_excluded_from_domain_denominator() {
+        let organization = organization();
+        let mut optional = point("u.dimension", Some("vision"), DesignLevel::L0);
+        optional.requirement = crate::types::PointRequirement::Optional;
+        let graph = DecisionGraph::new(vec![
+            point("u.vision", Some("vision"), DesignLevel::L0),
+            optional,
+        ])
+        .unwrap();
+        let selections: BTreeMap<_, _> = [confirmed("u.vision")].into_iter().collect();
+        let applicability = compute_applicability(
+            &graph,
+            &selections,
+            &BTreeMap::new(),
+            DepthProfile::new(DesignLevel::L4).unwrap(),
+        );
+        let progress = aggregate_progress(&graph, &organization, &selections, &applicability);
+        let positioning = progress.domain("positioning").expect("领域应出现");
+        assert_eq!(positioning.counts.applicable, 1);
+        assert_eq!(positioning.counts.confirmed, 1);
+        assert_eq!(positioning.counts.optional_skipped, 1);
+        assert_eq!(positioning.counts.total_points, 2);
+        assert_eq!(positioning.percent, 100);
+        assert_eq!(progress.total.applicable, 1);
+        assert_eq!(progress.total.optional_skipped, 1);
     }
 
     #[test]

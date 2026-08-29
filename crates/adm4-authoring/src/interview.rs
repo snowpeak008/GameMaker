@@ -4,7 +4,7 @@ use adm4_ai::{AiProvider, AiRequest};
 use adm4_contracts::{MatrixCell, TypedValue};
 use adm4_decision::{
     DecisionId, DecisionOption, DecisionPoint, DesignLevel, ParameterSchema, ParameterValues,
-    PointApplicability, Provenance,
+    Provenance, counts_toward_completeness,
 };
 use adm4_foundation::{Adm4Error, Adm4Result, UtcTimestamp};
 use serde::{Deserialize, Serialize};
@@ -168,10 +168,9 @@ impl InterviewService {
         let applicability = engine.applicability();
         let mut per_level: BTreeMap<DesignLevel, LevelProgress> = BTreeMap::new();
         for point in engine.space().graph.points() {
-            if !matches!(
-                applicability.get(&point.id),
-                Some(PointApplicability::Active)
-            ) {
+            // 与完成度分母同口径：未作答的非必做点不计入某层的 applicable，
+            // 否则 `current_level` 会永远停在该层，而 `propose_next` 已返回 Complete。
+            if !counts_toward_completeness(point, &applicability, &engine.state().selections) {
                 continue;
             }
             let entry = per_level.entry(point.level).or_insert(LevelProgress {

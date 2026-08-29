@@ -10,8 +10,9 @@ mod types;
 
 pub use applicability::{ApplicabilityMap, PointApplicability, compute_applicability};
 pub use completeness::{
-    CompletenessReport, MissingItem, compute_completeness, enumerate_axis,
-    validate_option_parameters, validate_parameters, validate_selection_mode,
+    CompletenessReport, MissingItem, compute_completeness, counts_toward_completeness,
+    enumerate_axis, optional_unanswered, validate_option_parameters, validate_parameters,
+    validate_selection_mode,
 };
 pub use consistency::{
     RowReference, RowReferenceViolation, check_row_references, row_reference_problems_by_decision,

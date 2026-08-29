@@ -105,6 +105,33 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             }
             Ok(())
         }
+        (Some("project"), Some("rename")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let name = required(rest.next(), "新项目名")?;
+            services.project_rename(archive_id, name)?;
+            println!("项目 {archive_id} 已重命名为：{name}");
+            Ok(())
+        }
+        (Some("project"), Some("prefill")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let template_id = required(rest.next(), "模板 id")?;
+            let report = services.project_prefill_template(archive_id, template_id)?;
+            println!("模板 {template_id} 预填：{}", report.summary());
+            // 跳过条目逐条列出（R2：禁止静默丢弃）；条目多时截断并给出总数。
+            for skip in report.skipped.iter().take(30) {
+                println!(
+                    "  - 跳过 {}/{}：{}",
+                    skip.decision_id, skip.option_id, skip.reason
+                );
+            }
+            if report.skipped_count() > 30 {
+                println!("  …… 其余 {} 条见运行日志", report.skipped_count() - 30);
+            }
+            println!(
+                "提示：预填条目需逐条用户确认（authoring confirm），并请改写选择理由完成换皮（authoring set-rationale）。"
+            );
+            Ok(())
+        }
         (Some("project"), Some("list")) => {
             for manifest in services.project_list()? {
                 println!(
@@ -148,11 +175,12 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             let engine = services.open_engine(archive_id)?;
             let report = engine.completeness();
             println!(
-                "完成度 {}/{}（{}%），阻塞 {} 项",
+                "完成度 {}/{}（{}%），阻塞 {} 项，非必做未作答 {} 项（不进分母）",
                 report.done,
                 report.total,
                 report.percent(),
-                report.blocking.len()
+                report.blocking.len(),
+                report.optional_skipped
             );
             for item in report.blocking.iter().take(30) {
                 println!("  - {}：{}", item.decision_id, item.detail);
@@ -216,10 +244,7 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             services.with_project(archive_id, |engine| {
                 engine.mark_not_applicable(
                     &decision,
-                    adm4_decision::NaJustification {
-                        reason_code: reason.clone(),
-                        note: String::new(),
-                    },
+                    adm4_decision::NaJustification::reason_code_only(reason.clone(), ""),
                 )
             })?;
             println!("已标记 {decision} 不适用（{reason}）");
@@ -335,6 +360,29 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
 
 fn template_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
     match sub {
+        Some("list") => {
+            let pack = required(args.first().copied(), "品类包 id")?;
+            // 列本包 + 通用层：universal 模板跨包可用，按包过滤会让它们在列表里彻底消失。
+            let templates = services.templates().list_available(pack)?;
+            println!("{pack} 可取用模板 {} 份：", templates.len());
+            for template in &templates {
+                println!(
+                    "  {}/{}  {}  状态 {:?}  深度 {:?}  答卷 {} 条{}",
+                    template.genre_pack,
+                    template.template_id,
+                    template.game_name,
+                    template.certification.status,
+                    template.depth_reached,
+                    template.answers.len(),
+                    if template.is_universal() {
+                        "  [通用层·跨包可预填]"
+                    } else {
+                        ""
+                    }
+                );
+            }
+            Ok(())
+        }
         Some("new-draft") => {
             let pack = required(args.first().copied(), "品类包 id")?;
             let template_id = required(args.get(1).copied(), "模板 id")?;
@@ -463,7 +511,7 @@ fn template_command(services: &AppServices, sub: Option<&str>, args: &[&str]) ->
         Some(other) => {
             println!("{TEMPLATE_HELP}");
             Err(Adm4Error::invalid_input(format!(
-                "未知 template 子命令：{other}（可用：new-draft/search-corpus/map/cross-check/review/certify/compare）"
+                "未知 template 子命令：{other}（可用：list/new-draft/search-corpus/map/cross-check/review/certify/compare）"
             )))
         }
     }
@@ -708,7 +756,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status|select|set-param|set-rationale|confirm|na <id> ...\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | status <id> | confirm <id> <阶段> <确认人> [备注]\n  template new-draft|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status|select|set-param|set-rationale|confirm|na <id> ...\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | status <id> | confirm <id> <阶段> <确认人> [备注]\n  template list|new-draft|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor"
     );
 }
 
@@ -728,11 +776,20 @@ const PROJECT_HELP: &str = r#"项目生命周期（project）
   adm4 project new <名称> --pack <包id> [--depth L4|L5|L6] [--template <模板id>]
       创建新项目存档。--depth 为设计深度档，默认 L4。
       --template 用已认证（Certified）模板预填；未认证模板会被拒。
+      模板先在项目品类包里找，找不到落通用层（genre_pack=universal 的模板跨包可预填）。
       预填条目需逐条用户确认（authoring confirm），并改写选择理由完成换皮
       （authoring set-rationale）——预填理由含模板游戏名会被冻结换皮门拦截（R5）。
 
   adm4 project list
       列出全部项目存档（id、名称、更新时间，按更新时间倒序）。
+
+  adm4 project rename <项目存档id> <新项目名>
+      重命名项目（空白名称被拒），变更落运行日志。
+
+  adm4 project prefill <项目存档id> <模板id>
+      把已认证模板预填进**已有**项目（project new --template 的事后版本）。
+      答卷里引用了本项目装配空间中不存在的决策点/选项时逐条跳过并打印原因与总数
+      （R2：不静默丢弃），跳过明细同时进运行日志。
 
   adm4 project doctor <项目存档id>
       存档体检：manifest 可读、内容指纹一致。发现问题逐条打印 [PROBLEM]。
@@ -813,6 +870,10 @@ const AI_HELP: &str = r#"AI 配置（ai）
 const TEMPLATE_HELP: &str = r#"逆向模板产线（template）——五步状态机只进不跳：Draft→Mapped→CrossChecked→HumanReviewed→Certified
 
 用法：
+  adm4 template list <包id>
+      列出该包**可取用**的模板：本包模板 + 通用层模板（genre_pack=universal，跨包可预填）。
+      每行给出「所属包/模板id  游戏名  状态  深度  答卷条数」；通用层模板带标记。
+
   adm4 template new-draft <包id> <模板id> --game <逆向目标游戏名> [--alias <别名>]... [--depth L4|L5|L6]
       S0 新建模板草稿。--game 必填：游戏名与别名在认证时自动登记进换皮词表（R5）。
       --alias 可重复传入多个别名；--depth 为逆向目标深度档，默认 L4。

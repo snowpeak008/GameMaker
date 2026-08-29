@@ -75,11 +75,54 @@ PACK_NODES = {
 GAMEPLAY_SCOPE_NODE = "gameplay_system_scope_decision"
 GAMEPLAY_SCOPE_POINT = "v2.gameplay_system_scope"
 
-# 二版画像字段 -> 四版既有 L0 决策点的可无损映射（不可无损的进未迁移清单）。
+# 二版画像字段 -> 四版 L0 画像决策点的可无损映射（不可无损的进未迁移清单）。
+#
+# F3 前只有 2 条：其余取值在四版没有承载，280 条画像答案全进未迁移清单。F3 给
+# universal/core.json 补了缺失选项（u.business_model / u.platform）与 8 个 requirement=optional
+# 的画像点（既有 id 一字未改），因此这里可以把绝大部分取值如实迁出。
+#
+# referenceGame / referenceArchetype 仍**故意不迁**：把参考游戏名做成选项 id/label 等于把换皮
+# 词写进设计空间，直接违反 R5（参考游戏名只许出现在 reference_games 字段与换皮词表）。
 PROFILE_ANSWER_MAP = {
     ("businessModel", "buyout"): ("u.business_model", "premium"),
+    ("businessModel", "free_to_play"): ("u.business_model", "free_to_play"),
     ("primaryPlatform", "mobile"): ("u.platform", "mobile"),
+    ("primaryPlatform", "pc_console"): ("u.platform", "pc_console"),
+    ("primaryPlatform", "cross_platform"): ("u.platform", "cross_platform"),
+    ("platformScope", "single_platform"): ("u.platform_scope", "single_platform"),
+    ("platformScope", "multi_platform"): ("u.platform_scope", "multi_platform"),
+    ("operationModel", "one_time_release"): ("u.operation_model", "one_time_release"),
+    ("operationModel", "content_updates"): ("u.operation_model", "content_updates"),
+    ("operationModel", "live_service"): ("u.operation_model", "live_service"),
+    ("socialModel", "solo"): ("u.social_model", "solo"),
+    ("socialModel", "async_light"): ("u.social_model", "async_light"),
+    ("socialModel", "community_driven"): ("u.social_model", "community_driven"),
+    ("socialModel", "multiplayer"): ("u.social_model", "multiplayer"),
+    ("targetSessionBand", "session_1_3"): ("u.session_band", "session_1_3"),
+    ("targetSessionBand", "session_3_10"): ("u.session_band", "session_3_10"),
+    ("targetSessionBand", "session_10_20"): ("u.session_band", "session_10_20"),
+    ("targetSessionBand", "session_20_40"): ("u.session_band", "session_20_40"),
+    ("targetSessionBand", "session_40_plus"): ("u.session_band", "session_40_plus"),
+    ("targetScale", "iaa_hypercasual"): ("u.target_scale", "iaa_hypercasual"),
+    ("targetScale", "midcore"): ("u.target_scale", "midcore"),
+    ("targetScale", "indie"): ("u.target_scale", "indie"),
+    ("targetScale", "3a"): ("u.target_scale", "triple_a"),
+    ("targetScale", "large_service"): ("u.target_scale", "large_service"),
+    ("contentRating", "all_ages"): ("u.content_rating", "all_ages"),
+    ("contentRating", "teen"): ("u.content_rating", "teen"),
+    ("contentRating", "mature_17_plus"): ("u.content_rating", "mature_17_plus"),
+    ("regionScope", "single_region"): ("u.region_scope", "single_region"),
+    ("regionScope", "global"): ("u.region_scope", "global"),
+    ("dimension", "2D"): ("u.dimension", "two_d"),
+    ("dimension", "2.5D"): ("u.dimension", "two_point_five_d"),
+    ("dimension", "3D"): ("u.dimension", "three_d"),
 }
+
+# 画像点所在的 L 层（写进模板的 depth_reached 计算）。
+PROFILE_ANSWER_LEVEL = "L0"
+
+# 画像字段中**禁止迁移**的换皮来源（R5）：迁出即把参考游戏名写进设计空间/答卷。
+PROFILE_SKIN_FIELDS = ("referenceGame", "referenceArchetype")
 
 
 def read_json(path):
@@ -177,6 +220,9 @@ def build_space(order, domains, shared, gameplay_options):
         "groups": 0,
         "options": 0,
         "levels": {},
+        # requirement 分布：unlocked（默认必做，激活驱动）/ baseline（领域入口，恒适用）/
+        # optional（二版 required=false 的非必做项）。
+        "requirements": {},
         "entry_points": [],
         "option_relations_skipped": 0,
     }
@@ -202,7 +248,11 @@ def build_space(order, domains, shared, gameplay_options):
                 ("description", "先确认本项目包含哪些玩法系统，再逐系统细化（二版玩法系统选项库的归宿）。"),
                 ("role_class", "meta_planning"),
             ]))
-            domain_points.append(gameplay_scope_point(gameplay_options))
+            scope_point = gameplay_scope_point(gameplay_options)
+            stats["options"] += len(scope_point["options"])
+            stats["levels"][scope_point["level"]] = stats["levels"].get(scope_point["level"], 0) + 1
+            stats["requirements"]["unlocked"] = stats["requirements"].get("unlocked", 0) + 1
+            domain_points.append(scope_point)
 
         for node in nodes:
             out_nodes.append(OrderedDict([
@@ -225,11 +275,23 @@ def build_space(order, domains, shared, gameplay_options):
                     stats["groups"] += 1
                     stats["options"] += len(point["options"])
                     stats["levels"][point["level"]] = stats["levels"].get(point["level"], 0) + 1
+                    requirement = point.get("requirement", "unlocked")
+                    stats["requirements"][requirement] = stats["requirements"].get(requirement, 0) + 1
                     domain_points.append(point)
 
         chain(domain_points)
-        domain_points[0]["requirement"] = "baseline"
-        stats["entry_points"].append(domain_points[0]["id"])
+        # 领域入口点必须是「恒适用」的必做点：非必做点当入口会让整域默认不进分母。
+        entry = next(
+            (point for point in domain_points if point.get("requirement") != "optional"),
+            None,
+        )
+        if entry is None:
+            raise SystemExit("领域 %s 的全部决策点都是非必做，无法选出恒适用入口点" % domain_id)
+        previous = entry.get("requirement", "unlocked")
+        entry["requirement"] = "baseline"
+        stats["requirements"][previous] = stats["requirements"].get(previous, 0) - 1
+        stats["requirements"]["baseline"] = stats["requirements"].get("baseline", 0) + 1
+        stats["entry_points"].append(entry["id"])
         points.extend(domain_points)
 
     return out_domains, out_nodes, points, stats
@@ -273,6 +335,11 @@ def build_point(node, item, group, is_first_group_of_node):
     if mda:
         point["mda_layer"] = mda
     point["selection_mode"] = selection_mode
+    # 二版选项组的 `required` 语义：false = 非必做。四版归宿是 PointRequirement::Optional
+    # （未作答不进完成度分母、不构成冻结门 1 阻塞项，作答后照常校验）。
+    # F3 前该字段被整体丢弃，非必做项一旦出现就会被当成必做点拉低完成度。
+    if not group.get("required", True):
+        point["requirement"] = "optional"
     point["options"] = options
     return point
 
@@ -359,33 +426,62 @@ def build_templates(points_by_id, order, domains, shared):
                         unmigrated.append((name, decision_id, "选项 %s 不在迁移后的选项集" % primary))
                         continue
                     extras = [item for item in selected if item != primary and item in option_ids]
+                    dropped = [item for item in selected
+                               if item != primary and item not in option_ids]
                     answer = OrderedDict([
                         ("decision_id", decision_id),
                         ("option_id", primary),
                         ("evidence", evidence()),
                     ])
-                    if extras:
-                        answer["notes"] = "二版多选：%s（主选 %s）；TemplateAnswer 暂无多选字段，仅主选可预填" % (
-                            "、".join(selected), primary)
-                        unmigrated.append((name, decision_id, "多选附加选项 %s 无 TemplateAnswer 承载" % "、".join(extras)))
+                    is_multi = point["selection_mode"]["mode"] == "multi"
+                    if extras and not is_multi:
+                        # 二版给单选组塞了多个已选：四版单选点无处安放，逐条进未迁移清单。
+                        unmigrated.append((name, decision_id,
+                                           "单选点收到多个已选选项 %s，只保留主选" % "、".join(extras)))
+                    elif extras:
+                        # F3：TemplateAnswer 已支持多选 + 主选，附加选项如实落盘。
+                        answer["additional_options"] = [
+                            OrderedDict([("option_id", item)]) for item in extras
+                        ]
+                        answer["notes"] = "二版多选：%s（主选 %s）" % ("、".join(selected), primary)
+                    if extras and is_multi and point["selection_mode"].get("allow_primary"):
+                        answer["primary_option"] = primary
+                    if dropped:
+                        unmigrated.append((name, decision_id,
+                                           "已选选项 %s 不在迁移后的选项集" % "、".join(dropped)))
                     answers.append(answer)
                     levels.add(point["level"])
 
         # 画像字段：只迁可无损映射的取值，其余进未迁移清单。
         for field, value in (state.get("profile") or {}).items():
+            if field in PROFILE_SKIN_FIELDS:
+                unmigrated.append((name, "profile.%s" % field,
+                                   "参考游戏名/原型描述属换皮词，禁止迁进设计空间或答卷（R5）"))
+                continue
             mapped = PROFILE_ANSWER_MAP.get((field, value))
             if mapped is None:
                 unmigrated.append((name, "profile.%s=%s" % (field, value),
-                                   "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"))
+                                   "四版画像决策点无该取值的对应选项（只增不改，需先补选项）"))
                 continue
             decision_id, option_id = mapped
+            # 画像点声明在 universal/core.json（本脚本不生成它，只读它做存在性核对）：
+            # 映射表写错点/选项时必须报出来，不能生成引用不存在选项的答卷。
+            target = points_by_id.get(decision_id)
+            if target is None:
+                unmigrated.append((name, "profile.%s=%s" % (field, value),
+                                   "画像决策点 %s 不在通用层清单内" % decision_id))
+                continue
+            if option_id not in {option["id"] for option in target["options"]}:
+                raise SystemExit(
+                    "PROFILE_ANSWER_MAP 指向的选项不存在：%s/%s（先补 core.json 的选项）"
+                    % (decision_id, option_id))
             answers.append(OrderedDict([
                 ("decision_id", decision_id),
                 ("option_id", option_id),
                 ("evidence", evidence()),
                 ("notes", "二版项目画像 %s=%s" % (field, value)),
             ]))
-            levels.add("L0")
+            levels.add(PROFILE_ANSWER_LEVEL)
 
         # 玩法系统选择 -> v2.gameplay_system_scope（主选取权重最高者）。
         systems = state.get("gameplaySystems") or {}
@@ -406,18 +502,21 @@ def build_templates(points_by_id, order, domains, shared):
                     return entry or 0
 
                 primary = max(valid, key=lambda item: (weight_of(item), item))
+                extras = [item for item in valid if item != primary]
                 answer = OrderedDict([
                     ("decision_id", GAMEPLAY_SCOPE_POINT),
                     ("option_id", primary),
                     ("evidence", evidence()),
                     ("notes", "二版已选玩法系统：%s（按权重取主选 %s）" % ("、".join(valid), primary)),
                 ])
+                # F3：玩法系统范围点是 multi + allow_primary，附加系统如实落盘（此前整批丢弃）。
+                if extras:
+                    answer["additional_options"] = [
+                        OrderedDict([("option_id", item)]) for item in extras
+                    ]
+                    answer["primary_option"] = primary
                 answers.append(answer)
                 levels.add("L3")
-                extras = [item for item in valid if item != primary]
-                if extras:
-                    unmigrated.append((name, GAMEPLAY_SCOPE_POINT,
-                                       "多选附加系统 %s 无 TemplateAnswer 承载" % "、".join(extras)))
         for custom in (systems.get("custom") or []):
             unmigrated.append((name, "gameplaySystems.custom", "自定义系统 %s 无对应选项" % custom))
 
@@ -577,7 +676,11 @@ def main():
         points,
     )
 
+    # 答卷映射的查表底座 = 本脚本生成的检查单点 + core.json 里手写的 u.* 画像点
+    # （画像点不由本脚本生成，只读它核对映射表指向的点/选项确实存在）。
     points_by_id = {point["id"]: point for point in points}
+    for core_point in read_json(os.path.join(UNIVERSAL, "core.json"))["decision_points"]:
+        points_by_id.setdefault(core_point["id"], core_point)
     templates, unmigrated, skin_words = build_templates(points_by_id, order, domains, shared)
     write_templates(templates)
 
@@ -597,9 +700,21 @@ def main():
         ("decision_points", len(points)),
         ("options", stats["options"]),
         ("levels", stats["levels"]),
+        ("requirements", stats["requirements"]),
         ("entry_points", stats["entry_points"]),
         ("templates", len(templates)),
         ("template_answers", sum(len(answers) for _, _, answers in templates)),
+        ("template_multi_answers", sum(
+            1
+            for _, _, answers in templates
+            for answer in answers
+            if answer.get("additional_options")
+        )),
+        ("template_additional_options", sum(
+            len(answer.get("additional_options") or [])
+            for _, _, answers in templates
+            for answer in answers
+        )),
         ("skin_words", len(words)),
         ("core_points_patched", core_patched),
         ("pack_patched", pack_report),

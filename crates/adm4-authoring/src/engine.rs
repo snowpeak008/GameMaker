@@ -1,28 +1,74 @@
-use crate::state::{AuthoringState, NaSignoff, TemplateMode};
+use crate::state::{AuthoringState, TemplateMode};
 use adm4_decision::{
     ApplicabilityMap, CompletenessReport, DecisionId, NaJustification, OptionId,
-    OrganizationProgress, ParameterValues, PointApplicability, PointRequirement, Provenance,
-    SelectedOption, Selection, aggregate_progress, compute_applicability, compute_completeness,
+    OrganizationProgress, ParameterValues, PointRequirement, Provenance, SelectedOption, Selection,
+    aggregate_progress, compute_applicability, compute_completeness, counts_toward_completeness,
     validate_option_parameters, validate_parameters,
 };
 use adm4_foundation::{Adm4Error, Adm4Result, UtcTimestamp};
 use adm4_space::DesignSpace;
 use adm4_template::Template;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+/// 模板预填时被跳过的一条答卷内容（R2：不静默丢弃，逐条在案）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrefillSkip {
+    pub decision_id: String,
+    /// 被跳过的选项 id（决策点整条跳过时是答卷的首选项）。
+    pub option_id: String,
+    pub reason: String,
+}
+
+/// 模板预填结果：写入了什么、跳过了什么。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PrefillReport {
+    /// 写入项目的决策点数。
+    pub applied: usize,
+    /// 写入的附加已选选项数（多选点；不含首选项）。
+    pub multi_options_applied: usize,
+    /// 逐条跳过的答卷内容。
+    pub skipped: Vec<PrefillSkip>,
+}
+
+impl PrefillReport {
+    pub fn skipped_count(&self) -> usize {
+        self.skipped.len()
+    }
+
+    /// 一行摘要（日志与 CLI/GUI 提示共用，保证「跳过多少」永远可见）。
+    pub fn summary(&self) -> String {
+        format!(
+            "写入 {} 个决策点（含 {} 个附加多选选项），跳过 {} 条",
+            self.applied,
+            self.multi_options_applied,
+            self.skipped_count()
+        )
+    }
+}
 
 /// 创作引擎：装配设计空间 + 项目状态，提供全部经校验的变更操作。
+///
+/// 设计空间以 `Arc` 持有：它在运行期只读，一个包的空间被多个引擎实例共享是常态
+/// （工作台一次交互要开好几个只读引擎）。迁移后通用层清单 4.7MB，按值持有意味着
+/// 每开一个引擎就深拷一遍整张决策图。`new` 接受 `impl Into<Arc<DesignSpace>>`，
+/// 因此既可以传 `DesignSpace`（自动装箱）也可以传门面缓存里的 `Arc`（零拷贝）。
 pub struct AuthoringEngine {
-    space: DesignSpace,
+    space: Arc<DesignSpace>,
     state: AuthoringState,
 }
 
 impl AuthoringEngine {
-    pub fn new(space: DesignSpace, state: AuthoringState) -> Adm4Result<Self> {
+    pub fn new(space: impl Into<Arc<DesignSpace>>, mut state: AuthoringState) -> Adm4Result<Self> {
+        let space = space.into();
         if state.genre_pack != space.pack.pack_id {
             return Err(Adm4Error::conflict(format!(
                 "项目品类包 {} 与加载的设计空间 {} 不一致",
                 state.genre_pack, space.pack.pack_id
             )));
         }
+        // 旧存档的豁免署名并行 map 就地合并进 NaJustification（署名只留一个真相源）。
+        state.adopt_legacy_na_signoffs();
         Ok(Self { space, state })
     }
 
@@ -350,8 +396,12 @@ impl AuthoringEngine {
         if justification.reason_code.trim().is_empty() {
             return Err(Adm4Error::invalid_input("N/A 必须提供结构化理由码"));
         }
+        if justification.is_signed() {
+            return Err(Adm4Error::invalid_input(
+                "baseline 理由码跳过不带署名；需要署名的人工豁免请用 set_not_applicable",
+            ));
+        }
         self.state.selections.remove(decision_id);
-        self.state.na_signoffs.remove(decision_id);
         self.state
             .not_applicable
             .insert(decision_id.to_string(), justification);
@@ -393,11 +443,6 @@ impl AuthoringEngine {
             NaJustification {
                 reason_code: reason_code.trim().to_string(),
                 note: note.trim().to_string(),
-            },
-        );
-        self.state.na_signoffs.insert(
-            decision_id.to_string(),
-            NaSignoff {
                 actor: actor.trim().to_string(),
                 at: UtcTimestamp::now().to_iso8601(),
             },
@@ -449,8 +494,8 @@ impl AuthoringEngine {
     }
 
     fn clear_na_records(&mut self, decision_id: &str) {
+        // 署名已并入 NaJustification，删一处即全清（不会再留下幽灵署名）。
         self.state.not_applicable.remove(decision_id);
-        self.state.na_signoffs.remove(decision_id);
     }
 
     /// 清除选择：级联检查依赖本选项的其它选择。
@@ -488,28 +533,108 @@ impl AuthoringEngine {
         Ok(())
     }
 
-    /// 模板预填（仅 Approved 模板；调用方通过 TemplateLibrary::approved_for_prefill 取得）。
-    pub fn prefill_from_template(&mut self, template: &Template) -> Adm4Result<usize> {
+    /// 模板预填（仅 Certified 模板；调用方通过 `TemplateLibrary::approved_for_prefill` 取得）。
+    ///
+    /// 包匹配规则：模板包与项目包相同，**或**模板是通用层模板（`genre_pack=universal`）——
+    /// 通用层模板逆向的全是跨品类决策点，绑定单一品类包只会让 26 份内置模板全体不可用。
+    ///
+    /// 答卷里引用了装配空间中不存在的决策点/选项时**逐条跳过并计数在案**（R2：禁止静默丢弃），
+    /// 结果落在 [`PrefillReport::skipped`] 里，由调用方展示/记日志。
+    pub fn prefill_from_template(&mut self, template: &Template) -> Adm4Result<PrefillReport> {
         if !template.is_approved() {
             return Err(Adm4Error::blocked(format!(
                 "模板 {} 未认证，不能预填",
                 template.template_id
             )));
         }
-        if template.genre_pack != self.state.genre_pack {
+        if template.genre_pack != self.state.genre_pack && !template.is_universal() {
             return Err(Adm4Error::conflict(format!(
-                "模板品类包 {} 与项目 {} 不一致",
+                "模板品类包 {} 与项目 {} 不一致（只有 universal 模板可跨包预填）",
                 template.genre_pack, self.state.genre_pack
             )));
         }
-        let mut applied = 0;
+        let mut report = PrefillReport::default();
         for answer in &template.answers {
             let Some(point) = self.space.graph.point(&answer.decision_id) else {
-                continue; // 答卷针对旧版清单的条目：跳过并由 coverage 呈现。
+                // 答卷针对旧版清单、或通用层模板在本包装配里找不到该点：跳过并计数。
+                report.skipped.push(PrefillSkip {
+                    decision_id: answer.decision_id.clone(),
+                    option_id: answer.option_id.clone(),
+                    reason: "决策点不在当前装配空间（通用层 + 本品类包）内".to_string(),
+                });
+                continue;
             };
             if point.option(&answer.option_id).is_none() {
+                report.skipped.push(PrefillSkip {
+                    decision_id: answer.decision_id.clone(),
+                    option_id: answer.option_id.clone(),
+                    reason: "首选项不在该决策点的选项集内".to_string(),
+                });
                 continue;
             }
+            // 附加选项：单选点不接受，选项不存在则逐条跳过——两种情形都不静默丢弃。
+            let mut additional_options = Vec::new();
+            for extra in &answer.additional_options {
+                if !point.is_multi() {
+                    report.skipped.push(PrefillSkip {
+                        decision_id: answer.decision_id.clone(),
+                        option_id: extra.option_id.clone(),
+                        reason: "决策点是单选点，附加选项无处安放".to_string(),
+                    });
+                    continue;
+                }
+                if point.option(&extra.option_id).is_none() {
+                    report.skipped.push(PrefillSkip {
+                        decision_id: answer.decision_id.clone(),
+                        option_id: extra.option_id.clone(),
+                        reason: "附加选项不在该决策点的选项集内".to_string(),
+                    });
+                    continue;
+                }
+                if extra.option_id == answer.option_id
+                    || additional_options
+                        .iter()
+                        .any(|item: &SelectedOption| item.option_id == extra.option_id)
+                {
+                    report.skipped.push(PrefillSkip {
+                        decision_id: answer.decision_id.clone(),
+                        option_id: extra.option_id.clone(),
+                        reason: "附加选项与已写入的选项重复".to_string(),
+                    });
+                    continue;
+                }
+                additional_options.push(SelectedOption {
+                    option_id: extra.option_id.clone(),
+                    parameters: extra.parameters.clone(),
+                    rationale: String::new(),
+                    template_original: Some(extra.parameters.clone()),
+                });
+            }
+            // 主选：只在开了 allow_primary 且该选项确实被写入时才落，否则跳过并计数。
+            let primary_option = match answer.primary_option.as_deref() {
+                None => None,
+                Some(primary) => {
+                    let written = primary == answer.option_id
+                        || additional_options
+                            .iter()
+                            .any(|item| item.option_id == primary);
+                    if point.requires_primary() && written {
+                        Some(primary.to_string())
+                    } else {
+                        report.skipped.push(PrefillSkip {
+                            decision_id: answer.decision_id.clone(),
+                            option_id: primary.to_string(),
+                            reason: if written {
+                                "该决策点未开启 allow_primary，主选标记无处安放".to_string()
+                            } else {
+                                "主选不在写入项目的已选集合内".to_string()
+                            },
+                        });
+                        None
+                    }
+                }
+            };
+            report.multi_options_applied += additional_options.len();
             self.state.selections.insert(
                 answer.decision_id.clone(),
                 Selection {
@@ -522,27 +647,54 @@ impl AuthoringEngine {
                     },
                     confirmed_by_user: false,
                     template_original: Some(answer.parameters.clone()),
-                    additional_options: Vec::new(),
-                    primary_option: None,
+                    additional_options,
+                    primary_option,
                 },
             );
-            applied += 1;
+            report.applied += 1;
         }
         self.state.template_mode = TemplateMode::Prefilled {
             template_id: template.template_id.clone(),
         };
         self.invalidate_red_team();
-        Ok(applied)
+        Ok(report)
+    }
+
+    /// 项目名规范化：去首尾空白，全空白即拒。
+    ///
+    /// 单独暴露是为了让门面在开事务**之前**就拿到规范化后的名字（存档 manifest 的展示名
+    /// 要与创作状态里的名字逐字一致，不能一个 trim 过一个没 trim）。
+    pub fn normalize_project_name(project_name: &str) -> Adm4Result<String> {
+        let trimmed = project_name.trim();
+        if trimmed.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "项目名不能为空白（重命名必须给出可读名称）",
+            ));
+        }
+        Ok(trimmed.to_string())
+    }
+
+    /// 项目重命名：非空白校验后写入创作状态（存档 manifest 的展示名由调用方同步）。
+    pub fn set_project_name(&mut self, project_name: &str) -> Adm4Result<()> {
+        self.state.project_name = Self::normalize_project_name(project_name)?;
+        self.state.bump_revision();
+        Ok(())
     }
 
     /// 当前激活但未完成的决策点（拓扑序），访谈游标与 UI 待办共用。
+    ///
+    /// 未作答的非必做点不进待办（口径与完成度分母一致）：它们不是「欠着的活」，
+    /// 访谈不追问，用户想填就在工作台检查单里直接选。
     pub fn pending_decisions(&self) -> Adm4Result<Vec<DecisionId>> {
         let applicability = self.applicability();
         let order = self.space.graph.topological_order()?;
         Ok(order
             .into_iter()
             .filter(|id| {
-                matches!(applicability.get(id), Some(PointApplicability::Active))
+                let Some(point) = self.space.graph.point(id) else {
+                    return false;
+                };
+                counts_toward_completeness(point, &applicability, &self.state.selections)
                     && !self
                         .state
                         .selections

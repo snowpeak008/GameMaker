@@ -98,6 +98,8 @@ impl MdaLayer {
 }
 
 /// 决策点适用性要求。
+///
+/// 旧清单没有该键 → `serde(default)` → `Unlocked`，与扩展前行为逐字节一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PointRequirement {
@@ -106,6 +108,28 @@ pub enum PointRequirement {
     Unlocked,
     /// 基线：建议回答，但可给结构化理由码显式 N/A。
     Baseline,
+    /// 非必做（二版检查单项 `required=false` 的归宿）：激活判定与 `Unlocked` 相同，
+    /// 但**未作答时不进完成度分母、不构成冻结门第 1 道的阻塞项**——设计者可以整域跳过
+    /// 而不把完成度拖低。
+    ///
+    /// 一旦作答就按普通点校验：作答等于把这个点纳入本项目的设计，参数缺格、主选缺失、
+    /// 悬空外键仍照常拦（否则 R2 会被绕过——非法答案会一路带进 `FrozenDesign` 与 C0）。
+    Optional,
+}
+
+impl PointRequirement {
+    /// 未作答时是否可以不进完成度分母。
+    pub fn is_optional(&self) -> bool {
+        matches!(self, Self::Optional)
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Unlocked => "激活驱动",
+            Self::Baseline => "基线点",
+            Self::Optional => "非必做",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -445,10 +469,51 @@ impl Selection {
     }
 }
 
-/// 显式 N/A 的结构化理由（机器可判定理由码，非散文）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// 显式 N/A 的结构化理由（机器可判定理由码，非散文）+ 人工豁免的署名（R3）。
+///
+/// 两条来路共用本结构：
+/// - baseline 点的理由码跳过：只有 `reason_code`（+可选 `note`），`actor`/`at` 留空；
+/// - 人工豁免适用点：`reason_code`/`note`/`actor` 三者非空，`at` 由引擎盖时间戳。
+///
+/// `actor`/`at` 原先存在 `AuthoringState.na_signoffs` 并行 map 里（T11 无权改本文件所致）。
+/// 并行 map 要求两处键始终同步，任一处漏删就会出现「豁免已解除但署名还在」的幽灵记录；
+/// 合并进本结构后这类不一致在类型层面就不可能发生。两个新键都 `serde(default)`，
+/// 旧存档（无这两键）照旧可读，其 N/A 视为无署名的历史条目。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct NaJustification {
     pub reason_code: String,
     #[serde(default)]
     pub note: String,
+    /// 人工豁免的署名（人名/账号）；baseline 理由码跳过与旧存档为空串。
+    #[serde(default)]
+    pub actor: String,
+    /// 署名时间（ISO8601）；无署名时为空串。
+    #[serde(default)]
+    pub at: String,
+}
+
+impl NaJustification {
+    /// baseline 点的理由码跳过（无署名）。
+    pub fn reason_code_only(reason_code: impl Into<String>, note: impl Into<String>) -> Self {
+        Self {
+            reason_code: reason_code.into(),
+            note: note.into(),
+            actor: String::new(),
+            at: String::new(),
+        }
+    }
+
+    /// 是否带人工署名（R3 可追责的豁免）。
+    pub fn is_signed(&self) -> bool {
+        !self.actor.trim().is_empty()
+    }
+
+    /// 署名展示文本（无署名时说明它是理由码跳过或旧存档条目）。
+    pub fn signature_label(&self) -> String {
+        if self.is_signed() {
+            format!("署名 {}（{}）", self.actor, self.at)
+        } else {
+            "无署名（baseline 理由码跳过或旧存档条目）".to_string()
+        }
+    }
 }

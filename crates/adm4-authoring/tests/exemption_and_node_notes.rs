@@ -132,15 +132,18 @@ fn exemption_leaves_and_reenters_the_denominator() {
     engine
         .set_not_applicable("u.scope", "out_of_scope", "本期不做范围扩展", "张三")
         .unwrap();
-    assert_eq!(
-        engine.applicability().get("u.scope"),
-        Some(&PointApplicability::NotApplicable(
-            adm4_decision::NaJustification {
-                reason_code: "out_of_scope".into(),
-                note: "本期不做范围扩展".into(),
-            }
-        ))
-    );
+    // F3：署名已并入 NaJustification（此前是 AuthoringState.na_signoffs 并行 map），
+    // 因此适用性里的 NotApplicable 载荷同时带理由码、说明与署名。
+    let applicability = engine.applicability();
+    let Some(PointApplicability::NotApplicable(justification)) = applicability.get("u.scope")
+    else {
+        panic!("u.scope 应被判为不适用：{:?}", applicability.get("u.scope"));
+    };
+    assert_eq!(justification.reason_code, "out_of_scope");
+    assert_eq!(justification.note, "本期不做范围扩展");
+    assert_eq!(justification.actor, "张三");
+    assert!(!justification.at.is_empty());
+    assert!(justification.is_signed());
     let exempted = engine.completeness();
     assert_eq!(
         (exempted.done, exempted.total),
@@ -150,13 +153,8 @@ fn exemption_leaves_and_reenters_the_denominator() {
     assert!(exempted.is_complete());
     // 在案：理由码计数 + 署名。
     assert_eq!(exempted.na_reason_counts.get("out_of_scope"), Some(&1));
-    let signoff = engine
-        .state()
-        .na_signoffs
-        .get("u.scope")
-        .expect("署名应落库");
-    assert_eq!(signoff.actor, "张三");
-    assert!(!signoff.at.is_empty());
+    // 并行 map 已淘汰：新写入不再往 na_signoffs 落任何东西。
+    assert!(engine.state().na_signoffs.is_empty());
 
     // 领域聚合：豁免点单列，不进分母。
     let progress = engine.organization_progress();
@@ -191,7 +189,10 @@ fn exemption_leaves_and_reenters_the_denominator() {
     );
     let restored = engine.completeness();
     assert_eq!((restored.done, restored.total), (1, 2));
-    assert!(engine.state().na_signoffs.is_empty());
+    assert!(
+        engine.state().not_applicable.is_empty(),
+        "署名随豁免一并清除"
+    );
     assert!(
         restored
             .blocking
@@ -211,6 +212,62 @@ fn selecting_an_option_clears_the_exemption_and_its_signature() {
         .unwrap();
     assert!(engine.state().not_applicable.is_empty());
     assert!(engine.state().na_signoffs.is_empty());
+}
+
+/// F3 顺带项：`NaJustification` 吸收 actor/at 后，F3 之前的存档（署名在
+/// `na_signoffs` 并行 map 里）必须仍可读，且署名不丢——读入后就地合并进 not_applicable。
+#[test]
+fn legacy_archive_signoff_map_is_adopted_on_load() {
+    let legacy = r#"{
+      "project_name": "旧存档",
+      "genre_pack": "na_test",
+      "pack_version": "0.1.0",
+      "depth_profile": { "target": "L4" },
+      "selections": {},
+      "not_applicable": {
+        "u.scope": { "reason_code": "out_of_scope", "note": "本期不做" },
+        "u.vision": { "reason_code": "no_persistence", "note": "理由码跳过" }
+      },
+      "na_signoffs": {
+        "u.scope": { "actor": "王五", "at": "2026-01-01T00:00:00Z" },
+        "u.ghost": { "actor": "幽灵", "at": "2026-01-01T00:00:00Z" }
+      }
+    }"#;
+    let mut state: AuthoringState =
+        serde_json::from_str(legacy).expect("F3 之前的存档必须仍可反序列化");
+    assert_eq!(state.na_signoffs.len(), 2);
+    assert_eq!(state.adopt_legacy_na_signoffs(), 1, "只合并仍在案的豁免");
+    assert!(state.na_signoffs.is_empty(), "并行 map 合并后清空");
+
+    let signed = state.not_applicable.get("u.scope").expect("豁免应在案");
+    assert_eq!(signed.actor, "王五");
+    assert_eq!(signed.at, "2026-01-01T00:00:00Z");
+    assert!(signed.is_signed());
+    // 理由码跳过条目没有署名，照实标注（不编造署名）。
+    let unsigned = state.not_applicable.get("u.vision").expect("跳过应在案");
+    assert!(!unsigned.is_signed());
+    assert!(unsigned.signature_label().contains("无署名"));
+    // 幽灵署名（豁免早已解除）被丢弃，不复活成新记录。
+    assert!(!state.not_applicable.contains_key("u.ghost"));
+
+    // 回写后不再包含 na_signoffs 键（新存档格式只有一个真相源）。
+    let json = serde_json::to_string(&state).expect("序列化");
+    assert!(!json.contains("na_signoffs"), "{json}");
+    assert!(json.contains(r#""actor":"王五""#), "{json}");
+
+    // 引擎装配路径同样自动合并（上层不必知道曾有过并行 map）。
+    let with_legacy: AuthoringState = serde_json::from_str(legacy).expect("反序列化");
+    let space = engine().space().clone();
+    let assembled = AuthoringEngine::new(space, with_legacy).expect("装配");
+    assert!(assembled.state().na_signoffs.is_empty());
+    assert_eq!(
+        assembled
+            .state()
+            .not_applicable
+            .get("u.scope")
+            .map(|item| item.actor.as_str()),
+        Some("王五")
+    );
 }
 
 #[test]

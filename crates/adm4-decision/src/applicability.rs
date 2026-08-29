@@ -191,10 +191,7 @@ mod tests {
 
         let na: BTreeMap<_, _> = [(
             "save_system".to_string(),
-            NaJustification {
-                reason_code: "no_persistence".into(),
-                note: "超休闲无存档".into(),
-            },
+            NaJustification::reason_code_only("no_persistence", "超休闲无存档"),
         )]
         .into_iter()
         .collect();
@@ -225,6 +222,8 @@ mod tests {
             NaJustification {
                 reason_code: "out_of_scope".into(),
                 note: "本项目不做品类分化".into(),
+                actor: "主策划".into(),
+                at: "2026-08-29T00:00:00Z".into(),
             },
         )]
         .into_iter()

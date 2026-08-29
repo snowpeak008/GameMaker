@@ -423,6 +423,48 @@ Assert-NotContains $out '阻塞' '流水线终态'
 Assert-NotContains $out '等待' '流水线终态'
 
 # ---------------------------------------------------------------------------
+# 8b. F3 模型缺口：通用层模板跨包可见/可预填、非必做点不进分母、项目重命名
+#
+# 用独立的一次性项目做，不触碰上面已冻结并跑完 C0-C6 的 $ArchiveId。
+# ---------------------------------------------------------------------------
+$out = Invoke-Adm4 'F3：模板列表应包含通用层模板（跨包可预填）' @('template', 'list', 'lane_defense')
+Assert-Contains $out '[通用层·跨包可预填]' '通用层模板可见性'
+Assert-Contains $out 'universal/builtin_midcore_arknights' '通用层模板条目'
+Assert-Contains $out 'lane_defense/tpl_dawnline' '本包模板条目'
+
+$out = Invoke-Adm4 'F3：新建跨包预填验证项目' @('project', 'new', '通用模板跨包验证', '--pack', 'grid_strategy', '--depth', 'L4')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析跨包验证项目的存档 id' }
+$UniversalArchive = $match.Groups[1].Value
+
+# 非必做点：新项目里 8 个 requirement=optional 的画像点恒适用但未作答 → 不进分母。
+$out = Invoke-Adm4 'F3：新项目的非必做点不进完成度分母' @('authoring', 'status', $UniversalArchive)
+Assert-Contains $out '非必做未作答 8 项（不进分母）' '非必做计数'
+Assert-NotContains $out 'u.dimension' '非必做点不进阻塞清单'
+
+# 通用层模板（genre_pack=universal）预填到 grid_strategy 项目：F3 前会被「模板品类包不一致」拒。
+$out = Invoke-Adm4 'F3：通用层模板跨包预填' @('project', 'prefill', $UniversalArchive, 'builtin_midcore_arknights')
+Assert-Contains $out '预填：写入' '跨包预填写入'
+Assert-Contains $out '个附加多选选项' '多选选项随模板写入'
+Assert-Contains $out '跳过 0 条' '通用层答卷整卷可用（通用层对每个包都装配在内）'
+
+# 模板把 8 个画像点全部答上 → 非必做未作答归零，它们随之进入分母（作答即纳入设计）。
+$out = Invoke-Adm4 'F3：作答后的非必做点进入分母' @('authoring', 'status', $UniversalArchive)
+Assert-Contains $out '非必做未作答 0 项（不进分母）' '作答后非必做计数归零'
+Assert-Contains $out 'u.dimension' '作答但未确认的非必做点照常进阻塞清单'
+
+# 负例：不存在的模板必须显式报错（不静默当作零条预填）。
+Invoke-Adm4 'F3 负例：不存在的模板预填必须非零退出' @('project', 'prefill', $UniversalArchive, 'tpl_not_there') -ExpectFailure | Out-Null
+
+# 项目重命名：空白名被拒；正常改名后 project list 立即可见。
+Invoke-Adm4 'F3 负例：空白项目名必须被拒' @('project', 'rename', $UniversalArchive, '   ') -ExpectFailure | Out-Null
+$out = Invoke-Adm4 'F3：项目重命名' @('project', 'rename', $UniversalArchive, '晨星台地防线')
+Assert-Contains $out '已重命名为：晨星台地防线' '重命名回执'
+$out = Invoke-Adm4 'F3：project list 应显示新名称' @('project', 'list')
+Assert-Contains $out '晨星台地防线' '重命名后列表名称'
+Assert-NotContains $out '通用模板跨包验证' '旧名称应消失'
+
+# ---------------------------------------------------------------------------
 # 9. 收尾
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue

@@ -22,6 +22,9 @@ pub struct CompletenessReport {
     pub blocking: Vec<MissingItem>,
     /// baseline 点显式 N/A 的理由码计数（比例过高反馈品类包设计）。
     pub na_reason_counts: BTreeMap<String, usize>,
+    /// `requirement=Optional` 且未作答，因此被移出分母的适用点数（非必做点，在案可见）。
+    /// 作答过的 Optional 点不计在此——它们已按普通点进 done/total。
+    pub optional_skipped: usize,
 }
 
 impl CompletenessReport {
@@ -312,6 +315,29 @@ pub fn enumerate_axis(
     }
 }
 
+/// 非必做点且尚未作答——「不进完成度分母」的唯一新增情形。
+///
+/// 单独抽成函数是为了让完成度、领域/节点聚合、访谈进度与访谈待办四处共用同一口径：
+/// 口径分叉会让「完成度 100% 但访谈永远停在某层」这类矛盾状态出现。
+pub fn optional_unanswered(
+    point: &DecisionPoint,
+    selections: &BTreeMap<DecisionId, Selection>,
+) -> bool {
+    point.requirement.is_optional() && !selections.contains_key(&point.id)
+}
+
+/// 该决策点是否计入完成度分母：适用（Active）且不是「未作答的非必做点」。
+pub fn counts_toward_completeness(
+    point: &DecisionPoint,
+    applicability: &ApplicabilityMap,
+    selections: &BTreeMap<DecisionId, Selection>,
+) -> bool {
+    matches!(
+        applicability.get(&point.id),
+        Some(PointApplicability::Active)
+    ) && !optional_unanswered(point, selections)
+}
+
 /// 完成度计算（设计 01 号文档 §2.6）。
 ///
 /// `row_references` 为品类包声明的跨表外键规则：悬空引用与单表校验一样进待填清单，
@@ -326,6 +352,7 @@ pub fn compute_completeness(
 ) -> CompletenessReport {
     let mut done = 0;
     let mut total = 0;
+    let mut optional_skipped = 0;
     let mut blocking = Vec::new();
     let mut na_reason_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut reference_problems =
@@ -341,6 +368,12 @@ pub fn compute_completeness(
                 continue;
             }
             _ => continue,
+        }
+        // 非必做点未作答：移出分母（二版「非必做」检查单项的归宿），计数在案。
+        // 已作答的非必做点走下面的普通路径——作答即纳入设计，校验一视同仁。
+        if optional_unanswered(point, selections) {
+            optional_skipped += 1;
+            continue;
         }
         total += 1;
         let Some(selection) = selections.get(&point.id) else {
@@ -386,6 +419,7 @@ pub fn compute_completeness(
         total,
         blocking,
         na_reason_counts,
+        optional_skipped,
     }
 }
 
@@ -803,6 +837,95 @@ mod tests {
         let good_report = report(good);
         assert!(good_report.is_complete(), "{:?}", good_report.blocking);
         assert_eq!(good_report.done, 1);
+    }
+
+    /// 非必做点（`requirement=Optional`）的完成度口径：
+    /// 未作答 → 不进分母、不进阻塞清单，只在 `optional_skipped` 计数；
+    /// 一旦作答 → 与普通点一视同仁（进分母、参数缺漏照常拦）。
+    #[test]
+    fn optional_point_leaves_denominator_until_answered() {
+        let mut required_point = table_point();
+        required_point.id = "u.platform".into();
+        required_point.level = DesignLevel::L0;
+        required_point.options = vec![DecisionOption {
+            id: "pc_single".into(),
+            label: "PC 单机".into(),
+            ..Default::default()
+        }];
+        let mut optional_point = required_point.clone();
+        optional_point.id = "u.dimension".into();
+        optional_point.requirement = PointRequirement::Optional;
+        optional_point.options = vec![DecisionOption {
+            id: "two_d".into(),
+            label: "2D".into(),
+            ..Default::default()
+        }];
+        let graph = DecisionGraph::new(vec![required_point, optional_point]).unwrap();
+        let depth = DepthProfile::new(DesignLevel::L4).unwrap();
+        let report = |selections: BTreeMap<String, Selection>| {
+            let applicability = compute_applicability(&graph, &selections, &BTreeMap::new(), depth);
+            compute_completeness(
+                &graph,
+                &selections,
+                &BTreeMap::new(),
+                &applicability,
+                &BTreeMap::new(),
+                &[],
+            )
+        };
+        let answer = |decision: &str, option: &str| Selection {
+            decision_id: decision.into(),
+            option_id: option.into(),
+            parameters: ParameterValues::None,
+            rationale: String::new(),
+            provenance: Provenance::UserManual,
+            confirmed_by_user: true,
+            template_original: None,
+            additional_options: Vec::new(),
+            primary_option: None,
+        };
+
+        // 只答必做点：分母只有 1（非必做点不在其中），完成度即 100%。
+        let only_required: BTreeMap<_, _> =
+            [("u.platform".to_string(), answer("u.platform", "pc_single"))]
+                .into_iter()
+                .collect();
+        let skipped = report(only_required.clone());
+        assert_eq!((skipped.done, skipped.total), (1, 1));
+        assert_eq!(skipped.optional_skipped, 1);
+        assert!(skipped.is_complete(), "{:?}", skipped.blocking);
+        assert!(
+            !skipped
+                .blocking
+                .iter()
+                .any(|item| item.decision_id == "u.dimension"),
+            "非必做点未作答不得进阻塞清单：{:?}",
+            skipped.blocking
+        );
+
+        // 补答非必做点：进分母并计入完成。
+        let mut both = only_required.clone();
+        both.insert("u.dimension".into(), answer("u.dimension", "two_d"));
+        let answered = report(both.clone());
+        assert_eq!((answered.done, answered.total), (2, 2));
+        assert_eq!(answered.optional_skipped, 0);
+
+        // 作答但未确认：与普通点一样拦（作答即纳入设计，AI/模板预填仍需用户确认）。
+        let mut unconfirmed = both;
+        if let Some(selection) = unconfirmed.get_mut("u.dimension") {
+            selection.confirmed_by_user = false;
+        }
+        let pending = report(unconfirmed);
+        assert_eq!((pending.done, pending.total), (1, 2));
+        assert_eq!(pending.optional_skipped, 0);
+        assert!(
+            pending
+                .blocking
+                .iter()
+                .any(|item| item.decision_id == "u.dimension"),
+            "{:?}",
+            pending.blocking
+        );
     }
 
     /// 单选点被写入多个选项 / 被标主选 → 完成度拦截（不静默接受）。

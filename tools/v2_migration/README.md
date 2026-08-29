@@ -19,7 +19,7 @@ powershell -ExecutionPolicy Bypass -File V4\tools\v2_migration\verify_migration.
 | `universal/v2_checklist.json` | 2575 个决策点（515 检查单项 × L4 选项组 + 1 个玩法系统范围点） |
 | `universal/references/*.json` | 25 份二版内置模板（Certified，批量导入通道） |
 | `skin_wordlist.json` | 50 个换皮词（25 模板游戏名 + 中文别名） |
-| `universal/core.json` | 就地补 4 个既有 `u.*` 点的 `node_id`（id 与选项一字未改） |
+| `universal/core.json` | 只读（不由脚本生成）：脚本读它核对画像映射表指向的点/选项是否存在 |
 | `lane_defense/pack.json`、`grid_strategy/pack.json` | 就地补 `nodes`（4 / 7 个品类专属节点）与每个决策点的 `node_id` |
 | `unmigrated_report.json` | 未迁移答案清单 + 未迁移规则清单（机器可读） |
 
@@ -31,3 +31,19 @@ powershell -ExecutionPolicy Bypass -File V4\tools\v2_migration\verify_migration.
   unlock 下一点；每个领域的入口点是 `requirement=baseline` 的根点（恒适用、可用理由码豁免）。
 - L4 选项统一声明 `compiler_tags.spec_role=profile`：二版检查单没有效果语义，按 R2 不发明
   `effects_template`，答案在 C0 落进 GameSpec 的设计意图档案而不是机制。
+
+## F3 增补（模型缺口修复后的迁移语义）
+
+- **非必做（`requirement=optional`）**：二版选项组的 `required=false` 现在如实迁成
+  `PointRequirement::Optional`（此前该字段被整体丢弃）。领域入口点只从**必做**点里挑
+  （非必做点当入口会让整域默认不进分母）。报告里新增 `requirements` 分布。
+  当前二版数据里 2574 个选项组全是 `required=true`，因此实测 optional 计数为 0——
+  语义通道已打通，数据侧暂无非必做项。
+- **多选答卷**：`TemplateAnswer` 已支持 `additional_options` + `primary_option`，
+  检查单多选组与玩法系统范围点的附加选项如实落盘（此前只留主选、其余进未迁移清单）。
+  单选组收到多个已选时仍只保留主选，并逐条进未迁移清单。
+- **画像字段**：`PROFILE_ANSWER_MAP` 覆盖二版全部可无损映射的 `profile.*` 取值
+  （对应 `universal/core.json` 里 F3 新补的选项与 8 个 `optional` 画像点）。
+  `referenceGame` / `referenceArchetype` **故意不迁**：把参考游戏名做成选项或答卷内容
+  等于把换皮词写进设计空间，违反 R5。
+- 未迁移条目：330 → 75（50 条参考游戏名 + 25 条节点文本）。
