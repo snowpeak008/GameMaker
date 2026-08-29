@@ -1,25 +1,18 @@
 [workspace]
 members = [
-    "apps/adm-new-cli",
-    "apps/desktop-tauri",
-    "apps/root-launcher",
-    "crates/adm-new-foundation",
-    "crates/adm-new-game-spec",
-    "crates/adm-new-contracts",
-    "crates/adm-new-governance",
-    "crates/adm-new-config",
-    "crates/adm-new-storage",
-    "crates/adm-new-knowledge",
-    "crates/adm-new-design",
-    "crates/adm-new-save",
-    "crates/adm-new-ai",
-    "crates/adm-new-pipeline",
-    "crates/adm-new-artifact",
-    "crates/adm-new-packaging",
-    "crates/adm-new-patch",
-    "crates/adm-new-sdk",
-    "crates/adm-new-application",
-    "crates/adm-new-tauri-commands",
+    "crates/adm4-foundation",
+    "crates/adm4-contracts",
+    "crates/adm4-decision",
+    "crates/adm4-space",
+    "crates/adm4-template",
+    "crates/adm4-spec",
+    "crates/adm4-authoring",
+    "crates/adm4-pipeline",
+    "crates/adm4-archive",
+    "crates/adm4-ai",
+    "crates/adm4-app",
+    "apps/adm4-cli",
+    "apps/adm4-desktop",
 ]
 resolver = "3"
 
@@ -29,5 +22,26 @@ edition = "2024"
 rust-version = "1.96"
 license = "UNLICENSED"
 
+[workspace.dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha2 = "0.10.9"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
+
+adm4-foundation = { path = "crates/adm4-foundation" }
+adm4-contracts = { path = "crates/adm4-contracts" }
+adm4-decision = { path = "crates/adm4-decision" }
+adm4-space = { path = "crates/adm4-space" }
+adm4-template = { path = "crates/adm4-template" }
+adm4-spec = { path = "crates/adm4-spec" }
+adm4-authoring = { path = "crates/adm4-authoring" }
+adm4-pipeline = { path = "crates/adm4-pipeline" }
+adm4-archive = { path = "crates/adm4-archive" }
+adm4-ai = { path = "crates/adm4-ai" }
+adm4-app = { path = "crates/adm4-app" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[profile.release]
+lto = "thin"

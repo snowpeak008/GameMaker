@@ -1,0 +1,35 @@
+{
+  "pack_id": "your_pack_id",
+  "pack_version": "0.1.0",
+  "display_name": "品类显示名",
+  "reference_games": ["参考游戏A", "参考游戏B", "参考游戏C"],
+  "cardinality_expectations": {
+    "your_table_key": { "min": 1, "max": 10 }
+  },
+  "consistency_rules": [],
+  "decision_points": [
+    {
+      "id": "your_pack_id.example_point",
+      "domain": "your_domain",
+      "level": "L3",
+      "genre_scope": { "pack": "your_pack_id" },
+      "question": "这里写一句话问题？",
+      "options": [
+        {
+          "id": "option_a",
+          "label": "选项A",
+          "summary": "选它意味着什么的一句话",
+          "implications": ["含义一", "含义二"],
+          "unlocks": []
+        },
+        {
+          "id": "option_b",
+          "label": "选项B",
+          "summary": "另一条真实可选路线的一句话（非表格型决策点必须 ≥2 个选项）",
+          "implications": ["含义一", "含义二"],
+          "unlocks": []
+        }
+      ]
+    }
+  ]
+}

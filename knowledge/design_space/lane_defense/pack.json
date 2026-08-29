@@ -1,0 +1,718 @@
+{
+  "pack_id": "lane_defense",
+  "pack_version": "0.2.0",
+  "display_name": "通道塔防（示例包：正式内容待逆向产线校准）",
+  "reference_games": ["Plants vs Zombies", "Kingdom Rush", "Bloons TD 6"],
+  "cardinality_expectations": {
+    "guard_types": { "min": 4, "max": 8 },
+    "enemy_types": { "min": 2, "max": 6 },
+    "wave_count": { "min": 5, "max": 20 },
+    "counter_cells": { "min": 8, "max": 48 },
+    "asset_specs": { "min": 5, "max": 14 },
+    "guard_stat_rows": { "min": 4, "max": 48 },
+    "enemy_stat_rows": { "min": 2, "max": 36 },
+    "counter_bands": { "min": 2, "max": 4 },
+    "stage_count": { "min": 12, "max": 90 },
+    "wave_detail_rows": { "min": 40, "max": 800 },
+    "economy_entries": { "min": 2, "max": 10 }
+  },
+  "consistency_rules": [
+    {
+      "id": "matrix_rows_match_guards",
+      "kind": "matrix_axis_matches_table_rows",
+      "matrix_decision": "ld.counter_matrix",
+      "table_decision": "ld.guard_roster"
+    },
+    {
+      "id": "economy_values_follow_structure",
+      "kind": "answered_together",
+      "first": "ld.economy_structure",
+      "second": "ld.economy_values"
+    },
+    {
+      "id": "wave_rows_reference_enemies",
+      "kind": "row_reference",
+      "source_decision": "ld.wave_table",
+      "source_column": "enemy_id",
+      "target_decision": "ld.enemy_roster",
+      "target_key_column": "id"
+    },
+    {
+      "id": "wave_rows_reference_stages",
+      "kind": "row_reference",
+      "source_decision": "ld.wave_table",
+      "source_column": "stage_id",
+      "target_decision": "ld.stage_roster",
+      "target_key_column": "stage_id"
+    },
+    {
+      "id": "guard_stats_reference_guards",
+      "kind": "row_reference",
+      "source_decision": "ld.guard_stats",
+      "source_column": "guard_id",
+      "target_decision": "ld.guard_roster",
+      "target_key_column": "id"
+    },
+    {
+      "id": "enemy_stats_reference_enemies",
+      "kind": "row_reference",
+      "source_decision": "ld.enemy_stats",
+      "source_column": "enemy_id",
+      "target_decision": "ld.enemy_roster",
+      "target_key_column": "id"
+    },
+    {
+      "id": "economy_values_reference_entries",
+      "kind": "row_reference",
+      "source_decision": "ld.economy_values",
+      "source_column": "entry_id",
+      "target_decision": "ld.economy_structure",
+      "target_key_column": "entry_id"
+    }
+  ],
+  "decision_points": [
+    {
+      "id": "ld.combat_system",
+      "domain": "combat",
+      "level": "L3",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "战斗系统采用什么结构？",
+      "options": [
+        {
+          "id": "counter_combat",
+          "label": "克制式战斗",
+          "summary": "守卫与敌人之间存在克制关系，伤害受克制系数放大",
+          "implications": ["需要克制矩阵", "需要伤害公式"],
+          "unlocks": ["ld.counter_damage", "ld.counter_matrix"]
+        },
+        {
+          "id": "layered_armor_combat",
+          "label": "护甲分层式战斗",
+          "summary": "伤害先被敌人护甲吸收一部分，剩余部分再按克制关系结算，护甲与克制两层叠加",
+          "implications": ["需要克制矩阵", "需要伤害公式", "敌人属性表必须提供护甲列", "破甲能力成为独立的守卫定位"],
+          "unlocks": ["ld.counter_damage", "ld.counter_matrix"]
+        }
+      ]
+    },
+    {
+      "id": "ld.deploy_system",
+      "domain": "deploy",
+      "level": "L3",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "部署系统采用什么结构？",
+      "options": [
+        {
+          "id": "grid_deploy",
+          "label": "网格部署",
+          "summary": "守卫放置在固定网格位上，消耗资源",
+          "implications": ["需要网格坐标", "需要部署成本规则"],
+          "unlocks": ["ld.deploy_cost", "ld.guard_roster"]
+        },
+        {
+          "id": "lane_slot_deploy",
+          "label": "通道槽位部署",
+          "summary": "每条通道提供数个有序槽位，守卫只能占槽，槽位前后顺序决定承伤与射击次序",
+          "implications": ["需要槽位容量与部署成本规则", "站位策略压缩为通道内排序", "槽位数量是防线容量的硬上限"],
+          "unlocks": ["ld.deploy_cost", "ld.guard_roster"]
+        }
+      ]
+    },
+    {
+      "id": "ld.wave_system",
+      "domain": "wave",
+      "level": "L3",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "波次系统采用什么结构？",
+      "options": [
+        {
+          "id": "scripted_waves",
+          "label": "脚本化波次",
+          "summary": "每关波次表预先设计，敌人按表出场",
+          "implications": ["需要波次表", "需要敌人名单"],
+          "unlocks": ["ld.enemy_roster", "ld.wave_table"]
+        },
+        {
+          "id": "staged_scripted_waves",
+          "label": "分关卡脚本波次",
+          "summary": "先确定关卡名单，再按关卡逐波填写出怪行，波次数据挂接到具体关卡",
+          "implications": ["需要关卡名单表", "波次行必须标注所属关卡", "需要敌人名单"],
+          "unlocks": ["ld.enemy_roster", "ld.stage_roster", "ld.wave_table"]
+        }
+      ]
+    },
+    {
+      "id": "ld.economy_system",
+      "domain": "economy",
+      "level": "L3",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "资源经济采用什么结构？",
+      "options": [
+        {
+          "id": "regen_resource",
+          "label": "周期回复资源",
+          "summary": "资源随时间周期性增长，用于部署",
+          "implications": ["需要回复节奏参数"],
+          "unlocks": ["ld.income_rule"]
+        },
+        {
+          "id": "hybrid_income_resource",
+          "label": "回复加击杀双通道资源",
+          "summary": "资源既随时间周期回复，也由击杀敌人掉落，两条通道并行产出",
+          "implications": ["需要回复节奏参数", "主动清怪可加速经济，经济与战斗表现强耦合", "掉落额与回复额需要合并核算收支"],
+          "unlocks": ["ld.income_rule"]
+        }
+      ]
+    },
+    {
+      "id": "ld.counter_damage",
+      "domain": "combat",
+      "level": "L4",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "克制伤害的机制规则是什么？",
+      "options": [
+        {
+          "id": "multiplier_formula",
+          "label": "克制系数乘法公式",
+          "summary": "伤害 = 攻击力 × 克制系数（系数来自克制矩阵）",
+          "implications": ["克制矩阵是数值平衡核心"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.combat_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "ld.enemy_roster", "property": "hp", "formula": "hp - attack * counter_coeff * {param:base_multiplier}" }
+          ]
+        },
+        {
+          "id": "additive_counter_formula",
+          "label": "克制加值与保底公式",
+          "summary": "伤害 = 攻击力 + 克制系数 × 加值权重，并设最低伤害保底",
+          "implications": ["克制以加值而非倍率进入，低攻守卫同样吃得到克制收益", "保底值决定最慢击杀时间，防止高护甲敌人完全免疫"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.combat_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "counter_bonus_weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true },
+            { "key": "min_damage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "ld.enemy_roster", "property": "hp", "formula": "hp - max(attack + counter_coeff * {param:counter_bonus_weight}, {param:min_damage})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ld.deploy_cost",
+      "domain": "deploy",
+      "level": "L4",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "部署成本的机制规则是什么？",
+      "options": [
+        {
+          "id": "cost_gate",
+          "label": "成本闸门",
+          "summary": "部署消耗守卫成本，资源不足禁止部署；移除返还比例资源",
+          "implications": ["成本与收益节奏需匹配"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.deploy_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "refund_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "energy", "formula": "cost(guard)" },
+            { "effect": "spawn_entity", "entity": "ld.guard_roster" }
+          ]
+        },
+        {
+          "id": "escalating_cost_gate",
+          "label": "递增成本闸门",
+          "summary": "同种守卫每多部署一个，其部署成本按增长率递增；移除时按比例返还资源",
+          "implications": ["抑制单一守卫铺满防线，逼出混编阵容", "增长率与回复节奏共同决定防线成型速度"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.deploy_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "cost_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true },
+            { "key": "refund_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "energy", "formula": "cost(guard) * {param:cost_growth} ^ deployed_count(guard)" },
+            { "effect": "spawn_entity", "entity": "ld.guard_roster" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ld.income_rule",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "资源回复的机制规则是什么？",
+      "options": [
+        {
+          "id": "periodic_income",
+          "label": "周期定额回复",
+          "summary": "每隔固定秒数回复固定数额资源",
+          "implications": ["回复节奏决定部署节奏"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.economy_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 30.0 }, "required": true },
+            { "key": "amount", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 500.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "energy", "formula": "+{param:amount} / {param:interval_seconds}s" }
+          ]
+        },
+        {
+          "id": "curved_income",
+          "label": "曲线化周期回复",
+          "summary": "每隔固定秒数回复资源，数额随波次推进按线性增量成长",
+          "implications": ["前后期经济节奏可分段调平", "需要经济数值表承载曲线参数"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "ld.economy_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 30.0 }, "required": true },
+            { "key": "base_amount", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 500.0 }, "required": true },
+            { "key": "wave_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "energy", "formula": "+({param:base_amount} + wave_index * {param:wave_growth}) / {param:interval_seconds}s" }
+          ],
+          "unlocks": ["ld.economy_structure"]
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster",
+      "domain": "deploy",
+      "level": "L5",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "守卫名单与属性表结构是什么？",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "guard_table",
+          "label": "守卫属性表",
+          "summary": "每种守卫一行：标识、成本、攻击、攻速",
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "attack", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true },
+              { "key": "attack_interval", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "guard_types"
+          }
+        },
+        {
+          "id": "guard_table_advanced",
+          "label": "进阶守卫属性表",
+          "summary": "每种守卫一行：标识、成本、攻击、攻速、生命、射程、冷却、职能",
+          "implications": ["支撑守卫成长数值表", "职能划分驱动克制矩阵设计"],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "attack", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true },
+              { "key": "attack_interval", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true },
+              { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+              { "key": "range", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 20.0 }, "required": true },
+              { "key": "cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 120.0 }, "required": true },
+              { "key": "role", "kind": { "kind": "enum", "variants": ["blocker", "ranged_attacker", "resource_generator", "area_controller", "support"] }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "guard_types"
+          },
+          "unlocks": ["ld.guard_stats"]
+        }
+      ]
+    },
+    {
+      "id": "ld.enemy_roster",
+      "domain": "wave",
+      "level": "L5",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "敌人名单与属性表结构是什么？",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "enemy_table",
+          "label": "敌人属性表",
+          "summary": "每种敌人一行：标识、生命、移动速度",
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99999.0 }, "required": true },
+              { "key": "speed", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 20.0 }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "enemy_types"
+          }
+        },
+        {
+          "id": "enemy_table_advanced",
+          "label": "进阶敌人属性表",
+          "summary": "每种敌人一行：标识、生命、移动速度、护甲、赏金、移动方式",
+          "implications": ["支撑敌人成长数值表", "移动方式影响守卫射程与拦截判定"],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99999.0 }, "required": true },
+              { "key": "speed", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 20.0 }, "required": true },
+              { "key": "armor", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true },
+              { "key": "bounty", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 9999.0 }, "required": true },
+              { "key": "movement", "kind": { "kind": "enum", "variants": ["ground", "air", "burrow"] }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "enemy_types"
+          },
+          "unlocks": ["ld.enemy_stats"]
+        }
+      ]
+    },
+    {
+      "id": "ld.counter_matrix",
+      "domain": "combat",
+      "level": "L5",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "克制矩阵的结构与数值是什么？",
+      "options": [
+        {
+          "id": "matrix_full",
+          "label": "全量克制矩阵",
+          "summary": "守卫 × 敌人的克制系数矩阵，每格必填",
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "matrix",
+            "row_axis": { "axis": "table_rows", "decision": "ld.guard_roster" },
+            "col_axis": { "axis": "table_rows", "decision": "ld.enemy_roster" },
+            "cell": { "key": "coeff", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true },
+            "cardinality_key": "counter_cells"
+          }
+        },
+        {
+          "id": "matrix_banded",
+          "label": "分档克制矩阵",
+          "summary": "守卫 × 敌人每格填克制档位，具体系数由克制档位数值表统一定义",
+          "implications": ["数值调平集中到档位数值表，一处修改全局生效", "格数据是档位枚举而非裸数字"],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "matrix",
+            "row_axis": { "axis": "table_rows", "decision": "ld.guard_roster" },
+            "col_axis": { "axis": "table_rows", "decision": "ld.enemy_roster" },
+            "cell": { "key": "band", "kind": { "kind": "enum", "variants": ["hard_counter", "advantage", "neutral", "countered"] }, "required": true },
+            "cardinality_key": "counter_cells"
+          },
+          "unlocks": ["ld.counter_band_values"]
+        }
+      ]
+    },
+    {
+      "id": "ld.stage_roster",
+      "domain": "wave",
+      "level": "L5",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "关卡名单与关卡级参数结构是什么？",
+      "skin_fields": ["stage_id"],
+      "options": [
+        {
+          "id": "stage_table",
+          "label": "关卡名单表",
+          "summary": "每个关卡一行：标识、波次数、难度档",
+          "implications": ["关卡是波次数据的挂接单元", "难度档驱动敌人成长数值取档"],
+          "requires": [{ "decision": "ld.wave_system", "option": "staged_scripted_waves" }],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "stage_id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "wave_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
+              { "key": "difficulty_tier", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+            ],
+            "row_key": "stage_id",
+            "cardinality_key": "stage_count"
+          }
+        },
+        {
+          "id": "custom",
+          "label": "自定义关卡表结构",
+          "summary": "关卡列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "stage_count"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.economy_structure",
+      "domain": "economy",
+      "level": "L5",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "经济数值表的条目结构是什么？",
+      "skin_fields": ["entry_id"],
+      "options": [
+        {
+          "id": "economy_entry_table",
+          "label": "经济条目表",
+          "summary": "每个经济量一行：标识、流向、封顶方式",
+          "implications": ["条目集合决定经济数值表的行集合", "流向划分支撑收支平衡核算"],
+          "requires": [{ "decision": "ld.income_rule", "option": "curved_income" }],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "entry_id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "flow", "kind": { "kind": "enum", "variants": ["income", "expense", "reward", "conversion"] }, "required": true },
+              { "key": "cap_kind", "kind": { "kind": "enum", "variants": ["uncapped", "soft_cap", "hard_cap"] }, "required": true }
+            ],
+            "row_key": "entry_id",
+            "cardinality_key": "economy_entries"
+          },
+          "unlocks": ["ld.economy_values"]
+        },
+        {
+          "id": "custom",
+          "label": "自定义经济条目结构",
+          "summary": "经济条目列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "economy_entries"
+          },
+          "unlocks": ["ld.economy_values"]
+        }
+      ]
+    },
+    {
+      "id": "ld.wave_table",
+      "domain": "wave",
+      "level": "L6",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "各关波次表的具体数据是什么？",
+      "options": [
+        {
+          "id": "wave_rows",
+          "label": "波次数据表",
+          "summary": "每波一行：波次号、敌人、数量、间隔",
+          "compiler_tags": { "spec_role": "content", "content_kind": "wave_schedule" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "wave", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "enemy_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.2, "max": 60.0 }, "required": true }
+            ],
+            "row_key": "wave",
+            "cardinality_key": "wave_count"
+          }
+        },
+        {
+          "id": "wave_rows_advanced",
+          "label": "进阶波次数据表",
+          "summary": "每行一条出怪记录：所属关卡、波次号、敌人、数量、节奏与首领标记",
+          "implications": ["波次数据按关卡组织", "首领波可单独调平"],
+          "requires": [{ "decision": "ld.wave_system", "option": "staged_scripted_waves" }],
+          "compiler_tags": { "spec_role": "content", "content_kind": "wave_schedule" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "row_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "stage_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "wave", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "enemy_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.2, "max": 60.0 }, "required": true },
+              { "key": "spawn_delay_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 300.0 }, "required": true },
+              { "key": "is_boss_wave", "kind": { "kind": "bool" }, "required": true }
+            ],
+            "row_key": "row_id",
+            "cardinality_key": "wave_detail_rows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_stats",
+      "domain": "deploy",
+      "level": "L6",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "守卫成长数值表的具体行数据是什么？",
+      "skin_fields": ["stat_id"],
+      "evidence_slots": true,
+      "options": [
+        {
+          "id": "stat_rows",
+          "label": "守卫成长数值行",
+          "summary": "每守卫每档位一行：升级成本与攻防数值",
+          "implications": ["档位间数值差决定升级价值", "行数等于守卫种数乘以档位数"],
+          "requires": [{ "decision": "ld.guard_roster", "option": "guard_table_advanced" }],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "stat_id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "guard_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "rank", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true },
+              { "key": "upgrade_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 9999.0 }, "required": true },
+              { "key": "attack", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true },
+              { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+              { "key": "range", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 20.0 }, "required": true }
+            ],
+            "row_key": "stat_id",
+            "cardinality_key": "guard_stat_rows"
+          }
+        },
+        {
+          "id": "custom",
+          "label": "自定义守卫数值表结构",
+          "summary": "守卫数值列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "guard_stat_rows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.enemy_stats",
+      "domain": "wave",
+      "level": "L6",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "敌人成长数值表的具体行数据是什么？",
+      "skin_fields": ["stat_id"],
+      "evidence_slots": true,
+      "options": [
+        {
+          "id": "stat_rows",
+          "label": "敌人成长数值行",
+          "summary": "每敌人每波段一行：生命、速度与赏金的成长倍率",
+          "implications": ["波段倍率决定后期压力曲线", "行数等于敌人种数乘以波段数"],
+          "requires": [{ "decision": "ld.enemy_roster", "option": "enemy_table_advanced" }],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "stat_id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "enemy_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "wave_band", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true },
+              { "key": "hp_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 20.0 }, "required": true },
+              { "key": "speed_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 5.0 }, "required": true },
+              { "key": "bounty_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 5.0 }, "required": true }
+            ],
+            "row_key": "stat_id",
+            "cardinality_key": "enemy_stat_rows"
+          }
+        },
+        {
+          "id": "custom",
+          "label": "自定义敌人数值表结构",
+          "summary": "敌人数值列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "enemy_stat_rows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.counter_band_values",
+      "domain": "combat",
+      "level": "L6",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "各克制档位对应的伤害系数是什么？",
+      "evidence_slots": true,
+      "options": [
+        {
+          "id": "band_rows",
+          "label": "克制档位数值行",
+          "summary": "每个档位一行：档位标识与伤害系数",
+          "implications": ["全矩阵共用档位系数，调平一处生效", "档位行集受档位枚举上限约束"],
+          "requires": [{ "decision": "ld.counter_matrix", "option": "matrix_banded" }],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "band_id", "kind": { "kind": "enum", "variants": ["hard_counter", "advantage", "neutral", "countered"] }, "required": true },
+              { "key": "coeff", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true }
+            ],
+            "row_key": "band_id",
+            "cardinality_key": "counter_bands"
+          }
+        },
+        {
+          "id": "custom",
+          "label": "自定义档位数值结构",
+          "summary": "档位数值列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "counter_bands"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.economy_values",
+      "domain": "economy",
+      "level": "L6",
+      "genre_scope": { "pack": "lane_defense" },
+      "question": "各经济条目的具体数值是什么？",
+      "evidence_slots": true,
+      "options": [
+        {
+          "id": "economy_value_rows",
+          "label": "经济数值行",
+          "summary": "每个经济条目一行：基础值、每波增量、下限与上限",
+          "implications": ["与经济条目表同行集，一一对应", "增量为零即恒定经济量"],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "entry_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "base_value", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99999.0 }, "required": true },
+              { "key": "per_wave_delta", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": -9999.0, "max": 9999.0 }, "required": true },
+              { "key": "floor_value", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99999.0 }, "required": true },
+              { "key": "ceil_value", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999999.0 }, "required": true }
+            ],
+            "row_key": "entry_id",
+            "cardinality_key": "economy_entries"
+          }
+        },
+        {
+          "id": "custom",
+          "label": "自定义经济数值结构",
+          "summary": "经济数值列结构由创作者自定义，最少包含标识列与一个数值列",
+          "is_custom": true,
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "value", "kind": { "kind": "float" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "economy_entries"
+          }
+        }
+      ]
+    }
+  ]
+}

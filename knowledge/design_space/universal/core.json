@@ -1,0 +1,84 @@
+{
+  "space_version": "0.1.0",
+  "decision_points": [
+    {
+      "id": "u.business_model",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "项目采用什么商业模式？",
+      "requirement": "baseline",
+      "options": [
+        { "id": "premium", "label": "买断制", "summary": "一次性付费获得完整内容", "implications": ["无内购系统", "内容一次交付"] },
+        { "id": "free_demo", "label": "免费试玩+完整版", "summary": "试玩章节免费，完整版付费解锁", "implications": ["需要试玩边界设计"] }
+      ]
+    },
+    {
+      "id": "u.platform",
+      "domain": "profile",
+      "level": "L0",
+      "genre_scope": "universal",
+      "question": "主平台是什么？",
+      "requirement": "baseline",
+      "options": [
+        { "id": "pc_single", "label": "PC 单机", "summary": "Windows 桌面单机", "implications": ["键鼠交互", "离线运行"] },
+        { "id": "mobile", "label": "移动端", "summary": "触屏优先", "implications": ["触控交互", "竖屏或横屏决策"] }
+      ]
+    },
+    {
+      "id": "u.experience",
+      "domain": "experience",
+      "level": "L1",
+      "genre_scope": "universal",
+      "question": "游戏的核心体验幻想是什么？",
+      "skin_fields": ["statement"],
+      "options": [
+        {
+          "id": "guardian_underdog",
+          "label": "以小博大的守护",
+          "summary": "玩家以有限资源守护脆弱目标，从濒危到掌控",
+          "implications": ["压力曲线先紧后松", "防线可视化"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "statement", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true, "is_skin": true }
+          ] }
+        },
+        {
+          "id": "power_trip",
+          "label": "力量成长的爽感",
+          "summary": "玩家由弱变强，碾压回馈",
+          "implications": ["数值曲线陡峭", "反馈演出优先"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "statement", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true, "is_skin": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "u.genre",
+      "domain": "structure",
+      "level": "L2",
+      "genre_scope": "universal",
+      "question": "游戏属于什么品类结构？",
+      "options": [
+        {
+          "id": "lane_defense",
+          "label": "通道塔防",
+          "summary": "敌人沿通道推进，玩家部署守卫拦截",
+          "implications": ["需要部署/波次/克制系统"]
+        },
+        {
+          "id": "grid_strategy",
+          "label": "网格战棋",
+          "summary": "在网格地图上回合制调度单位，以走位与地形博弈取胜",
+          "implications": ["需要网格移动/回合调度/地形交互系统", "策略深度来自位置关系而非反应速度"]
+        },
+        {
+          "id": "puzzle_casual",
+          "label": "休闲解谜",
+          "summary": "回合制谜题关卡",
+          "implications": ["无实时压力", "关卡编辑范式"]
+        }
+      ]
+    }
+  ]
+}

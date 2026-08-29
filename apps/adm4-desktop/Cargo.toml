@@ -1,0 +1,25 @@
+﻿[package]
+name = "adm4-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm4-foundation = { workspace = true }
+adm4-contracts = { workspace = true }
+adm4-decision = { workspace = true }
+adm4-authoring = { workspace = true }
+adm4-template = { workspace = true }
+adm4-pipeline = { workspace = true }
+adm4-app = { workspace = true }
+serde_json = { workspace = true }
+slint = "1"
+
+[build-dependencies]
+slint-build = "1"
+
+# 不继承 workspace 的 unsafe_code=forbid：Slint 生成代码内部带 allow(unsafe_code)。
+# 手写代码仍禁 unsafe（见 src/main.rs 顶部 deny）。
+[lints.rust]
+unsafe_code = "deny"

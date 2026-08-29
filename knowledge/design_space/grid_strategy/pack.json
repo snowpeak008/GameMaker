@@ -1,0 +1,844 @@
+{
+  "pack_id": "grid_strategy",
+  "pack_version": "0.1.0",
+  "display_name": "战棋·网格战术（示例数值：正式内容待逆向产线校准）",
+  "reference_games": ["Fire Emblem", "Into the Breach", "Advance Wars", "Triangle Strategy"],
+  "cardinality_expectations": {
+    "unit_types": { "min": 6, "max": 30 },
+    "class_types": { "min": 4, "max": 12 },
+    "class_counter_cells": { "min": 16, "max": 144 },
+    "terrain_types": { "min": 4, "max": 12 },
+    "asset_specs": { "min": 8, "max": 42 },
+    "stage_count": { "min": 8, "max": 40 },
+    "progression_rows": { "min": 4, "max": 12 },
+    "enemy_deploy_rows": { "min": 24, "max": 600 }
+  },
+  "consistency_rules": [
+    {
+      "id": "counter_matrix_axes_match_classes",
+      "kind": "matrix_axis_matches_table_rows",
+      "matrix_decision": "grid.class_counter_matrix",
+      "table_decision": "grid.class_roster"
+    },
+    {
+      "id": "units_and_classes_answered_together",
+      "kind": "answered_together",
+      "first": "grid.unit_roster",
+      "second": "grid.class_roster"
+    },
+    {
+      "id": "stages_and_enemy_deploy_answered_together",
+      "kind": "answered_together",
+      "first": "grid.stage_table",
+      "second": "grid.enemy_deploy_table"
+    },
+    {
+      "id": "units_reference_classes",
+      "kind": "row_reference",
+      "source_decision": "grid.unit_roster",
+      "source_column": "class_id",
+      "target_decision": "grid.class_roster",
+      "target_key_column": "id"
+    },
+    {
+      "id": "progression_rows_reference_classes",
+      "kind": "row_reference",
+      "source_decision": "grid.progression_table",
+      "source_column": "class_id",
+      "target_decision": "grid.class_roster",
+      "target_key_column": "id"
+    },
+    {
+      "id": "enemy_deploy_references_stages",
+      "kind": "row_reference",
+      "source_decision": "grid.enemy_deploy_table",
+      "source_column": "stage_no",
+      "target_decision": "grid.stage_table",
+      "target_key_column": "stage_no"
+    },
+    {
+      "id": "enemy_deploy_references_units",
+      "kind": "row_reference",
+      "source_decision": "grid.enemy_deploy_table",
+      "source_column": "unit_id",
+      "target_decision": "grid.unit_roster",
+      "target_key_column": "id"
+    }
+  ],
+  "decision_points": [
+    {
+      "id": "grid.battlefield_system",
+      "domain": "battlefield",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "战场采用什么网格结构？",
+      "options": [
+        {
+          "id": "square_grid",
+          "label": "方形网格",
+          "summary": "战场由方形格组成，四方向邻接，移动与射程按格计算",
+          "implications": ["需要逐格移动规则", "需要地形效果规则", "射程与距离按曼哈顿距离计算"],
+          "unlocks": ["grid.move_rule", "grid.terrain_effect_rule"]
+        },
+        {
+          "id": "hex_grid",
+          "label": "六边形网格",
+          "summary": "战场由六边形格组成，六方向邻接，包抄与侧翼路线更多",
+          "implications": ["需要逐格移动规则", "需要地形效果规则", "寻路与射程按六向邻接计算"],
+          "unlocks": ["grid.move_rule", "grid.terrain_effect_rule"]
+        }
+      ]
+    },
+    {
+      "id": "grid.turn_system",
+      "domain": "turn",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "回合制采用什么结构？",
+      "options": [
+        {
+          "id": "phase_alternate",
+          "label": "敌我阶段交替",
+          "summary": "我方全体单位行动完毕后轮到敌方，整队轮换",
+          "implications": ["需要行动点规则", "单回合内可自由安排己方行动顺序", "敌方回合是纯观战节点，需要演出与信息设计"],
+          "unlocks": ["grid.action_point_rule"]
+        },
+        {
+          "id": "speed_initiative",
+          "label": "速度先攻序列",
+          "summary": "全场单位按速度排成行动序列，敌我穿插逐个行动",
+          "implications": ["需要行动点规则", "速度属性成为核心数值", "行动序列的可视化与预测是界面重点"],
+          "conflicts": [
+            { "decision": "grid.action_point_rule", "option": "pooled_action_points" }
+          ],
+          "unlocks": ["grid.action_point_rule"]
+        }
+      ]
+    },
+    {
+      "id": "grid.combat_system",
+      "domain": "combat",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "战斗结算采用什么结构？",
+      "options": [
+        {
+          "id": "deterministic_resolve",
+          "label": "确定性结算",
+          "summary": "攻击必然命中，伤害由公式与克制唯一确定，无命中随机",
+          "implications": ["信息完全公开，策略深度来自站位与克制", "需要伤害公式与兵种克制矩阵", "敌方意图需要提前展示以支撑推演"],
+          "unlocks": ["grid.damage_formula", "grid.counter_attack_rule", "grid.class_counter_matrix"]
+        },
+        {
+          "id": "probabilistic_resolve",
+          "label": "概率命中结算",
+          "summary": "攻击带命中率与暴击率，结算引入受控随机",
+          "implications": ["需要命中与暴击规则", "需要伤害公式与兵种克制矩阵", "期望管理与保底设计是体验关键"],
+          "unlocks": ["grid.damage_formula", "grid.hit_rule", "grid.crit_rule", "grid.counter_attack_rule", "grid.class_counter_matrix"]
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_system",
+      "domain": "unit",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "单位体系采用什么结构？",
+      "options": [
+        {
+          "id": "class_based_units",
+          "label": "兵种职业体系",
+          "summary": "单位由兵种模板派生，同兵种共享属性框架与克制标签",
+          "implications": ["需要单位属性表与兵种表", "兵种克制是平衡性的主要抓手"],
+          "unlocks": ["grid.unit_roster", "grid.class_roster"]
+        },
+        {
+          "id": "unique_heroes",
+          "label": "独立英雄体系",
+          "summary": "每个单位独立建模，但仍挂兵种标签以驱动克制判定",
+          "implications": ["需要单位属性表与兵种表", "单位个性优先，兵种仅作克制归类", "单位数量少而精，逐个手调数值"],
+          "unlocks": ["grid.unit_roster", "grid.class_roster"]
+        }
+      ]
+    },
+    {
+      "id": "grid.progression_system",
+      "domain": "progression",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "单位养成采用什么结构？",
+      "options": [
+        {
+          "id": "exp_level_growth",
+          "label": "经验升级成长",
+          "summary": "单位通过战斗行为获取经验，升级提升属性",
+          "implications": ["需要经验获取规则", "需要养成数值表", "战斗内成长使练兵本身成为玩法"],
+          "unlocks": ["grid.exp_gain_rule"]
+        },
+        {
+          "id": "resource_upgrade",
+          "label": "资源强化成长",
+          "summary": "单位在关卡外消耗资源强化属性，战斗内不产生经验",
+          "implications": ["需要强化成本规则", "需要养成数值表", "资源产出与关卡奖励必须闭环"],
+          "unlocks": ["grid.upgrade_cost_rule"]
+        }
+      ]
+    },
+    {
+      "id": "grid.stage_system",
+      "domain": "stage",
+      "level": "L3",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "关卡战役采用什么结构？",
+      "options": [
+        {
+          "id": "linear_campaign",
+          "label": "线性战役",
+          "summary": "关卡按固定顺序推进，难度曲线全局可控",
+          "implications": ["需要胜负判定规则", "需要关卡表与敌方配置表", "单一路线便于精确调节难度曲线"],
+          "unlocks": ["grid.victory_condition_rule", "grid.stage_table", "grid.enemy_deploy_table"]
+        },
+        {
+          "id": "branching_campaign",
+          "label": "分支战役",
+          "summary": "关键节点提供路线分支，不同路线经过不同关卡集合",
+          "implications": ["需要胜负判定规则", "需要关卡表与敌方配置表", "各分支路线的难度与奖励需要对齐"],
+          "unlocks": ["grid.victory_condition_rule", "grid.stage_table", "grid.enemy_deploy_table"]
+        }
+      ]
+    },
+    {
+      "id": "grid.move_rule",
+      "domain": "battlefield",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "网格移动的机制规则是什么？",
+      "options": [
+        {
+          "id": "move_point_cost",
+          "label": "地形移动力消耗",
+          "summary": "每进入一格消耗该地形的移动成本，路径总消耗不得超过单位移动力",
+          "implications": ["地形表成为走位策略核心", "寻路采用最小消耗路径", "机动类别可对特定地形改写消耗"],
+          "unlocks": ["grid.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "zoc_enabled", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "path_min_cost(terrain_move_cost) <= move" }
+          ]
+        },
+        {
+          "id": "fixed_range_move",
+          "label": "固定范围移动",
+          "summary": "移动范围为以自身为中心的固定格数，无视地形差异",
+          "implications": ["地形只影响战斗不影响机动", "数值调优集中在移动力字段", "规则可读性高，适合快节奏关卡"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pass_through_allies", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "grid_distance(origin, target) <= move" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.action_point_rule",
+      "domain": "turn",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "行动点的机制规则是什么？",
+      "options": [
+        {
+          "id": "move_act_split",
+          "label": "移动加行动两段制",
+          "summary": "每单位每回合一次移动与一次行动，执行行动后该单位本回合结束",
+          "implications": ["先移动后行动的顺序博弈", "行动后再移动类能力需要单独开洞"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "allow_move_after_act", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.turn_system" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_slot", "formula": "1 per act" },
+            { "effect": "change_state", "machine": "unit_turn_state", "to_state": "acted" }
+          ]
+        },
+        {
+          "id": "pooled_action_points",
+          "label": "全队行动点池",
+          "summary": "全队共享一个行动点池，同一单位可连续多次行动",
+          "implications": ["允许集火与连锁战术", "需要重复行动递增成本以防单核滚雪球"],
+          "conflicts": [
+            { "decision": "grid.turn_system", "option": "speed_initiative" }
+          ],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 20.0 }, "required": true },
+            { "key": "repeat_cost_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 3.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.turn_system" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_point_pool", "formula": "act_cost * (1 + {param:repeat_cost_growth} * repeat_count)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.damage_formula",
+      "domain": "combat",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "伤害公式的机制规则是什么？",
+      "options": [
+        {
+          "id": "atk_minus_def",
+          "label": "攻减防线性公式",
+          "summary": "伤害 = (攻击 − 防御) × 克制系数 − 地形减伤，带最低伤害保底",
+          "implications": ["攻防数值差直接决定交换比", "克制系数与地形修正是二级杠杆", "高防单位可能把伤害压到保底值"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "min_damage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - max((atk - def) * counter_coeff - terrain_def_bonus, {param:min_damage})" }
+          ]
+        },
+        {
+          "id": "ratio_mitigation",
+          "label": "防御百分比减伤公式",
+          "summary": "伤害 = 攻击 × 克制系数 × (1 − 防御/(防御+常数K))",
+          "implications": ["防御收益边际递减，堆防不会免疫", "常数K决定前后期防御价值曲线"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "mitigation_k", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 10.0, "max": 500.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - atk * counter_coeff * (1 - def / (def + {param:mitigation_k}))" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.hit_rule",
+      "domain": "combat",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "命中判定的机制规则是什么？",
+      "options": [
+        {
+          "id": "hit_chance_formula",
+          "label": "单随机数命中公式",
+          "summary": "命中率 = 技巧修正 + 武器命中 − 回避 − 地形回避，掷一次随机数判定",
+          "implications": ["命中率需要上下限钳制", "地形回避加成进入命中公式"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "hit_floor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "hit_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hit_chance", "formula": "clamp(skill_mod + weapon_hit - evade - terrain_evade_bonus, {param:hit_floor}, {param:hit_cap})" }
+          ]
+        },
+        {
+          "id": "dual_rng_hit",
+          "label": "双随机数平滑命中",
+          "summary": "取两次随机数的平均值与命中率比较，高命中更稳、低命中更难蒙中",
+          "implications": ["展示命中率与真实概率存在系统性偏差", "需要决定是否向玩家披露真实概率"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "display_true_rate", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hit_chance", "formula": "P(avg(roll1, roll2) < displayed_hit_chance)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.crit_rule",
+      "domain": "combat",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "暴击判定的机制规则是什么？",
+      "options": [
+        {
+          "id": "independent_crit",
+          "label": "独立暴击判定",
+          "summary": "命中后另掷一次暴击判定，暴击时伤害乘以倍率",
+          "implications": ["暴击率与暴击倍率可分开调优", "高倍率低概率制造强随机记忆点"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "crit_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.5, "max": 4.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * ({param:crit_multiplier} - 1) if crit_roll < crit_chance" }
+          ]
+        },
+        {
+          "id": "overflow_crit",
+          "label": "溢出命中转化暴击",
+          "summary": "命中率超过上限的溢出部分按比例转化为暴击率",
+          "implications": ["堆命中的收益不会浪费", "暴击率间接受敌方回避压制"],
+          "requires": [
+            { "decision": "grid.hit_rule", "option": "hit_chance_formula" }
+          ],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "overflow_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "crit_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.5, "max": 4.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "crit_chance", "formula": "max(raw_hit_chance - hit_cap, 0) * {param:overflow_ratio}" },
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * ({param:crit_multiplier} - 1) if crit_roll < crit_chance" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.terrain_effect_rule",
+      "domain": "terrain",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "地形加成的机制规则是什么？",
+      "options": [
+        {
+          "id": "terrain_modifier_stack",
+          "label": "地形修正数值叠加",
+          "summary": "站位地形按地形表提供回避与减伤加值，叠加进战斗公式",
+          "implications": ["地形表数值直接进战斗公式", "抢占强势地形成为核心走位动机", "飞行类机动可豁免地形修正"],
+          "unlocks": ["grid.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "flier_ignore_terrain", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "evade", "formula": "evade + terrain_evade_bonus" },
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "def", "formula": "def + terrain_def_bonus" }
+          ]
+        },
+        {
+          "id": "terrain_binary_cover",
+          "label": "二元掩体规则",
+          "summary": "地形只区分掩体与非掩体，处于掩体时按固定比例减伤",
+          "implications": ["地形理解成本低，可读性优先", "数值杠杆集中在单一减伤比例上"],
+          "unlocks": ["grid.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "cover_reduction", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.9 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * (1 - {param:cover_reduction}) if in_cover" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.counter_attack_rule",
+      "domain": "combat",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "反击的机制规则是什么？",
+      "options": [
+        {
+          "id": "range_check_counter",
+          "label": "射程内自动反击",
+          "summary": "受击方存活且武器射程覆盖攻击方时，立即反击一次",
+          "implications": ["射程差成为安全输出的核心", "交战预览需要展示双向伤害"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "counter_damage_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 1.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "attacker.hp - counter_damage * {param:counter_damage_ratio}" }
+          ]
+        },
+        {
+          "id": "no_counter",
+          "label": "无反击结算",
+          "summary": "被动方不反击，先手进攻方独占本次交战收益",
+          "implications": ["鼓励主动进攻，回合内输出即收益", "需要地形与目标设计补足防守方体验"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.combat_system" },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "counter_skipped" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.exp_gain_rule",
+      "domain": "progression",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "经验获取的机制规则是什么？",
+      "options": [
+        {
+          "id": "action_exp",
+          "label": "行动经验制",
+          "summary": "攻击、击杀、辅助分别给固定经验，攒满定额升一级",
+          "implications": ["辅助型单位也能稳定成长", "刷经验行为需要关卡侧限制"],
+          "unlocks": ["grid.progression_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "exp_per_level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 10.0, "max": 1000.0 }, "required": true },
+            { "key": "kill_bonus_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.progression_system" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "exp", "formula": "base_action_exp * {param:kill_bonus_multiplier} on kill" }
+          ]
+        },
+        {
+          "id": "level_diff_exp",
+          "label": "等级差经验制",
+          "summary": "经验随敌我等级差缩放，越级挑战收益更高、碾压收益衰减",
+          "implications": ["自然抑制单核滚雪球", "低等级单位追赶成本降低"],
+          "unlocks": ["grid.progression_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "diff_scale", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.05, "max": 3.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.progression_system" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "exp", "formula": "base_exp * max(1 + (enemy_level - unit_level) * {param:diff_scale}, 0.1)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.upgrade_cost_rule",
+      "domain": "progression",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "强化成本的机制规则是什么？",
+      "options": [
+        {
+          "id": "linear_cost",
+          "label": "线性成本曲线",
+          "summary": "强化成本 = 基础成本 × 当前强化档位",
+          "implications": ["养成节奏平稳可预期", "后期资源溢出风险需要奖励侧控制"],
+          "unlocks": ["grid.progression_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.progression_system" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "upgrade_material", "formula": "{param:base_cost} * current_tier" }
+          ]
+        },
+        {
+          "id": "exponential_cost",
+          "label": "指数成本曲线",
+          "summary": "强化成本按倍率逐档放大，深度养成单个单位代价极高",
+          "implications": ["鼓励宽度养成多单位", "尾部档位需要保底或折扣设计"],
+          "unlocks": ["grid.progression_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "cost_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.1, "max": 3.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.progression_system" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "upgrade_material", "formula": "{param:base_cost} * {param:cost_growth} ^ current_tier" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.victory_condition_rule",
+      "domain": "stage",
+      "level": "L4",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "胜负判定的机制规则是什么？",
+      "options": [
+        {
+          "id": "objective_victory",
+          "label": "目标制胜负",
+          "summary": "每关声明胜利与失败目标（歼灭、占点、坚守、护送），达成即结算",
+          "implications": ["关卡表需要目标字段", "不同目标改变最优编队与节奏"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "default_turn_limit", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 5.0, "max": 99.0 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.stage_system" },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "stage_victory" },
+            { "effect": "emit_signal", "signal": "stage_defeat" }
+          ]
+        },
+        {
+          "id": "annihilation_only",
+          "label": "纯歼灭制",
+          "summary": "消灭全部敌方单位即胜，己方全灭即败",
+          "implications": ["目标单一，节奏由敌方配置决定", "龟缩战术需要增援或限时机制对抗"],
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.stage_system" },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "stage_victory" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster",
+      "domain": "unit",
+      "level": "L5",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "单位属性表的结构是什么？",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "unit_stat_table",
+          "label": "单位属性表",
+          "summary": "每个单位一行：标识、所属兵种、生命、攻击、防御、技巧、速度、移动力、射程",
+          "implications": ["属性列是战斗与命中公式的输入", "所属兵种列关联兵种表与克制矩阵"],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "class_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "atk", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true },
+              { "key": "def", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true },
+              { "key": "skill", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true },
+              { "key": "speed", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true },
+              { "key": "move", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
+              { "key": "range_min", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true },
+              { "key": "range_max", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "unit_types"
+          }
+        },
+        {
+          "id": "custom_unit_table",
+          "label": "自定义单位表结构",
+          "summary": "以结构化描述声明与预设不同的单位属性表结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.class_roster",
+      "domain": "unit",
+      "level": "L5",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "兵种表的结构是什么？",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "class_table",
+          "label": "兵种定义表",
+          "summary": "每个兵种一行：标识、机动类别、基础移动力、克制标签",
+          "implications": ["机动类别决定地形消耗改写", "克制标签驱动克制矩阵取值"],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "mobility", "kind": { "kind": "enum", "variants": ["infantry", "cavalry", "armored", "flier"] }, "required": true },
+              { "key": "base_move", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
+              { "key": "counter_tag", "kind": { "kind": "text" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "class_types"
+          }
+        },
+        {
+          "id": "custom_class_table",
+          "label": "自定义兵种表结构",
+          "summary": "以结构化描述声明与预设不同的兵种表结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.class_counter_matrix",
+      "domain": "combat",
+      "level": "L5",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "兵种克制矩阵的结构与数值是什么？",
+      "options": [
+        {
+          "id": "class_counter_full",
+          "label": "全量兵种克制矩阵",
+          "summary": "攻击方兵种 × 受击方兵种的克制系数矩阵，每格必填",
+          "implications": ["克制系数是伤害公式的直接乘数", "矩阵行列随兵种表增删联动"],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "matrix",
+            "row_axis": { "axis": "table_rows", "decision": "grid.class_roster" },
+            "col_axis": { "axis": "table_rows", "decision": "grid.class_roster" },
+            "cell": { "key": "coeff", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 3.0 }, "required": true },
+            "cardinality_key": "class_counter_cells"
+          }
+        },
+        {
+          "id": "custom_counter_structure",
+          "label": "自定义克制结构",
+          "summary": "以结构化描述声明与预设不同的克制关系结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.terrain_table",
+      "domain": "terrain",
+      "level": "L5",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "地形效果表的结构是什么？",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "terrain_effect_table",
+          "label": "地形效果表",
+          "summary": "每种地形一行：标识、移动消耗、回避加成、减伤加成、可通行性",
+          "implications": ["移动消耗列被移动规则消费", "回避与减伤列被战斗公式消费"],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "move_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
+              { "key": "evade_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 60.0 }, "required": true },
+              { "key": "def_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true },
+              { "key": "passable", "kind": { "kind": "bool" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "terrain_types"
+          }
+        },
+        {
+          "id": "custom_terrain_table",
+          "label": "自定义地形表结构",
+          "summary": "以结构化描述声明与预设不同的地形效果表结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.stage_table",
+      "domain": "stage",
+      "level": "L6",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "各关卡的具体数据是什么？",
+      "options": [
+        {
+          "id": "stage_rows",
+          "label": "关卡数据表",
+          "summary": "每关一行：关卡号、地图尺寸、胜利目标、回合上限、部署上限",
+          "implications": ["回合上限为零表示不限时", "部署上限决定编队宽度"],
+          "compiler_tags": { "spec_role": "content", "content_kind": "stage_schedule" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "stage_no", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "map_width", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true },
+              { "key": "map_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true },
+              { "key": "objective", "kind": { "kind": "enum", "variants": ["rout", "seize", "survive", "escort"] }, "required": true },
+              { "key": "turn_limit", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true },
+              { "key": "deploy_limit", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+            ],
+            "row_key": "stage_no",
+            "cardinality_key": "stage_count"
+          }
+        },
+        {
+          "id": "custom_stage_table",
+          "label": "自定义关卡表结构",
+          "summary": "以结构化描述声明与预设不同的关卡数据结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.progression_table",
+      "domain": "progression",
+      "level": "L6",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "各兵种养成数值的具体数据是什么？",
+      "options": [
+        {
+          "id": "progression_rows",
+          "label": "养成数值表",
+          "summary": "每兵种一行：兵种标识与各属性每档成长值（升级或强化的单档增量）",
+          "implications": ["成长值与基础属性共同决定后期强度", "行集合应与兵种表一一对应"],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "class_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "hp_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true },
+              { "key": "atk_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true },
+              { "key": "def_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true },
+              { "key": "skill_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true },
+              { "key": "speed_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true }
+            ],
+            "row_key": "class_id",
+            "cardinality_key": "progression_rows"
+          }
+        },
+        {
+          "id": "custom_progression_table",
+          "label": "自定义养成表结构",
+          "summary": "以结构化描述声明与预设不同的养成数值结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "grid.enemy_deploy_table",
+      "domain": "stage",
+      "level": "L6",
+      "genre_scope": { "pack": "grid_strategy" },
+      "question": "各关敌方配置的具体数据是什么？",
+      "options": [
+        {
+          "id": "enemy_deploy_rows",
+          "label": "敌方配置表",
+          "summary": "每个敌方棋子一行：配置标识、所属关卡、单位标识、站位坐标、AI 姿态",
+          "implications": ["站位坐标必须落在对应关卡的地图尺寸内", "AI 姿态决定敌方行为脚本分派"],
+          "requires": [
+            { "decision": "grid.stage_table", "option": "stage_rows" }
+          ],
+          "compiler_tags": { "spec_role": "content", "content_kind": "enemy_layout" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "slot_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "stage_no", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+              { "key": "unit_id", "kind": { "kind": "text" }, "required": true },
+              { "key": "grid_x", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 39.0 }, "required": true },
+              { "key": "grid_y", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 39.0 }, "required": true },
+              { "key": "ai_stance", "kind": { "kind": "enum", "variants": ["aggressive", "hold_position", "patrol", "guard_objective"] }, "required": true }
+            ],
+            "row_key": "slot_id",
+            "cardinality_key": "enemy_deploy_rows"
+          }
+        },
+        {
+          "id": "custom_enemy_deploy",
+          "label": "自定义敌方配置结构",
+          "summary": "以结构化描述声明与预设不同的敌方配置结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    }
+  ]
+}

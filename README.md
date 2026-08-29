@@ -1,330 +1,106 @@
-# AutoDesignMaker NEWrust
+# AutoDesignMaker V4
 
-`NEWrust/` is the Tauri 2 + Rust rebuild of AutoDesignMaker. The desktop application
-contains the design workbench, save management, AI configuration/interview surfaces,
-the Step00-14 pipeline, safe execution summaries, logs, patches, packaging, and SDK views.
+第四版：决策驱动的游戏设计与生产工作台。全新工程，与历代版本代码零关联。
 
-This directory is an independent source repository. All product data, Schema,
-protocol resources, test baselines, and release tooling live below this root; no
-parent AutoDesignMaker or Python project is required. See
-`docs/independence/README.md` for the enforced boundary.
+## 架构一句话
 
-The source-checkout entry follows the Python project's root-launcher design: double-click
-`AutoDesignMaker.exe` in this directory. The small native launcher locates the complete
-Rust portable application under `dist/AutoDesignMaker-NEWrust`, pins all runtime data to
-that Rust-owned directory, and starts a blank project by default. It does not invoke a
-CMD file or read the parent Python project.
+用户在决策工具中完成创作（手动选择 ⇄ AI 访谈分层确认，AI 只提案、永不代提交），经**冻结门五道**（完备度→一致性→换皮→AI 红队→哈希冻结）固化为唯一内容真相源 `FrozenDesign`，再由 **C0-C6 文档编译流水线**（C5 风格、C6 签收两道人工门）产出双格式文档集；**模板生产线**独立于项目流程，把成熟游戏逆向为带证据链的认证答卷，用于新项目预填与对照；Phase 2（P0-P5 EXE 生产，仅 L6 深度档）本版只保留架构接缝，另行立项。
 
-## Requirements
+## 文档导航
 
-- Windows 10/11 x64 with Microsoft Edge WebView2 Runtime.
-- Node.js 22-24 and npm 10-11 (the Web build script itself uses only Node.js; Playwright checks
-  require the declared development dependency).
-- Rust 1.96 or newer with the `x86_64-pc-windows-msvc` toolchain.
-- Visual Studio C++ Build Tools for the MSVC linker.
+- **设计真相源**：`docs/design/00_第四版总体设计.md` 起（00-06 七份，开发争议以此为准）
+- **计划四件套**：`docs/plan/`（01 设计计划 / 02 开发计划 / 03 工程规范 / 04 子任务排序与派发）
+- **跨会话记忆**：`docs/memory/00_续接开发入口.md`（新会话从这里接管）
+- **设计空间清单**：`knowledge/design_space/`（universal + lane_defense + grid_strategy）
 
-## Development
-
-Run commands from `NEWrust/`:
+## 构建与测试
 
 ```powershell
-# Build the static Web UI consumed by Tauri.
-npm --prefix web run build
+cargo check --workspace
+cargo test --workspace
+cargo run -p adm4-cli -- space validate
+cargo build -p adm4-desktop --release
 
-# Check and test the Rust workspace.
-cargo fmt --all -- --check
-cargo check --workspace --locked
-cargo test --workspace --locked
-
-# Build or run the desktop application.
-cargo build --locked -p desktop-tauri --release
-cargo run -p desktop-tauri
-
-# Build, verify, and atomically install the root AutoDesignMaker.exe entry.
-powershell -ExecutionPolicy Bypass -File .\tools\build-root-launcher.ps1
+# CLI 全链冒烟（零网络、临时目录隔离，覆盖逆向五步→预填→访谈→冻结→C0-C6）
+powershell -ExecutionPolicy Bypass -File scripts\cli_smoke.ps1
 ```
 
-The desktop application normally stores runtime data in its Tauri application-data
-directory. Set `ADM_NEWRUST_DATA_DIR` to use an explicit data directory and
-`ADM_NEWRUST_SOURCE_ROOT` to override where `knowledge/design_data` is loaded from.
-The source-root override exists only in debug builds and must pass the complete Rust v2
-standalone identity contract (`.project_root`, Cargo workspace, both lockfiles, and the
-Rust resource manifest). It cannot point at the legacy Python project. Release builds do
-not search parent directories or use the compiler's source path.
+## 工作流（CLI）
 
-## Startup Project Mode
+任意子命令加 `--help` 查看中文详情。AI 相关命令默认使用 `config/app.json` 配置的真实 Provider（`ai doctor` 可诊断）；`--scripted-file <应答文件>` 为确定性离线测试开关。
 
-Normal product startup always creates a new, unbound draft containing the empty project
-and empty pipeline state. Existing drafts and formal saves remain on disk and formal
-saves stay available through the Save Manager; startup does not select or restore one.
-
-Recovery is explicit. Set `ADM_NEWRUST_STARTUP_PROJECT=restore` before launch only when
-the previous desktop draft/current save must be recovered. Any other value, no value,
-and the root launcher's default all select `blank`.
-
-Blank-start sessions can be bounded explicitly with
-`ADM_NEWRUST_PRUNE_BLANK_DRAFTS_KEEP_COUNT`. Missing, invalid, and `0` values disable
-cleanup. A positive value keeps the newest N old sessions that Rust can prove are
-unbound, unsaved, unlocked, equal to the canonical empty project and idle pipeline,
-and contain only the known blank-session file layout:
+### 项目主线：创建 → 创作 → 冻结 → 编译
 
 ```powershell
-$env:ADM_NEWRUST_PRUNE_BLANK_DRAFTS_KEEP_COUNT = "3"
-.\AutoDesignMaker.exe
+# 校验设计空间清单
+cargo run -p adm4-cli -- space validate lane_defense
+
+# 创建项目（选品类包 + 深度档；--template 用认证模板预填）
+cargo run -p adm4-cli -- project new "我的塔防" --pack lane_defense --depth L5
+
+# 脚本化创作（GUI 之外的自动化通道）
+cargo run -p adm4-cli -- authoring status <archive_id>
+cargo run -p adm4-cli -- authoring select <archive_id> <决策点> <选项>
+cargo run -p adm4-cli -- authoring confirm <archive_id> <决策点>
+
+# 冻结门五道评估与冻结
+cargo run -p adm4-cli -- freeze red-team <archive_id>
+cargo run -p adm4-cli -- freeze check <archive_id>
+cargo run -p adm4-cli -- freeze run <archive_id>
+
+# C0-C6 文档编译流水线（停在 C5/C6 人工门时用 confirm 放行）
+cargo run -p adm4-cli -- pipeline run <archive_id>
+cargo run -p adm4-cli -- pipeline confirm <archive_id> C5 <确认人> "风格方向确认"
+cargo run -p adm4-cli -- pipeline status <archive_id>
 ```
 
-This policy runs only during normal blank startup. `desktop_current`, the current
-session, formal saves, active locks, linked or nonblank drafts, corrupt JSON, symbolic
-links, transaction data, and any unknown file or directory layout are always retained.
-The effective value is exposed as `startup.pruneDraftsKeepCount` in Shell state and
-cleanup diagnostics are written to Runtime Logs.
-
-## Language Modes
-
-Application-owned UI text supports two complete modes:
-
-- `zh-CN`: pure Simplified Chinese UI, the default.
-- `en-US`: pure English UI.
-
-There is intentionally no visible language selector yet. Choose the startup mode
-with `ADM_NEWRUST_LANGUAGE`; the portable launcher preserves an externally supplied
-value and otherwise defaults to `zh-CN`:
+### 模板生产线（逆向五步，状态机只进不跳）
 
 ```powershell
-$env:ADM_NEWRUST_LANGUAGE = "en-US"
-.\AutoDesignMaker.exe
+# S0 新建草稿（--game 必填，游戏名与别名认证时自动登记进换皮词表 R5）
+cargo run -p adm4-cli -- template new-draft lane_defense tpl_demo --game "逆向目标游戏名" --alias "别名" --depth L4
+
+# S1 本地语料检索（零网络；可换关键词多轮调用，候选池按来源去重累积）
+cargo run -p adm4-cli -- template search-corpus lane_defense tpl_demo --corpus <语料目录> --question "战斗与部署结构" --keywords "克制,网格"
+
+# S2 AI 映射：证据候选 → 逆向答卷（无证据整卷拒收 R1）
+cargo run -p adm4-cli -- template map lane_defense tpl_demo
+
+# S3 交叉核验：独立二次 AI 会话逐条对照，冲突降级待人工
+cargo run -p adm4-cli -- template cross-check lane_defense tpl_demo
+
+# S4 人工审核（署名与结论必填 R3）
+cargo run -p adm4-cli -- template review lane_defense tpl_demo --reviewer "评审人" --note "审核结论"
+
+# S5 认证入库（只有 Certified 模板可预填/对照）
+cargo run -p adm4-cli -- template certify lane_defense tpl_demo
+
+# 认证模板预填新项目 + 只读对照（模板不进项目）
+cargo run -p adm4-cli -- project new "新项目" --pack lane_defense --depth L6 --template tpl_demo
+cargo run -p adm4-cli -- template compare <archive_id> tpl_demo
 ```
 
-The Web localization API also exports `replaceLanguageMode(language)`, which persists
-the choice and reloads the application for a future settings entry to call. The
-built-in design catalog is localized at display time through stable IDs: this covers
-all 16 domains, 103 nodes, 515 checklist labels, inline/shared option groups and
-options, gameplay-system names, the emergency fallback taxonomy, project-profile
-system fields, L4 missing paths, and built-in quality violations. The authoritative
-design/save schema remains language-neutral. New design exports and Step00-14 runs
-capture an immutable `artifact_locale`; user-facing Markdown, messages, reasons,
-acceptance text, and generation prompts follow that locale. The first complete
-artifact catalog is `zh-CN`, while the shared locale contract keeps `en-US` and future
-catalogs as protocol-compatible extensions. A stopped run resumes with the locale
-captured by its checkpoint instead of mixing languages after the UI preference changes.
+预填条目需逐条 `authoring confirm`，并用 `authoring set-rationale` 改写理由完成换皮——预填理由含模板游戏名会被冻结换皮门拦截（属预期）。
 
-Machine IDs, JSON keys, status/code values, paths, file formats, schema identifiers,
-commands, and user-authored text are never translated. Localized Markdown is a view;
-structured JSON and stable IDs are the machine-to-machine protocol. Legacy Chinese
-and English Markdown readers remain only for older packages.
+### AI 访谈（分层逐条确认）
 
-## Project Templates
-
-The design workbench provides a real template browser rather than a client-side
-placeholder. It lists lightweight metadata for the 25 bundled templates and custom
-templates in the current draft without transferring every complete project state to
-the Web UI. Built-in names, summaries, and analysis presentation follow the selected
-application language; custom names and content remain verbatim user data.
-
-Loading a template requires confirmation and sends only its stable template ID. Rust
-loads the authoritative `projectState`, removes AI interview history, infers missing
-gameplay-system selections, normalizes the design, updates the project name, and then
-autosaves. A failed autosave restores the previous in-memory project.
-
-Custom templates are stored under the active desktop session at
-`drafts/<session>/workspace/projects/templates`. Saving is atomic, built-in templates
-cannot be overwritten or deleted, duplicate custom templates require explicit
-overwrite confirmation, and corrupt JSON files are skipped with visible warnings
-instead of making the complete browser unusable. Because templates live inside the
-draft workspace, Save As Copy and formal-save restore preserve them; a new blank
-project save intentionally starts with an empty workspace.
-
-## Save Semantics And Recovery
-
-Each desktop window owns an independent autosaved draft. A formal save is an explicit,
-versioned commit of that draft; another window cannot edit the same formal save while
-its operating-system lock is held.
-
-- **New Project Save** keeps the current design decisions but starts with an empty
-  pipeline/generated workspace.
-- **Save As Copy** preserves the complete persistent workspace and binds the window to
-  the new save.
-- **Save Current** only writes the currently bound save. It never overwrites an
-  arbitrary selected save.
-- **Load** requires an explicit choice to save the current draft, discard it, or cancel.
-  A detached draft must first be saved as a copy unless discard is chosen.
-
-Formal commits use same-volume staging, before-image transaction journals, and durable
-archive/index locks. Interrupted transactions are recovered before a later save
-operation proceeds. Corrupt draft/runtime state is quarantined; corrupt formal saves
-remain listed so their directory can be inspected or deleted. Cleanup and recovery
-warnings are returned to the UI and written to Runtime Logs.
-
-Automatic draft pruning is disabled by default (`pruneDraftsKeepCount = 0`) so recovery
-data is not deleted without an explicit retention policy. When the user explicitly opens
-an imported legacy archive already located inside this Rust data root, the loader can
-recover a missing Rust autosave from its latest verified `design_project` execution
-object without modifying the archive. It never reaches into a Python project directory.
-
-## Portable Trial Build
-
-The release script builds the Web UI, compiles the locked Rust release, and stages a
-self-contained trial directory with the executable and the required design taxonomy:
+L 层升序推进、同层拓扑序、被拒点排同层末尾；L5/L6 整表为一个确认单元。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build-portable.ps1
+# 生成下一个提案（stdout 单行回合 JSON，保存后 confirm 原样传回）
+cargo run -p adm4-cli -- interview next <archive_id> > turn.json
+
+# 确认提案（用户手势；--overrides-file 例外下钻，整表确认时改若干行/格）
+cargo run -p adm4-cli -- interview confirm <archive_id> --proposal-file turn.json
+cargo run -p adm4-cli -- interview confirm <archive_id> --proposal-file turn.json --overrides-file overrides.json
+
+# 拒绝提案（该点排同层末尾，同层其余处理完后重提）
+cargo run -p adm4-cli -- interview reject <archive_id> <决策点id> "拒绝理由"
+
+# 查询分层进度（current_level 为 null 即全部完成）
+cargo run -p adm4-cli -- interview progress <archive_id>
 ```
 
-The default local update preserves and verifies any existing `user_data` before the
-portable directory is replaced. To create a distributable build with an empty data
-directory, use a separate output name; the script refuses to erase non-empty data:
+## 桌面应用（adm4-desktop）
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build-portable.ps1 `
-  -OutputName AutoDesignMaker-NEWrust-release -CleanUserData
-```
-
-`adm-new-cli dist build --execute` delegates to this same locked portable script; it
-does not maintain a second release layout.
-
-Output:
-
-```text
-dist/AutoDesignMaker-NEWrust/
-|-- AutoDesignMaker.exe
-|-- Start-AutoDesignMaker.cmd
-|-- README.txt
-|-- build-manifest.json
-|-- portable-resource-manifest.json
-|-- knowledge/{design_data,schemas,market_data,sdks,skills}/
-|-- pipeline/artifact_layer/
-`-- user_data/
-```
-
-For normal source-checkout use, run the root `AutoDesignMaker.exe`. It validates the
-portable layout and WebView2, pins the runtime data directory to the staged `user_data`
-folder, and starts the product executable directly. The internal portable CMD remains a
-release-compatibility support file only; the root EXE neither invokes nor depends on it.
-
-Release resource discovery accepts only the complete manifest-verified directory beside
-the product executable; it does not honor a source override, search the current directory,
-or fall back to an embedded taxonomy. Moving only the product `.exe`, changing a tracked
-resource, or changing either manifest makes startup/smoke fail closed.
-
-`build-manifest.json` binds the executable, launcher, artifact registry, resource
-manifest, Git commit, lockfiles, toolchain, target architecture, CRT result, and
-preserved/clean user-data digest. `portable-resource-manifest.json` binds every shipped
-resource tree. A staged release can be checked without opening the GUI:
-
-```powershell
-.\dist\AutoDesignMaker-NEWrust-release\AutoDesignMaker.exe --smoke `
-  --smoke-report "$env:TEMP\adm-newrust-smoke.json"
-```
-
-An update that replaces an existing local portable keeps its recovery backup until
-`tools/Finalize-PortableSwap.ps1` validates the transaction, live smoke result, locks,
-and user-data digests. The finalizer defaults to dry-run; only its explicit `-Execute`
-path may remove that backup.
-
-## Standalone release verification and cleanup
-
-Formal release evidence comes from a `--no-local` clone under a same-volume root path
-that is outside both the source and legacy project trees and contains Chinese characters
-and spaces. The verifier has no development/skip mode. It runs the complete Web/Rust
-checks, builds the clean portable at `dist/AutoDesignMaker-NEWrust-release`, verifies
-its manifests/hash/current HEAD/x64 static-CRT evidence, then closes the leased clone
-through dry-run, delete, and receipt retirement:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass `
-  -File .\tools\verify-standalone.ps1
-
-cargo run --locked -p adm-new-cli -- release-gate
-```
-
-`gates/standalone-release-evidence.json` is fixed-path, UTF-8 without BOM, expires
-after 24 hours, and records structured command/exit/duration/output-hash evidence for
-all required checks. `tools/security-scan-allowlist.json` is fail-closed: every reviewed
-path exception is pinned to its complete file SHA-256. The release evidence is a
-same-user guard against stale or accidental claims, not cryptographic attestation.
-
-The verifier atomically replaces any previous claim with a new schema-v2 `running`
-record before the first check. Only the final write can set `status=passed`; an
-interrupted run therefore leaves either `running`, `blocked`, expired, or missing
-evidence, all of which the Rust release gate rejects. The portable evidence also pins
-the finalized swap-receipt path and SHA-256, transaction ID, output root, build
-manifest, and current Git HEAD. Any unresolved receipt, stage, backup, failed
-candidate, retirement tombstone, or active/stale operation lock blocks release; the
-resolved persistent lock file is retained for the next exclusive operation.
-
-The `generated_cleanup` check covers both the leased clone and source-owned Cargo/Web/
-gate outputs. It must observe guarded dry-run and execute results, preserve the formal
-portable plus finalized swap receipt, and only then write the final evidence file.
-
-Generated Cargo/Web/gate output is cleaned with a guarded dry-run followed by an
-explicit execution. Always pass every protected local data path:
-
-```powershell
-powershell -File .\tools\clean-generated.ps1 `
-  -ProtectedUserData .\dist\AutoDesignMaker-NEWrust\user_data
-
-powershell -File .\tools\clean-generated.ps1 `
-  -ProtectedUserData .\dist\AutoDesignMaker-NEWrust\user_data `
-  -Execute
-```
-
-## Trial Workflow
-
-1. From a source checkout, double-click the root `AutoDesignMaker.exe`. It directly starts
-   `dist/AutoDesignMaker-NEWrust/AutoDesignMaker.exe`, so all trial data stays under the
-   staged `user_data/` directory and the parent Python project is never consulted.
-2. Build or edit a project in the design workbench. The save manager creates formal
-   saves, switches between them, and restores design, pipeline, logs, patches, and
-   generated outputs after restart.
-3. Configure a Codex CLI, Claude CLI, or OpenAI-compatible completion provider in
-   AI settings. API providers support direct keys, environment references, and
-   explicitly configured no-auth local services.
-4. Run Step00-14 from the pipeline page. Step07 pauses for style confirmation; every
-   step exposes its status, warnings, errors, and semantic quality. Internal outputs,
-   artifact lists, file paths, and raw Base64 content remain hidden. Step07 alone
-   presents validated image previews with generated/fallback/failure status.
-5. Open the package page after Step14. Package validation consumes the current
-   Step11-14 outputs and, when available, external Unity evidence from
-   `stage_14/actual_project_file_audit.json` and
-   `stage_14/unity_validation_summary.json`. Missing real Unity evidence is reported
-   as a blocker instead of being treated as a successful validation.
-
-Real Unity execution, live-provider output quality, and generated-artifact quality
-remain target-environment acceptance checks; the application preserves their internal
-evidence while presenting only safe summaries and actionable errors.
-
-## Web Checks
-
-```powershell
-npm --prefix web ci
-npm --prefix web test
-npm --prefix web run e2e
-npm --prefix web run design-content-check
-npm --prefix web run i18n-test
-npm --prefix web run language-gate
-npm --prefix web run ui-gate
-npm --prefix web run ui-baseline-gate
-```
-
-When the authoritative design taxonomy changes, run
-`npm --prefix web run design-content` to regenerate the stable-ID display catalog,
-then rerun the checks above. The UI gate captures both languages at desktop, compact,
-and narrow viewports (90 screenshots) and rejects clipping plus invalid
-template-control heights in critical toolbars and dialogs. The separate baseline gate
-currently verifies 93 records. The UI gate is fail-closed: it requires the Playwright
-dependency from `web/package-lock.json`, applies bounded launch, navigation, action,
-and screenshot timeouts, and does not use a system-browser screenshot fallback.
-
-The generated Web output is `web/dist/`. It is embedded into the desktop executable
-during the Rust release build.
-
-## Workspace Layout
-
-- `apps/desktop-tauri`: Tauri desktop shell and command adapters.
-- `apps/adm-new-cli`: command-line gates and diagnostics.
-- `apps/root-launcher`: native root EXE entry and launch-contract tests.
-- `crates/adm-new-*`: foundation, contracts, design, save, AI, pipeline, artifact,
-  packaging, patch, SDK, application, and Tauri-command layers.
-- `web`: desktop Web UI and its test/gate scripts.
-- `gates`: generated local gate evidence.
-- `tools`: reproducible release and staging tools.
+Slint 桌面壳，围绕四大面板：**设计工作台**（L5/L6 结构化表格/矩阵编辑器）、**AI 访谈**（提案展示→确认/拒绝/例外下钻）、**冻结门**（五道门逐条 finding 明细）、**模板逆向**（产线五步状态 + 人工审核动作），另有项目、开发流水线、运行日志页签；GUI 无业务规则，一切校验与状态迁移在 `adm4-app` 服务层。

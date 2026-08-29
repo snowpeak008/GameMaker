@@ -1,0 +1,19 @@
+﻿[package]
+name = "adm4-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm4-foundation = { workspace = true }
+adm4-decision = { workspace = true }
+adm4-pipeline = { workspace = true }
+adm4-app = { workspace = true }
+adm4-ai = { workspace = true }
+adm4-authoring = { workspace = true }
+adm4-template = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

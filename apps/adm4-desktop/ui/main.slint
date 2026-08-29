@@ -1,0 +1,567 @@
+import { Button, ComboBox, LineEdit, ListView, ScrollView, TabWidget, TextEdit, VerticalBox, HorizontalBox, GroupBox, ProgressIndicator } from "std-widgets.slint";
+
+export struct ProjectItem { id: string, name: string, updated: string }
+export struct DecisionItem { id: string, domain: string, level: string, question: string, status: string, selected: string }
+export struct OptionItem { id: string, label: string, summary: string, selected: bool }
+export struct StageItem { id: string, name: string, status: string, waiting: bool }
+export struct LogItem { at: string, category: string, message: string }
+// 冻结门明细：门标题行（is-header=true）与逐条 finding 行的扁平混排。
+export struct GateRow { gate: string, is-header: bool, passed: bool, text: string }
+// 访谈分层进度：一层一行。
+export struct LevelRow { label: string, text: string, current: bool }
+// 逆向面板：模板列表行 / 产线五步 / 交叉核验冲突 / 对照结果。
+export struct TemplateRow { id: string, game: string, status: string, depth: string, answers: string }
+export struct StepRow { name: string, reached: bool, current: bool }
+export struct ConflictRow { decision: string, reason: string }
+export struct CompareRow { decision: string, template-option: string, project-option: string, same: bool, params: string }
+
+export component MainWindow inherits Window {
+    title: "AutoDesignMaker V4 · 决策驱动设计工作台";
+    preferred-width: 1280px;
+    preferred-height: 820px;
+
+    in property <[ProjectItem]> projects: [];
+    in property <[string]> packs: [];
+    in property <[string]> domains: [];
+    in property <[DecisionItem]> decisions: [];
+    in property <[OptionItem]> options: [];
+    in property <[StageItem]> stages: [];
+    in property <[LogItem]> logs: [];
+    in property <string> current-project-name: "（未打开项目）";
+    in property <string> completeness-text: "";
+    in property <float> completeness-ratio: 0.0;
+    in property <string> current-decision: "";
+    in property <string> current-decision-question: "";
+    in-out property <string> param-json: "";
+    in property <string> status-message: "";
+
+    // —— 结构化表格/矩阵编辑器（后端 schema 驱动；JSON 文本框保留为高级模式）——
+    in property <bool> structured-active: false;
+    in property <bool> advanced-mode: false;
+    in property <string> editor-title: "";
+    in property <[string]> table-columns: [];
+    in property <[[string]]> table-rows-model: [];
+
+    // —— 访谈面板 ——
+    in property <[LevelRow]> interview-levels: [];
+    in property <string> interview-progress-text: "";
+    in property <string> interview-turn-kind: "";
+    in property <string> interview-decision: "";
+    in property <string> interview-option: "";
+    in property <string> interview-rationale: "";
+    in-out property <string> interview-params-json: "";
+    in property <bool> interview-has-proposal: false;
+    in property <bool> interview-params-editable: false;
+
+    // —— 逆向维护面板 ——
+    in property <[TemplateRow]> template-list: [];
+    in property <[StepRow]> template-steps: [];
+    in property <string> reverse-selected: "（未选择模板）";
+    in property <[ConflictRow]> template-conflicts: [];
+    in property <[CompareRow]> compare-rows: [];
+    in property <string> compare-title: "";
+
+    // —— 冻结门明细 ——
+    in property <[GateRow]> gate-rows: [];
+    in property <bool> freeze-ready: false;
+
+    callback refresh-projects();
+    callback create-project(string, string, string);
+    callback open-project(string);
+    callback select-domain(string);
+    callback select-decision(string);
+    callback choose-option(string);
+    callback save-params(string);
+    callback confirm-decision();
+    callback run-red-team();
+    callback freeze-check();
+    callback freeze-run();
+    callback pipeline-run();
+    callback pipeline-confirm(string, string);
+    callback refresh-logs();
+
+    // 结构化编辑器：格编辑 / 行增删 / 保存 / 高级模式切换。
+    callback edit-table-cell(int, int, string);
+    callback add-table-row();
+    callback remove-table-row(int);
+    callback save-table();
+    callback set-advanced-mode(bool);
+
+    // 访谈：下一提案 / 确认（携编辑后参数 JSON，供例外下钻）/ 拒绝（附理由）。
+    callback interview-next();
+    callback interview-confirm(string);
+    callback interview-reject(string);
+
+    // 逆向产线：选包 / 刷新 / 选模板 / 五步操作 / 对照查询。
+    callback reverse-select-pack(string);
+    callback reverse-refresh();
+    callback reverse-select-template(string);
+    callback reverse-new-draft(string, string, string, string);
+    callback reverse-search(string, string, string);
+    callback reverse-map();
+    callback reverse-crosscheck();
+    callback reverse-review(string, string);
+    callback reverse-certify();
+    callback reverse-compare();
+
+    VerticalBox {
+        // 顶栏：项目选择与创建。
+        HorizontalBox {
+            height: 44px;
+            Text { text: root.current-project-name; font-size: 16px; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            new-name := LineEdit { placeholder-text: "新项目名"; width: 160px; }
+            pack-box := ComboBox { model: root.packs; width: 150px; }
+            depth-box := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 70px; }
+            Button {
+                text: "创建项目";
+                clicked => { root.create-project(new-name.text, pack-box.current-value, depth-box.current-value); }
+            }
+            Button { text: "刷新"; clicked => { root.refresh-projects(); } }
+        }
+
+        TabWidget {
+            Tab {
+                title: "项目";
+                ListView {
+                    for project in root.projects: Rectangle {
+                        height: 40px;
+                        background: touch.has-hover ? #2a2f3a : transparent;
+                        touch := TouchArea { clicked => { root.open-project(project.id); } }
+                        HorizontalBox {
+                            Text { text: project.name; width: 30%; vertical-alignment: center; }
+                            Text { text: project.id; width: 45%; color: #9aa4b2; vertical-alignment: center; }
+                            Text { text: project.updated; color: #9aa4b2; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "设计工作台";
+                HorizontalBox {
+                    // 左：领域。
+                    VerticalBox {
+                        width: 150px;
+                        Text { text: "领域"; font-size: 14px; }
+                        ListView {
+                            for domain in root.domains: Rectangle {
+                                height: 32px;
+                                background: domain-touch.has-hover ? #2a2f3a : transparent;
+                                domain-touch := TouchArea { clicked => { root.select-domain(domain); } }
+                                Text { text: domain; vertical-alignment: center; x: 8px; }
+                            }
+                        }
+                    }
+                    // 中：决策点。
+                    VerticalBox {
+                        horizontal-stretch: 1;
+                        HorizontalBox {
+                            height: 30px;
+                            Text { text: root.completeness-text; vertical-alignment: center; }
+                            ProgressIndicator { progress: root.completeness-ratio; horizontal-stretch: 1; }
+                        }
+                        ListView {
+                            for decision in root.decisions: Rectangle {
+                                height: 56px;
+                                background: decision-touch.has-hover ? #2a2f3a : transparent;
+                                decision-touch := TouchArea { clicked => { root.select-decision(decision.id); } }
+                                VerticalBox {
+                                    padding: 4px;
+                                    HorizontalBox {
+                                        Text { text: "[" + decision.level + "] " + decision.question; font-size: 13px; horizontal-stretch: 1; }
+                                        Text { text: decision.status; color: decision.status == "已确认" ? #4caf50 : #ffb74d; }
+                                    }
+                                    Text { text: decision.id + (decision.selected == "" ? "" : "  →  " + decision.selected); color: #9aa4b2; font-size: 11px; }
+                                }
+                            }
+                        }
+                    }
+                    // 右：当前决策点的选项与参数编辑。
+                    VerticalBox {
+                        width: 460px;
+                        Text { text: root.current-decision-question; font-size: 14px; wrap: word-wrap; }
+                        ListView {
+                            height: 30%;
+                            for option in root.options: Rectangle {
+                                height: 52px;
+                                background: option.selected ? #1d3a2a : (option-touch.has-hover ? #2a2f3a : transparent);
+                                option-touch := TouchArea { clicked => { root.choose-option(option.id); } }
+                                VerticalBox {
+                                    padding: 4px;
+                                    Text { text: (option.selected ? "● " : "○ ") + option.label; font-size: 13px; }
+                                    Text { text: option.summary; color: #9aa4b2; font-size: 11px; wrap: word-wrap; }
+                                }
+                            }
+                        }
+
+                        // 结构化表格/矩阵编辑器（schema 为 Table/Matrix 时启用；列名来自 schema）。
+                        if root.structured-active && !root.advanced-mode: VerticalBox {
+                            vertical-stretch: 1;
+                            padding: 0;
+                            HorizontalBox {
+                                height: 34px;
+                                Text { text: root.editor-title; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
+                                Button { text: "新增行"; clicked => { root.add-table-row(); } }
+                                Button { text: "保存表格"; primary: true; clicked => { root.save-table(); } }
+                                Button { text: "高级JSON"; clicked => { root.set-advanced-mode(true); } }
+                            }
+                            ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    HorizontalLayout {
+                                        spacing: 2px;
+                                        for column in root.table-columns: Text {
+                                            text: column;
+                                            width: 110px;
+                                            font-size: 11px;
+                                            color: #9aa4b2;
+                                            overflow: elide;
+                                        }
+                                        Rectangle { width: 40px; }
+                                    }
+                                    for row[row-index] in root.table-rows-model: HorizontalLayout {
+                                        spacing: 2px;
+                                        for cell[col-index] in row: LineEdit {
+                                            text: cell;
+                                            width: 110px;
+                                            font-size: 12px;
+                                            edited(text) => { root.edit-table-cell(row-index, col-index, text); }
+                                        }
+                                        Button {
+                                            text: "删";
+                                            width: 40px;
+                                            clicked => { root.remove-table-row(row-index); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // JSON 文本框：标量/无参数时的默认编辑区；表/矩阵时作为「高级模式」。
+                        if !root.structured-active || root.advanced-mode: VerticalBox {
+                            vertical-stretch: 1;
+                            padding: 0;
+                            HorizontalBox {
+                                height: 30px;
+                                Text { text: "参数（JSON，表/矩阵/标量）"; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                if root.structured-active: Button {
+                                    text: "返回结构化表格";
+                                    clicked => { root.set-advanced-mode(false); }
+                                }
+                            }
+                            param-editor := TextEdit {
+                                text <=> root.param-json;
+                                vertical-stretch: 1;
+                            }
+                            HorizontalBox {
+                                height: 40px;
+                                Button { text: "保存参数"; clicked => { root.save-params(param-editor.text); } }
+                            }
+                        }
+
+                        HorizontalBox {
+                            height: 40px;
+                            Button { text: "确认此决策"; primary: true; clicked => { root.confirm-decision(); } }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "AI 访谈";
+                VerticalBox {
+                    // 顶部：分层进度（interview_progress）。
+                    HorizontalBox {
+                        height: 36px;
+                        Button { text: "下一提案"; primary: true; clicked => { root.interview-next(); } }
+                        Text { text: root.interview-progress-text; vertical-alignment: center; horizontal-stretch: 1; }
+                    }
+                    HorizontalBox {
+                        height: 30px;
+                        for level in root.interview-levels: Text {
+                            text: level.label + " " + level.text;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                            color: level.current ? #ffb74d : #9aa4b2;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    GroupBox {
+                        title: "当前提案（确认/拒绝必须由你点击——AI 永不代提交）";
+                        vertical-stretch: 1;
+                        VerticalBox {
+                            Text { text: root.interview-turn-kind; font-size: 13px; color: #64b5f6; }
+                            Text { text: root.interview-decision; font-size: 13px; wrap: word-wrap; }
+                            Text { text: root.interview-option; font-size: 13px; wrap: word-wrap; }
+                            Text { text: root.interview-rationale == "" ? "" : "理由：" + root.interview-rationale; font-size: 12px; color: #9aa4b2; wrap: word-wrap; }
+                            Text {
+                                text: root.interview-params-editable
+                                    ? "参数预览（整表提案：可先编辑再确认，改动将作为例外下钻 overrides 提交）"
+                                    : "参数预览（只读）";
+                                font-size: 12px;
+                            }
+                            interview-params := TextEdit {
+                                text <=> root.interview-params-json;
+                                read-only: !root.interview-params-editable;
+                                vertical-stretch: 1;
+                            }
+                            HorizontalBox {
+                                height: 40px;
+                                Button {
+                                    text: "确认提案";
+                                    primary: true;
+                                    enabled: root.interview-has-proposal;
+                                    clicked => { root.interview-confirm(interview-params.text); }
+                                }
+                                reject-note := LineEdit { placeholder-text: "拒绝理由"; horizontal-stretch: 1; }
+                                Button {
+                                    text: "拒绝（附理由）";
+                                    enabled: root.interview-has-proposal;
+                                    clicked => { root.interview-reject(reject-note.text); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "冻结门";
+                VerticalBox {
+                    HorizontalBox {
+                        height: 40px;
+                        Button { text: "评估五道门"; clicked => { root.freeze-check(); } }
+                        Button { text: "运行 AI 红队"; clicked => { root.run-red-team(); } }
+                        Button {
+                            text: root.freeze-ready ? "执行冻结" : "执行冻结（需五道门全绿）";
+                            primary: true;
+                            enabled: root.freeze-ready;
+                            clicked => { root.freeze-run(); }
+                        }
+                    }
+                    Text {
+                        height: 26px;
+                        text: "提示：模板预填的决策理由若含原游戏名会被换皮门拦截（预期行为）——请在设计工作台重写理由后重新评估。";
+                        font-size: 11px;
+                        color: #9aa4b2;
+                        wrap: word-wrap;
+                    }
+                    ListView {
+                        for row in root.gate-rows: Rectangle {
+                            height: row.is-header ? 34px : 28px;
+                            HorizontalBox {
+                                padding: 2px;
+                                if row.is-header: Text {
+                                    text: (row.passed ? "✔ " : "✘ ") + row.gate + " · " + row.text;
+                                    color: row.passed ? #4caf50 : #ef5350;
+                                    font-size: 14px;
+                                    vertical-alignment: center;
+                                }
+                                if !row.is-header: Text {
+                                    text: "    " + row.text;
+                                    color: #9aa4b2;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "开发流水线";
+                VerticalBox {
+                    HorizontalBox {
+                        height: 40px;
+                        Button { text: "运行 C0-C6"; primary: true; clicked => { root.pipeline-run(); } }
+                        confirm-note := LineEdit { placeholder-text: "人工确认备注"; horizontal-stretch: 1; }
+                    }
+                    ListView {
+                        for stage in root.stages: Rectangle {
+                            height: 48px;
+                            VerticalBox {
+                                padding: 4px;
+                                HorizontalBox {
+                                    Text { text: stage.id + " · " + stage.name; width: 40%; font-size: 13px; vertical-alignment: center; }
+                                    Text { text: stage.status; horizontal-stretch: 1; color: stage.status == "成功" ? #4caf50 : (stage.waiting ? #ffb74d : #9aa4b2); vertical-alignment: center; wrap: word-wrap; }
+                                    if stage.waiting: Button {
+                                        text: "人工确认";
+                                        clicked => { root.pipeline-confirm(stage.id, confirm-note.text); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "模板逆向";
+                HorizontalBox {
+                    // 左：品类包选择 + 模板列表（认证状态）。
+                    VerticalBox {
+                        width: 300px;
+                        HorizontalBox {
+                            height: 36px;
+                            reverse-pack-box := ComboBox {
+                                model: root.packs;
+                                horizontal-stretch: 1;
+                                selected(value) => { root.reverse-select-pack(value); }
+                            }
+                            Button { text: "刷新"; clicked => { root.reverse-refresh(); } }
+                        }
+                        ListView {
+                            for template in root.template-list: Rectangle {
+                                height: 52px;
+                                background: template-touch.has-hover ? #2a2f3a : transparent;
+                                template-touch := TouchArea { clicked => { root.reverse-select-template(template.id); } }
+                                VerticalBox {
+                                    padding: 4px;
+                                    HorizontalBox {
+                                        Text { text: template.id; font-size: 13px; horizontal-stretch: 1; }
+                                        Text { text: template.status; font-size: 12px; color: template.status == "已认证" ? #4caf50 : #ffb74d; }
+                                    }
+                                    Text { text: template.game + " · " + template.depth + " · " + template.answers; color: #9aa4b2; font-size: 11px; }
+                                }
+                            }
+                        }
+                    }
+
+                    // 中：产线五步状态 + 逐步操作。
+                    VerticalBox {
+                        width: 460px;
+                        Text { text: root.reverse-selected; font-size: 13px; wrap: word-wrap; }
+                        HorizontalBox {
+                            height: 28px;
+                            for step[step-index] in root.template-steps: Text {
+                                text: (step-index == 0 ? "" : "→ ") + step.name;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                                color: step.reached ? #4caf50 : (step.current ? #ffb74d : #9aa4b2);
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                        GroupBox {
+                            title: "S0 新建草稿";
+                            VerticalBox {
+                                HorizontalBox {
+                                    height: 34px;
+                                    draft-id := LineEdit { placeholder-text: "模板 id（snake_case）"; horizontal-stretch: 1; }
+                                    draft-depth := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 70px; }
+                                }
+                                HorizontalBox {
+                                    height: 34px;
+                                    draft-game := LineEdit { placeholder-text: "逆向目标游戏名"; horizontal-stretch: 1; }
+                                    draft-aliases := LineEdit { placeholder-text: "别名（逗号分隔）"; horizontal-stretch: 1; }
+                                    Button {
+                                        text: "建草稿";
+                                        clicked => { root.reverse-new-draft(draft-id.text, draft-game.text, draft-aliases.text, draft-depth.current-value); }
+                                    }
+                                }
+                            }
+                        }
+                        GroupBox {
+                            title: "S1 语料检索（本地目录，零网络）";
+                            VerticalBox {
+                                corpus-dir := LineEdit { placeholder-text: "语料目录路径"; height: 34px; }
+                                HorizontalBox {
+                                    height: 34px;
+                                    corpus-question := LineEdit { placeholder-text: "决策问题（检索上下文）"; horizontal-stretch: 1; }
+                                    corpus-keywords := LineEdit { placeholder-text: "关键词（逗号分隔）"; horizontal-stretch: 1; }
+                                    Button {
+                                        text: "检索";
+                                        clicked => { root.reverse-search(corpus-dir.text, corpus-question.text, corpus-keywords.text); }
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalBox {
+                            height: 40px;
+                            Button { text: "S2 AI 映射"; clicked => { root.reverse-map(); } }
+                            Button { text: "S3 交叉核验"; clicked => { root.reverse-crosscheck(); } }
+                        }
+                        GroupBox {
+                            title: "S4 人工审核（署名与结论必填，R3）";
+                            HorizontalBox {
+                                height: 34px;
+                                reviewer-name := LineEdit { placeholder-text: "评审人署名"; width: 130px; }
+                                review-note := LineEdit { placeholder-text: "审核结论"; horizontal-stretch: 1; }
+                                Button {
+                                    text: "审核通过";
+                                    clicked => { root.reverse-review(reviewer-name.text, review-note.text); }
+                                }
+                            }
+                        }
+                        HorizontalBox {
+                            height: 40px;
+                            Button { text: "S5 认证入库"; primary: true; clicked => { root.reverse-certify(); } }
+                            Button { text: "与当前项目对照"; clicked => { root.reverse-compare(); } }
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    // 右：交叉核验冲突清单 + 对照结果表。
+                    VerticalBox {
+                        horizontal-stretch: 1;
+                        Text { text: "交叉核验冲突（待人工裁决）"; font-size: 13px; }
+                        ListView {
+                            height: 35%;
+                            for conflict in root.template-conflicts: VerticalBox {
+                                padding: 2px;
+                                Text { text: "✘ " + conflict.decision; color: #ef5350; font-size: 12px; }
+                                Text { text: conflict.reason; color: #9aa4b2; font-size: 11px; wrap: word-wrap; }
+                            }
+                        }
+                        Text { text: root.compare-title == "" ? "对照结果（先打开项目并选择已认证模板）" : root.compare-title; font-size: 13px; wrap: word-wrap; }
+                        HorizontalBox {
+                            height: 24px;
+                            Text { text: "决策点"; width: 30%; font-size: 11px; color: #9aa4b2; }
+                            Text { text: "模板选项"; width: 20%; font-size: 11px; color: #9aa4b2; }
+                            Text { text: "项目选项"; width: 20%; font-size: 11px; color: #9aa4b2; }
+                            Text { text: "一致"; font-size: 11px; color: #9aa4b2; }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for entry in root.compare-rows: VerticalBox {
+                                padding: 2px;
+                                HorizontalBox {
+                                    Text { text: entry.decision; width: 30%; font-size: 12px; overflow: elide; }
+                                    Text { text: entry.template-option; width: 20%; font-size: 12px; overflow: elide; }
+                                    Text { text: entry.project-option; width: 20%; font-size: 12px; overflow: elide; }
+                                    Text { text: entry.same ? "✔" : "✘"; color: entry.same ? #4caf50 : #ef5350; font-size: 12px; }
+                                }
+                                if entry.params != "": Text { text: entry.params; color: #9aa4b2; font-size: 10px; wrap: word-wrap; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "运行日志";
+                VerticalBox {
+                    HorizontalBox { height: 36px; Button { text: "刷新日志"; clicked => { root.refresh-logs(); } } }
+                    ListView {
+                        for log in root.logs: HorizontalBox {
+                            height: 28px;
+                            Text { text: log.at; width: 170px; color: #9aa4b2; font-size: 11px; vertical-alignment: center; }
+                            Text { text: "[" + log.category + "]"; width: 80px; color: #64b5f6; font-size: 11px; vertical-alignment: center; }
+                            Text { text: log.message; font-size: 12px; vertical-alignment: center; wrap: word-wrap; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 底栏：状态消息。
+        Rectangle {
+            height: 28px;
+            background: #1c2027;
+            Text { text: root.status-message; x: 10px; vertical-alignment: center; color: #cfd8dc; font-size: 12px; }
+        }
+    }
+}
