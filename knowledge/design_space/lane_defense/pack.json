@@ -70,9 +70,16 @@
       "target_key_column": "entry_id"
     }
   ],
+  "nodes": [
+    {"id":"ld_combat","domain_id":"gameplay_system_design","name":"通道塔防·战斗与克制","description":"通道塔防的战斗结算、克制关系与伤害规则。","role_class":"system_concrete"},
+    {"id":"ld_deploy","domain_id":"gameplay_system_design","name":"通道塔防·部署与守卫","description":"守卫的部署方式、成本规则与守卫名单数值。","role_class":"system_concrete"},
+    {"id":"ld_economy","domain_id":"economy_monetization_design","name":"通道塔防·资源经济","description":"资源产出与消耗结构、经济条目数值。","role_class":"system_concrete"},
+    {"id":"ld_wave","domain_id":"content_design","name":"通道塔防·波次与关卡内容","description":"敌人名单、关卡名单与各关波次编排数据。","role_class":"content_concrete"}
+  ],
   "decision_points": [
     {
       "id": "ld.combat_system",
+      "node_id": "ld_combat",
       "domain": "combat",
       "level": "L3",
       "genre_scope": { "pack": "lane_defense" },
@@ -96,6 +103,7 @@
     },
     {
       "id": "ld.deploy_system",
+      "node_id": "ld_deploy",
       "domain": "deploy",
       "level": "L3",
       "genre_scope": { "pack": "lane_defense" },
@@ -119,6 +127,7 @@
     },
     {
       "id": "ld.wave_system",
+      "node_id": "ld_wave",
       "domain": "wave",
       "level": "L3",
       "genre_scope": { "pack": "lane_defense" },
@@ -142,6 +151,7 @@
     },
     {
       "id": "ld.economy_system",
+      "node_id": "ld_economy",
       "domain": "economy",
       "level": "L3",
       "genre_scope": { "pack": "lane_defense" },
@@ -165,6 +175,7 @@
     },
     {
       "id": "ld.counter_damage",
+      "node_id": "ld_combat",
       "domain": "combat",
       "level": "L4",
       "genre_scope": { "pack": "lane_defense" },
@@ -201,6 +212,7 @@
     },
     {
       "id": "ld.deploy_cost",
+      "node_id": "ld_deploy",
       "domain": "deploy",
       "level": "L4",
       "genre_scope": { "pack": "lane_defense" },
@@ -239,6 +251,7 @@
     },
     {
       "id": "ld.income_rule",
+      "node_id": "ld_economy",
       "domain": "economy",
       "level": "L4",
       "genre_scope": { "pack": "lane_defense" },
@@ -278,6 +291,7 @@
     },
     {
       "id": "ld.guard_roster",
+      "node_id": "ld_deploy",
       "domain": "deploy",
       "level": "L5",
       "genre_scope": { "pack": "lane_defense" },
@@ -326,6 +340,7 @@
     },
     {
       "id": "ld.enemy_roster",
+      "node_id": "ld_wave",
       "domain": "wave",
       "level": "L5",
       "genre_scope": { "pack": "lane_defense" },
@@ -371,6 +386,7 @@
     },
     {
       "id": "ld.counter_matrix",
+      "node_id": "ld_combat",
       "domain": "combat",
       "level": "L5",
       "genre_scope": { "pack": "lane_defense" },
@@ -406,6 +422,7 @@
     },
     {
       "id": "ld.stage_roster",
+      "node_id": "ld_wave",
       "domain": "wave",
       "level": "L5",
       "genre_scope": { "pack": "lane_defense" },
@@ -448,6 +465,7 @@
     },
     {
       "id": "ld.economy_structure",
+      "node_id": "ld_economy",
       "domain": "economy",
       "level": "L5",
       "genre_scope": { "pack": "lane_defense" },
@@ -492,6 +510,7 @@
     },
     {
       "id": "ld.wave_table",
+      "node_id": "ld_wave",
       "domain": "wave",
       "level": "L6",
       "genre_scope": { "pack": "lane_defense" },
@@ -539,6 +558,7 @@
     },
     {
       "id": "ld.guard_stats",
+      "node_id": "ld_deploy",
       "domain": "deploy",
       "level": "L6",
       "genre_scope": { "pack": "lane_defense" },
@@ -586,6 +606,7 @@
     },
     {
       "id": "ld.enemy_stats",
+      "node_id": "ld_wave",
       "domain": "wave",
       "level": "L6",
       "genre_scope": { "pack": "lane_defense" },
@@ -632,6 +653,7 @@
     },
     {
       "id": "ld.counter_band_values",
+      "node_id": "ld_combat",
       "domain": "combat",
       "level": "L6",
       "genre_scope": { "pack": "lane_defense" },
@@ -673,6 +695,7 @@
     },
     {
       "id": "ld.economy_values",
+      "node_id": "ld_economy",
       "domain": "economy",
       "level": "L6",
       "genre_scope": { "pack": "lane_defense" },

@@ -225,7 +225,9 @@ pub fn validate_graph(graph: &DecisionGraph) -> Vec<GraphViolation> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{DecisionOption, DesignLevel, GenreScope, OptionSelector, PointRequirement};
+    use crate::types::{
+        DecisionOption, DesignLevel, GenreScope, OptionSelector, PointRequirement, SelectionMode,
+    };
 
     fn option(id: &str) -> DecisionOption {
         DecisionOption {
@@ -243,6 +245,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: "q".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options,
             skin_fields: Vec::new(),

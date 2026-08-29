@@ -3,6 +3,7 @@
   "decision_points": [
     {
       "id": "u.business_model",
+      "node_id": "business_goal_decision",
       "domain": "profile",
       "level": "L0",
       "genre_scope": "universal",
@@ -15,6 +16,7 @@
     },
     {
       "id": "u.platform",
+      "node_id": "platform_play_context_decision",
       "domain": "profile",
       "level": "L0",
       "genre_scope": "universal",
@@ -27,6 +29,7 @@
     },
     {
       "id": "u.experience",
+      "node_id": "core_fun_decision",
       "domain": "experience",
       "level": "L1",
       "genre_scope": "universal",
@@ -55,6 +58,7 @@
     },
     {
       "id": "u.genre",
+      "node_id": "market_category_positioning_decision",
       "domain": "structure",
       "level": "L2",
       "genre_scope": "universal",

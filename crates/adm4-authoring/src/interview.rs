@@ -680,6 +680,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: format!("{id}？"),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: adm4_decision::SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options,
             skin_fields: Vec::new(),
@@ -751,9 +754,11 @@ mod tests {
                 .into_iter()
                 .collect(),
                 consistency_rules: Vec::new(),
+                nodes: Vec::new(),
                 decision_points: Vec::new(),
             },
             graph: DecisionGraph::new(points).unwrap(),
+            organization: adm4_decision::DesignOrganization::default(),
         };
         let state = AuthoringState::new(
             "测试项目",

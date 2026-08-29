@@ -64,6 +64,9 @@ fn point(id: &str, question: &str, options: &[(&str, &str)]) -> DecisionPoint {
         genre_scope: GenreScope::Pack("lane_test".into()),
         question: question.into(),
         mda_layer: None,
+        design_question: None,
+        node_id: None,
+        selection_mode: Default::default(),
         requirement: Default::default(),
         options: options
             .iter()

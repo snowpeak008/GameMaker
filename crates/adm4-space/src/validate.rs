@@ -1,6 +1,7 @@
 use crate::model::{ConsistencyRuleKind, DesignSpace};
 use adm4_decision::{
-    AxisRef, DecisionPoint, DesignLevel, GenreScope, ParameterSchema, validate_graph,
+    AxisRef, DecisionPoint, DesignDomain, DesignLevel, DesignNode, GenreScope, ParameterSchema,
+    validate_graph, validate_organization,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,9 +11,14 @@ pub struct SpaceViolation {
 }
 
 /// 设计空间校验规则（设计 01 号文档 §3.3）。
+///
+/// `declared_domains` / `declared_nodes` 是清单里**显式声明**的组织维度条目
+/// （不含装配时内置的保留领域/节点）——保留 id 归代码所有，清单声明即违规。
 pub fn validate_design_space(
     space: &DesignSpace,
     universal_points: &[DecisionPoint],
+    declared_domains: &[DesignDomain],
+    declared_nodes: &[DesignNode],
 ) -> Vec<SpaceViolation> {
     let mut violations = Vec::new();
 
@@ -21,6 +27,14 @@ pub fn validate_design_space(
         violations.push(SpaceViolation {
             code: format!("graph.{}", graph_violation.code),
             message: graph_violation.message,
+        });
+    }
+
+    // 1b. 领域/节点组织维度：id 唯一、节点归属领域存在、决策点 node_id 存在。
+    for org_violation in validate_organization(declared_domains, declared_nodes, &space.graph) {
+        violations.push(SpaceViolation {
+            code: format!("organization.{}", org_violation.code),
+            message: org_violation.message,
         });
     }
 
@@ -222,7 +236,8 @@ mod tests {
     use crate::model::{ConsistencyRule, GenrePack};
     use adm4_contracts::{CardinalityRange, ValueKind};
     use adm4_decision::{
-        DecisionGraph, DecisionOption, PointRequirement, ScalarField, TableSchema,
+        DecisionGraph, DecisionOption, DesignOrganization, PointRequirement, ScalarField,
+        SelectionMode, TableSchema, UNASSIGNED_DOMAIN_ID, UNASSIGNED_NODE_ID,
     };
 
     fn universal_point(id: &str, level: DesignLevel) -> DecisionPoint {
@@ -233,6 +248,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: "q".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options: vec![
                 DecisionOption {
@@ -259,6 +277,9 @@ mod tests {
             genre_scope: GenreScope::Pack("demo".into()),
             question: "q".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options: vec![DecisionOption {
                 id: "rows".into(),
@@ -286,15 +307,32 @@ mod tests {
 
     /// 组装一份最小设计空间：通用层三点 + 两张表 + 给定的一致性规则。
     fn space_with_rules(rules: Vec<ConsistencyRule>) -> (DesignSpace, Vec<DecisionPoint>) {
-        let universal = vec![
+        space_with_organization(rules, Vec::new(), Vec::new(), &[])
+    }
+
+    /// 组装最小设计空间，并可注入领域/节点声明与「决策点 → 节点」挂载。
+    fn space_with_organization(
+        rules: Vec<ConsistencyRule>,
+        domains: Vec<DesignDomain>,
+        nodes: Vec<DesignNode>,
+        point_nodes: &[(&str, &str)],
+    ) -> (DesignSpace, Vec<DecisionPoint>) {
+        let mut universal = vec![
             universal_point("u.a", DesignLevel::L0),
             universal_point("u.b", DesignLevel::L1),
             universal_point("u.c", DesignLevel::L2),
         ];
-        let pack_points = vec![
+        let mut pack_points = vec![
             table_point("demo.stages", &["stage_id"], "stage_id"),
             table_point("demo.waves", &["row_id", "stage_id"], "row_id"),
         ];
+        for (point_id, node_id) in point_nodes {
+            for point in universal.iter_mut().chain(pack_points.iter_mut()) {
+                if point.id == *point_id {
+                    point.node_id = Some((*node_id).to_string());
+                }
+            }
+        }
         let mut all = universal.clone();
         all.extend(pack_points.clone());
         let graph = match DecisionGraph::new(all) {
@@ -310,6 +348,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             consistency_rules: rules,
+            nodes: Vec::new(),
             decision_points: pack_points,
         };
         (
@@ -317,9 +356,29 @@ mod tests {
                 universal_version: "0.1.0".into(),
                 pack,
                 graph,
+                organization: DesignOrganization::new(domains, nodes),
             },
             universal,
         )
+    }
+
+    fn domain(id: &str, order: u32) -> DesignDomain {
+        DesignDomain {
+            id: id.into(),
+            name: format!("领域 {id}"),
+            description: String::new(),
+            order,
+        }
+    }
+
+    fn node(id: &str, domain_id: &str) -> DesignNode {
+        DesignNode {
+            id: id.into(),
+            domain_id: domain_id.into(),
+            name: format!("节点 {id}"),
+            description: String::new(),
+            role_class: "strategic".into(),
+        }
     }
 
     fn row_reference_rule(
@@ -345,7 +404,7 @@ mod tests {
             "stage_id",
             "stage_id",
         )]);
-        let violations = validate_design_space(&space, &universal);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
         assert!(violations.is_empty(), "{violations:?}");
     }
 
@@ -355,7 +414,7 @@ mod tests {
             row_reference_rule("bad_source", "ghost_column", "stage_id"),
             row_reference_rule("bad_target", "stage_id", "ghost_key"),
         ]);
-        let violations = validate_design_space(&space, &universal);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
         let source_violation = violations
             .iter()
             .find(|violation| violation.code == "rule.unknown_source_column")
@@ -385,12 +444,63 @@ mod tests {
                 target_key_column: "stage_id".into(),
             },
         }]);
-        let violations = validate_design_space(&space, &universal);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
         assert!(
             violations
                 .iter()
                 .any(|violation| violation.code == "rule.dangling_reference"
                     && violation.message.contains("demo.ghost")),
+            "{violations:?}"
+        );
+    }
+
+    /// 领域/节点声明齐备且决策点挂在已声明节点上 → 无组织维度违规。
+    #[test]
+    fn well_formed_organization_passes() {
+        let (space, universal) = space_with_organization(
+            Vec::new(),
+            vec![domain("positioning", 1), domain("gameplay", 3)],
+            vec![node("vision", "positioning"), node("waves", "gameplay")],
+            &[("u.a", "vision"), ("demo.waves", "waves")],
+        );
+        let violations = validate_design_space(
+            &space,
+            &universal,
+            &[domain("positioning", 1), domain("gameplay", 3)],
+            &[node("vision", "positioning"), node("waves", "gameplay")],
+        );
+        assert!(violations.is_empty(), "{violations:?}");
+        // 未挂节点的决策点归入保留领域，仍可聚合。
+        assert!(space.organization.domain(UNASSIGNED_DOMAIN_ID).is_some());
+        assert!(space.organization.node(UNASSIGNED_NODE_ID).is_some());
+    }
+
+    /// 节点引用未声明领域、决策点引用未声明节点 → 双双进违规清单。
+    #[test]
+    fn dangling_domain_and_node_references_are_rejected() {
+        let (space, universal) = space_with_organization(
+            Vec::new(),
+            vec![domain("positioning", 1)],
+            vec![node("vision", "ghost_domain")],
+            &[("demo.stages", "ghost_node")],
+        );
+        let violations = validate_design_space(
+            &space,
+            &universal,
+            &[domain("positioning", 1)],
+            &[node("vision", "ghost_domain")],
+        );
+        assert!(
+            violations.iter().any(|violation| violation.code
+                == "organization.node.dangling_domain"
+                && violation.message.contains("ghost_domain")),
+            "{violations:?}"
+        );
+        assert!(
+            violations.iter().any(
+                |violation| violation.code == "organization.point.dangling_node"
+                    && violation.message.contains("ghost_node")
+            ),
             "{violations:?}"
         );
     }

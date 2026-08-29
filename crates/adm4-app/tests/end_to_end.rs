@@ -6,7 +6,9 @@ use adm4_app::{AppConfig, AppServices, InterviewTurnDto, save_config};
 use adm4_archive::DataRoot;
 use adm4_authoring::TemplateMode;
 use adm4_contracts::{MatrixCell, TypedValue};
-use adm4_decision::{DesignLevel, NaJustification, ParameterValues, Provenance};
+use adm4_decision::{
+    DesignLevel, NaJustification, ParameterValues, Provenance, SelectionMode, UNASSIGNED_DOMAIN_ID,
+};
 use adm4_pipeline::StageStatus;
 use adm4_template::{CROSSCHECK_PURPOSE, CertificationStatus, MAPPING_PURPOSE, load_skin_wordlist};
 use std::collections::BTreeMap;
@@ -18,6 +20,47 @@ fn design_space_root() -> PathBuf {
         .join("..")
         .join("knowledge")
         .join("design_space")
+}
+
+/// 二版十六领域检查单的领域入口点（W6 T10 迁移进通用层的内容）。
+///
+/// 迁移把二版 16 领域 / 103 节点 / 515 检查单项 × L4 选项组落成 2575 个通用层决策点，
+/// 每个领域的入口点是 `requirement=baseline` 的根点（恒适用），域内其余点靠 unlocks
+/// 顺序链激活。清单与 `scripts/cli_smoke.ps1` §5b 的 `$V2DomainEntryPoints` 逐字一致。
+const V2_DOMAIN_ENTRY_POINTS: [&str; 16] = [
+    "v2.product_vision_decision.he_xin_ti_yan_cheng_nuo.core_feeling_type",
+    "v2.core_fun_decision.zhu_yao_le_qu_lai_yuan.core_feeling_target",
+    "v2.gameplay_system_scope",
+    "v2.content_type_decision.he_xin_nei_rong.content_experience",
+    "v2.economy_loop_decision.zi_yuan_chan_chu.economy_value_experience",
+    "v2.ux_information_architecture_decision.zhu_jie_mian_jie_gou.ux_understanding_experience",
+    "v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target",
+    "v2.balance_model_decision.shu_xing_ding_yi.balance_goal",
+    "v2.social_relationship_decision.hao_you_guan_xi.social_relation_experience",
+    "v2.retention_onboarding_decision.shou_ci_ti_yan_mu_biao.retention_experience",
+    "v2.liveops_launch_content_decision.shou_fa_he_xin_nei_rong.liveops_version_experience",
+    "v2.data_goal_metric_decision.liu_cun_zhi_biao.data_validation_goal",
+    "v2.compliance_age_rating_decision.nei_rong_chi_du.compliance_protection_goal",
+    "v2.documentation_core_doc_decision.xiang_mu_yuan_jing_wen_dang.documentation_alignment_goal",
+    "v2.release_store_entry_decision.he_xin_mai_dian_biao_da.release_external_promise",
+    "v2.launch_version_decision.shou_fa_ti_yan_bi_huan.launch_experience",
+];
+
+/// 逐个豁免 16 个领域入口点，与冒烟脚本 §5b 同一做法：全链场景只验证「品类最小链路」
+/// 的工具链闭环，不做全域设计巡视。豁免点移出完成度分母，在冻结门第 1 道逐条在案且
+/// 不拦截，且因为入口点无选择，域内下游链不激活——既有断言一条不改就能继续成立。
+fn exempt_v2_domain_entry_points(services: &AppServices, archive_id: &str) {
+    for entry in V2_DOMAIN_ENTRY_POINTS {
+        services
+            .authoring_set_not_applicable(
+                archive_id,
+                entry,
+                "e2e_scope_minimal_chain",
+                "本测试只验证品类最小链路",
+                "e2e",
+            )
+            .unwrap();
+    }
 }
 
 /// 冻结门红队应答；C1 红队若原样复读这段文本，两份 ReviewProof 哈希全同 → R3 橡皮图章。
@@ -115,6 +158,9 @@ fn full_chain_from_space_to_signed_phase1() {
     let archive_id = services
         .project_new("生态穹顶防线", "lane_defense", DesignLevel::L6, None)
         .unwrap();
+
+    // 二版十六领域入口点显式豁免：本测试只验证品类最小链路（见常量处说明）。
+    exempt_v2_domain_entry_points(&services, &archive_id);
 
     // 3. 手动创作：结构层 + 参数表层全部填齐。
     services
@@ -708,6 +754,10 @@ fn reverse_template_prefill_interview_freeze_and_pipeline_full_chain() {
         })
         .unwrap();
 
+    // 二版十六领域入口点显式豁免：本测试只验证品类最小链路（见常量处说明）。
+    // 位置与冒烟脚本 §5b 一致——换皮改写之后、访谈开始之前，因此访谈只在品类点上推进。
+    exempt_v2_domain_entry_points(&services, &archive_id);
+
     // === AI 访谈补齐剩余决策 ===
     let progress = services.interview_progress(&archive_id).unwrap();
     assert_eq!(progress.current_level, Some(DesignLevel::L0));
@@ -1050,6 +1100,274 @@ fn uncertified_template_prefill_is_rejected() {
         services
             .template_new_draft("lane_defense", "tpl_wip", "未名防线", &[], DesignLevel::L4)
             .is_err()
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// T9 场景（W6 T10 迁移后跟随更新）：工作台聚合查询（领域进度 / 项目画像 / 右栏四页签）
+// 在**已迁移**的仓内设计空间上工作——每个决策点都声明 node_id，按二版 16 个通用领域
+// 分组，保留领域/节点「未分域」因无点落入而不出现在聚合结果里。
+//
+// 「未声明 node_id 全部落进未分域」的过渡形态由 adm4-decision::organization 与
+// adm4-space::validate 的单元测试覆盖（保留项是代码内置的，不依赖仓库数据形态）。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn workbench_aggregates_work_on_migrated_space() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_t9_{}", std::process::id()));
+    std::fs::remove_dir_all(&temp).ok();
+    let data_root = DataRoot::new(&temp).unwrap();
+    save_config(
+        &data_root,
+        &AppConfig {
+            design_space_root: design_space_root().to_string_lossy().into_owned(),
+            ai_provider: None,
+        },
+    )
+    .unwrap();
+    let services = AppServices::open(Some(temp.clone())).unwrap();
+    let archive_id = services
+        .project_new("工作台聚合验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+
+    // L0/L1 各确认一条（画像卡片的数据源），L2 留空（缺失项的数据源）。
+    services
+        .with_project(&archive_id, |engine| {
+            engine.select_option("u.platform", "pc_single", Provenance::UserManual)?;
+            engine.confirm_selection("u.platform")?;
+            engine.select_option("u.experience", "guardian_underdog", Provenance::UserManual)?;
+            engine.set_parameters(
+                "u.experience",
+                ParameterValues::Scalars {
+                    entries: [(
+                        "statement".to_string(),
+                        TypedValue::Text("以有限守卫资源保卫家园，从被动防御走向全面掌控".into()),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
+            )?;
+            engine.confirm_selection("u.experience")?;
+            Ok(())
+        })
+        .unwrap();
+
+    // 领域聚合：迁移后 16 个通用领域各自有决策点，保留领域为空（不出现在结果里）。
+    let progress = services.organization_progress(&archive_id).unwrap();
+    assert_eq!(
+        progress.domains.len(),
+        16,
+        "迁移后应聚合出二版 16 个领域：{:?}",
+        progress
+            .domains
+            .iter()
+            .map(|domain| domain.domain_id.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        progress.domain(UNASSIGNED_DOMAIN_ID).is_none(),
+        "全部决策点都声明了 node_id，保留领域应为空"
+    );
+    // 两条已确认的点分属两个领域（u.platform → 立项定位，u.experience → 核心体验）。
+    let positioning = progress
+        .domain("product_positioning_design")
+        .expect("u.platform 所在领域应上榜");
+    assert_eq!(positioning.name, "立项与产品定位设计");
+    assert_eq!(positioning.counts.confirmed, 1);
+    assert!(positioning.counts.applicable >= 3);
+    let core_experience = progress
+        .domain("core_experience_design")
+        .expect("u.experience 所在领域应上榜");
+    assert_eq!(core_experience.counts.confirmed, 1);
+    assert_eq!(progress.total.confirmed, 2);
+    assert_eq!(progress.total.not_applicable, 0, "此时还没有任何人工豁免");
+
+    // 节点文本挂在迁移后的真实节点上（u.experience 归「核心乐趣决策」节点）。
+    services
+        .authoring_set_node_risk_note(&archive_id, "core_fun_decision", "体验参数尚未经试玩验证")
+        .unwrap();
+
+    // 人工豁免一个适用点：分母 -1，且在案。
+    services
+        .authoring_set_not_applicable(
+            &archive_id,
+            "u.business_model",
+            "out_of_scope",
+            "本期只做单机买断，商业模式不再分化",
+            "主策划",
+        )
+        .unwrap();
+
+    // 项目画像：字段来自 L0/L1 已确认决策点，没有硬编码字段名。
+    let profile = services.project_profile(&archive_id).unwrap();
+    assert_eq!(profile.project_name, "工作台聚合验证");
+    assert_eq!(profile.depth_target, DesignLevel::L4);
+    let platform = profile
+        .fields
+        .iter()
+        .find(|field| field.decision_id == "u.platform")
+        .expect("已确认的 L0 点应上画像卡");
+    assert_eq!(platform.level, DesignLevel::L0);
+    assert_eq!(platform.label, "主平台是什么？");
+    assert_eq!(platform.node_id, "platform_play_context_decision");
+    assert_eq!(platform.domain_id, "product_positioning_design");
+    assert_eq!(platform.selected.len(), 1);
+    assert_eq!(platform.selected[0].label, "PC 单机");
+    assert!(!platform.selected[0].is_primary, "单选点没有主选概念");
+    assert!(
+        profile
+            .fields
+            .iter()
+            .any(|field| field.decision_id == "u.experience"),
+        "L1 点也应上画像卡"
+    );
+    assert!(
+        profile
+            .fields
+            .iter()
+            .all(|field| field.decision_id != "u.business_model"),
+        "被豁免的点不应上画像卡"
+    );
+
+    // 决策点视图：新字段（node_id / selection_mode / MDA / 设计提问）透传到 UI DTO，
+    // 豁免记录带署名，逐选项已选状态可见。
+    let views = services.decision_points(&archive_id).unwrap();
+    let platform_view = views
+        .iter()
+        .find(|view| view.decision_id == "u.platform")
+        .expect("决策点视图应覆盖全图");
+    assert_eq!(platform_view.node_id, "platform_play_context_decision");
+    assert_eq!(platform_view.domain_id, "product_positioning_design");
+    assert_eq!(platform_view.applicability, "active");
+    assert!(platform_view.confirmed);
+    assert_eq!(platform_view.selection_mode, SelectionMode::Single);
+    assert!(
+        platform_view.design_question.is_none(),
+        "u.platform 未声明设计提问（二版检查单点才有）"
+    );
+    assert!(
+        platform_view
+            .options
+            .iter()
+            .any(|option| option.option_id == "pc_single" && option.selected && !option.is_primary)
+    );
+    let exempted_view = views
+        .iter()
+        .find(|view| view.decision_id == "u.business_model")
+        .expect("被豁免的点仍在视图里");
+    assert_eq!(exempted_view.applicability, "not_applicable");
+    let exemption = exempted_view.exemption.as_ref().expect("豁免记录应在案");
+    assert_eq!(exemption.reason_code, "out_of_scope");
+    assert_eq!(exemption.actor.as_deref(), Some("主策划"));
+    assert!(exemption.at.is_some());
+
+    // 右栏四页签一次取齐。
+    let overview = services.workbench_overview(&archive_id).unwrap();
+
+    // 1. 摘要：领域 × 进度 + 总完成度。
+    assert_eq!(overview.summary.project_name, "工作台聚合验证");
+    assert_eq!(overview.summary.genre_pack, "lane_defense");
+    assert_eq!(overview.summary.done, 2);
+    assert!(overview.summary.total > overview.summary.done);
+    assert_eq!(overview.summary.percent, overview.summary.percent.min(100));
+    assert_eq!(overview.summary.domains.len(), 16);
+    assert_eq!(overview.summary.counts.not_applicable, 1);
+    // 总完成度口径：领域聚合的分子分母与完成度报告同源同值（迁移后仍成立）。
+    assert_eq!(overview.summary.counts.confirmed, overview.summary.done);
+    assert_eq!(overview.summary.counts.applicable, overview.summary.total);
+    assert!(!overview.summary.nodes.is_empty());
+
+    // 2. 缺失项：未确认且适用的点，按领域分组（领域序同左栏，保留领域不出现）。
+    assert_eq!(
+        overview.missing.len(),
+        16,
+        "16 个领域各有未确认的适用点：{:?}",
+        overview
+            .missing
+            .iter()
+            .map(|group| group.domain_id.as_str())
+            .collect::<Vec<_>>()
+    );
+    let missing_group = &overview.missing[0];
+    assert_eq!(missing_group.domain_id, "product_positioning_design");
+    assert!(
+        missing_group
+            .items
+            .iter()
+            .any(|item| item.decision_id == "u.genre" && item.reasons.contains(&"未选择".into())),
+        "{:?}",
+        missing_group.items
+    );
+    assert!(
+        missing_group
+            .items
+            .iter()
+            .all(|item| item.decision_id != "u.business_model"),
+        "豁免点不算缺失项"
+    );
+
+    // 3. 风险：节点风险说明汇总；未跑红队时 red_team 为 None。
+    assert_eq!(overview.risk.node_risks.len(), 1);
+    assert_eq!(overview.risk.node_risks[0].node_id, "core_fun_decision");
+    assert_eq!(overview.risk.node_risks[0].node_name, "核心乐趣决策");
+    assert_eq!(
+        overview.risk.node_risks[0].domain_id,
+        "core_experience_design"
+    );
+    assert!(overview.risk.node_risks[0].note.contains("尚未经试玩验证"));
+    assert!(overview.risk.red_team.is_none());
+
+    // 4. 校验：外键违规 + 冻结门预检各门 pass/block。
+    assert!(overview.validation.row_reference_violations.is_empty());
+    assert_eq!(overview.validation.gates.len(), 4);
+    let gate_names: Vec<&str> = overview
+        .validation
+        .gates
+        .iter()
+        .map(|gate| gate.gate.as_str())
+        .collect();
+    assert_eq!(
+        gate_names,
+        vec![
+            "gate1_completeness",
+            "gate2_consistency",
+            "gate3_skin",
+            "gate4_red_team"
+        ]
+    );
+    assert!(!overview.validation.all_gates_passed, "设计未完成不该全绿");
+    let gate1 = &overview.validation.gates[0];
+    assert!(!gate1.passed);
+    assert_eq!(gate1.finding_count, gate1.findings.len());
+    // 豁免在门 1 明细里可见（带署名），且不参与通过判定。
+    assert!(
+        gate1
+            .findings
+            .iter()
+            .any(|finding| finding.code == "not_applicable_exemption"
+                && finding.message.contains("主策划")),
+        "{:?}",
+        gate1.findings
+    );
+
+    // 解除豁免 → 该点回到缺失项。
+    assert!(
+        services
+            .authoring_clear_not_applicable(&archive_id, "u.business_model")
+            .unwrap()
+    );
+    let after = services.workbench_overview(&archive_id).unwrap();
+    assert_eq!(after.summary.counts.not_applicable, 0);
+    assert_eq!(after.missing[0].domain_id, "product_positioning_design");
+    assert!(
+        after.missing[0]
+            .items
+            .iter()
+            .any(|item| item.decision_id == "u.business_model"),
+        "{:?}",
+        after.missing[0].items
     );
 
     std::fs::remove_dir_all(&temp).ok();

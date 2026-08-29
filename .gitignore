@@ -1,3 +1,4 @@
 /target
 /.adm4_data
 **/*.rs.bk
+/*.exe

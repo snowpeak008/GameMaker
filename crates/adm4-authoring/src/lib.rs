@@ -15,6 +15,6 @@ pub use interview::{
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, LevelProgress,
 };
 pub use state::{
-    AuthoringState, Finding, FindingDisposition, InterviewEntry, InterviewState, RedTeamRecord,
-    TemplateMode,
+    AuthoringState, Finding, FindingDisposition, InterviewEntry, InterviewState, NaSignoff,
+    RedTeamRecord, TemplateMode,
 };

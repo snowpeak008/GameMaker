@@ -40,6 +40,9 @@ impl CompletenessReport {
 
 /// 校验一次 Selection 的参数是否按 schema 填齐、类型与约束合法。
 /// 返回缺失/违例明细（空 = 通过）。表/矩阵按整表校验，缺格列清单而非默认值（R2）。
+///
+/// 多选点逐个已选选项分别校验（主选在前），明细前缀「选项 X：」以便定位；
+/// 单选点的明细文本与扩展前完全一致。
 pub fn validate_parameters(
     graph: &DecisionGraph,
     selections: &BTreeMap<DecisionId, Selection>,
@@ -47,11 +50,45 @@ pub fn validate_parameters(
     selection: &Selection,
     cardinality: &BTreeMap<String, CardinalityRange>,
 ) -> Vec<String> {
-    let Some(option) = point.option(&selection.option_id) else {
-        return vec![format!("选项 {} 不存在", selection.option_id)];
+    let selected = selection.selected_options();
+    let label_each = selected.len() > 1;
+    let mut problems = Vec::new();
+    for item in selected {
+        let per_option = validate_option_parameters(
+            graph,
+            selections,
+            point,
+            item.option_id,
+            item.parameters,
+            cardinality,
+        );
+        if label_each {
+            problems.extend(
+                per_option
+                    .into_iter()
+                    .map(|problem| format!("选项 {}：{problem}", item.option_id)),
+            );
+        } else {
+            problems.extend(per_option);
+        }
+    }
+    problems
+}
+
+/// 单个已选选项的参数校验（多选点按选项逐个调用）。
+pub fn validate_option_parameters(
+    graph: &DecisionGraph,
+    selections: &BTreeMap<DecisionId, Selection>,
+    point: &DecisionPoint,
+    option_id: &str,
+    parameters: &ParameterValues,
+    cardinality: &BTreeMap<String, CardinalityRange>,
+) -> Vec<String> {
+    let Some(option) = point.option(option_id) else {
+        return vec![format!("选项 {option_id} 不存在")];
     };
     let mut problems = Vec::new();
-    match (&option.parameter_schema, &selection.parameters) {
+    match (&option.parameter_schema, parameters) {
         (ParameterSchema::None, _) => {}
         (ParameterSchema::Scalar { fields }, ParameterValues::Scalars { entries }) => {
             for field in fields {
@@ -177,6 +214,54 @@ pub fn validate_parameters(
     problems
 }
 
+/// 校验已选集合与选择基数是否相符（单选点不许多选、多选点主选必须落在已选集合内）。
+///
+/// 多选点「至少选 1」由 `Selection` 的结构本身保证（`option_id` 恒有值，没选就没有
+/// Selection，缺答走「未选择」分支）；这里补的是四版原本没有的另外两条：
+/// 单选点被写入多个选项、以及 `allow_primary` 点缺主选/主选不在已选集合内。
+pub fn validate_selection_mode(point: &DecisionPoint, selection: &Selection) -> Vec<String> {
+    let mut problems = Vec::new();
+    let selected: Vec<&str> = selection.selected_option_ids();
+    if !point.is_multi() {
+        if selected.len() > 1 {
+            problems.push(format!(
+                "单选点被写入 {} 个已选选项（{}）：single 点最多一个选项",
+                selected.len(),
+                selected.join("、")
+            ));
+        }
+        if let Some(primary) = &selection.primary_option {
+            problems.push(format!(
+                "单选点标记了主选 {primary}：主选只对 multi + allow_primary 的点有意义"
+            ));
+        }
+        return problems;
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for option_id in &selected {
+        if seen.contains(option_id) {
+            problems.push(format!("已选选项 {option_id} 重复"));
+        } else {
+            seen.push(option_id);
+        }
+    }
+    match &selection.primary_option {
+        Some(primary) if !selection.contains_option(primary) => problems.push(format!(
+            "主选 {primary} 不在已选集合（{}）内",
+            selected.join("、")
+        )),
+        None if point.requires_primary() => problems.push(format!(
+            "多选点要求标记主选（allow_primary），当前已选 {} 项但未指定主选",
+            selected.len()
+        )),
+        _ => {}
+    }
+    if selection.primary_option.is_some() && !point.requires_primary() {
+        problems.push("该多选点未开启 allow_primary，不接受主选标记".to_string());
+    }
+    problems
+}
+
 /// 枚举矩阵轴的取值集合。
 pub fn enumerate_axis(
     graph: &DecisionGraph,
@@ -194,6 +279,7 @@ pub fn enumerate_axis(
                     .collect()
             })
             .unwrap_or_default(),
+        // 多选点：全部已选选项的行键并集（主选在前），少算一个选项会让矩阵轴缺行。
         AxisRef::TableRows { decision } => {
             let Some(selection) = selections.get(decision) else {
                 return Vec::new();
@@ -201,19 +287,27 @@ pub fn enumerate_axis(
             let Some(point) = graph.point(decision) else {
                 return Vec::new();
             };
-            let Some(option) = point.option(&selection.option_id) else {
-                return Vec::new();
-            };
-            let ParameterSchema::Table(table) = &option.parameter_schema else {
-                return Vec::new();
-            };
-            let ParameterValues::Rows { rows } = &selection.parameters else {
-                return Vec::new();
-            };
-            rows.iter()
-                .filter_map(|row| row.get(&table.row_key).map(|value| value.render()))
-                .filter(|value| !value.is_empty())
-                .collect()
+            let mut values = Vec::new();
+            for item in selection.selected_options() {
+                let Some(option) = point.option(item.option_id) else {
+                    continue;
+                };
+                let ParameterSchema::Table(table) = &option.parameter_schema else {
+                    continue;
+                };
+                let ParameterValues::Rows { rows } = item.parameters else {
+                    continue;
+                };
+                for row in rows {
+                    let Some(rendered) = row.get(&table.row_key).map(|value| value.render()) else {
+                        continue;
+                    };
+                    if !rendered.is_empty() && !values.contains(&rendered) {
+                        values.push(rendered);
+                    }
+                }
+            }
+            values
         }
     }
 }
@@ -263,7 +357,14 @@ pub fn compute_completeness(
             });
             continue;
         }
-        let mut problems = validate_parameters(graph, selections, point, selection, cardinality);
+        let mut problems = validate_selection_mode(point, selection);
+        problems.extend(validate_parameters(
+            graph,
+            selections,
+            point,
+            selection,
+            cardinality,
+        ));
         if let Some(dangling) = reference_problems.remove(&point.id) {
             problems.extend(dangling);
         }
@@ -294,7 +395,7 @@ mod tests {
     use crate::applicability::compute_applicability;
     use crate::types::{
         DecisionOption, DepthProfile, DesignLevel, GenreScope, MatrixSchema, PointRequirement,
-        Provenance, ScalarField, TableSchema,
+        Provenance, ScalarField, SelectedOption, SelectionMode, TableSchema,
     };
     use adm4_contracts::{MatrixCell, TypedValue, ValueKind};
 
@@ -306,6 +407,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: "守卫有哪些？".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options: vec![DecisionOption {
                 id: "roster".into(),
@@ -355,6 +459,8 @@ mod tests {
             provenance: Provenance::UserManual,
             confirmed_by_user: true,
             template_original: None,
+            additional_options: Vec::new(),
+            primary_option: None,
         }
     }
 
@@ -540,6 +646,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: "敌人种类？".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options: vec![
                 DecisionOption {
@@ -578,6 +687,8 @@ mod tests {
                 provenance: Provenance::UserManual,
                 confirmed_by_user: true,
                 template_original: None,
+                additional_options: Vec::new(),
+                primary_option: None,
             },
         );
         let point = graph.point("counter").unwrap();
@@ -595,6 +706,147 @@ mod tests {
                 .filter(|problem| problem.contains("矩阵缺格"))
                 .count(),
             3
+        );
+    }
+
+    /// 多选 + 主选的完成度正反例：缺主选/主选越界拦截，标对了才算完成。
+    #[test]
+    fn multi_point_primary_rules_gate_completeness() {
+        let mut point = table_point();
+        point.id = "core_feelings".into();
+        point.level = DesignLevel::L1;
+        point.selection_mode = SelectionMode::Multi {
+            allow_primary: true,
+        };
+        point.options = vec![
+            DecisionOption {
+                id: "tense_choice".into(),
+                label: "紧张抉择".into(),
+                ..Default::default()
+            },
+            DecisionOption {
+                id: "growth_accumulation".into(),
+                label: "成长积累".into(),
+                ..Default::default()
+            },
+            DecisionOption {
+                id: "creative_expression".into(),
+                label: "表达创造".into(),
+                ..Default::default()
+            },
+        ];
+        let graph = DecisionGraph::new(vec![point]).unwrap();
+        let depth = DepthProfile::new(DesignLevel::L4).unwrap();
+
+        let base = Selection {
+            decision_id: "core_feelings".into(),
+            option_id: "tense_choice".into(),
+            parameters: ParameterValues::None,
+            rationale: String::new(),
+            provenance: Provenance::UserManual,
+            confirmed_by_user: true,
+            template_original: None,
+            additional_options: vec![SelectedOption {
+                option_id: "growth_accumulation".into(),
+                ..Default::default()
+            }],
+            primary_option: None,
+        };
+        let report = |selection: Selection| {
+            let selections: BTreeMap<_, _> = [("core_feelings".to_string(), selection)]
+                .into_iter()
+                .collect();
+            let applicability = compute_applicability(&graph, &selections, &BTreeMap::new(), depth);
+            compute_completeness(
+                &graph,
+                &selections,
+                &BTreeMap::new(),
+                &applicability,
+                &BTreeMap::new(),
+                &[],
+            )
+        };
+
+        // 反例 1：allow_primary 但未标主选。
+        let missing_primary = report(base.clone());
+        assert_eq!(missing_primary.done, 0);
+        assert!(
+            missing_primary
+                .blocking
+                .iter()
+                .any(|item| item.detail.contains("未指定主选")),
+            "{:?}",
+            missing_primary.blocking
+        );
+
+        // 反例 2：主选不在已选集合内。
+        let mut outside = base.clone();
+        outside.primary_option = Some("creative_expression".into());
+        let outside_report = report(outside);
+        assert_eq!(outside_report.done, 0);
+        assert!(
+            outside_report
+                .blocking
+                .iter()
+                .any(|item| item.detail.contains("不在已选集合")),
+            "{:?}",
+            outside_report.blocking
+        );
+
+        // 正例：主选落在已选集合内 → 该点完成，且主选排序在前。
+        let mut good = base;
+        good.primary_option = Some("growth_accumulation".into());
+        assert_eq!(
+            good.selected_option_ids(),
+            vec!["growth_accumulation", "tense_choice"]
+        );
+        let good_report = report(good);
+        assert!(good_report.is_complete(), "{:?}", good_report.blocking);
+        assert_eq!(good_report.done, 1);
+    }
+
+    /// 单选点被写入多个选项 / 被标主选 → 完成度拦截（不静默接受）。
+    #[test]
+    fn single_point_rejects_multi_payload() {
+        let mut point = table_point();
+        point.id = "genre".into();
+        point.level = DesignLevel::L2;
+        point.options = vec![
+            DecisionOption {
+                id: "lane".into(),
+                label: "通道".into(),
+                ..Default::default()
+            },
+            DecisionOption {
+                id: "grid".into(),
+                label: "网格".into(),
+                ..Default::default()
+            },
+        ];
+        let graph = DecisionGraph::new(vec![point]).unwrap();
+        let single = graph.point("genre").expect("点存在");
+        let selection = Selection {
+            decision_id: "genre".into(),
+            option_id: "lane".into(),
+            parameters: ParameterValues::None,
+            rationale: String::new(),
+            provenance: Provenance::UserManual,
+            confirmed_by_user: true,
+            template_original: None,
+            additional_options: vec![SelectedOption {
+                option_id: "grid".into(),
+                ..Default::default()
+            }],
+            primary_option: Some("lane".into()),
+        };
+        let problems = validate_selection_mode(single, &selection);
+        assert!(
+            problems.iter().any(|item| item.contains("single 点最多")),
+            "{problems:?}"
+        );
+        assert!(
+            problems.iter().any(|item| item.contains("主选只对")),
+            "{problems:?}"
         );
     }
 }

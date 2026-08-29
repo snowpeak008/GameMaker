@@ -7,4 +7,9 @@ mod services;
 
 pub use config::{AppConfig, load_config, load_named_secrets, save_config};
 pub use runlog::{RunLog, RunLogEntry};
-pub use services::{AppServices, InterviewTurnDto, TemplateCompareEntry, TemplateComparison};
+pub use services::{
+    AppServices, DecisionOptionView, DecisionPointView, ExemptionView, GateSummary,
+    InterviewTurnDto, MissingByDomain, MissingEntry, NodeRiskNote, ProfileField, ProfileOption,
+    ProjectProfile, RedTeamFinding, RedTeamSummary, RowReferenceIssue, TemplateCompareEntry,
+    TemplateComparison, WorkbenchOverview, WorkbenchRisk, WorkbenchSummary, WorkbenchValidation,
+};

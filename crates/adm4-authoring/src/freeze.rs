@@ -83,6 +83,7 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
             message: format!("{}：{}", item.decision_id, item.detail),
         })
         .collect();
+    // 多选点：任一已选选项是 custom 就计入（少算会低报自定义比例）。
     let custom_option_count = state
         .selections
         .values()
@@ -91,8 +92,13 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
                 .space()
                 .graph
                 .point(&selection.decision_id)
-                .and_then(|point| point.option(&selection.option_id))
-                .is_some_and(|option| option.is_custom)
+                .is_some_and(|point| {
+                    selection.selected_options().into_iter().any(|item| {
+                        point
+                            .option(item.option_id)
+                            .is_some_and(|option| option.is_custom)
+                    })
+                })
         })
         .count();
     if completeness.total == 0 {
@@ -101,9 +107,35 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
             message: "没有任何适用决策点（设计空间或深度档异常）".into(),
         });
     }
+    // 不适用（N/A）豁免逐条在案：不拦截冻结，但必须在门报告里看得见谁以什么理由豁免了什么。
+    let mut na_findings: Vec<GateFinding> = state
+        .not_applicable
+        .iter()
+        .map(|(decision_id, justification)| {
+            let signature = match state.na_signoffs.get(decision_id) {
+                Some(signoff) => format!("署名 {}（{}）", signoff.actor, signoff.at),
+                None => "无署名（baseline 理由码跳过）".to_string(),
+            };
+            let note = if justification.note.trim().is_empty() {
+                String::new()
+            } else {
+                format!("：{}", justification.note)
+            };
+            GateFinding {
+                code: "not_applicable_exemption".into(),
+                message: format!(
+                    "{decision_id} 已标记不适用[{}]{note}，{signature}",
+                    justification.reason_code
+                ),
+            }
+        })
+        .collect();
+    let gate1_passed = gate1_findings.is_empty();
+    gate1_findings.append(&mut na_findings);
     gates.push(GateResult {
         gate: "gate1_completeness".into(),
-        passed: gate1_findings.is_empty(),
+        // N/A 明细是可见性条目，不参与通过判定。
+        passed: gate1_passed,
         findings: gate1_findings,
     });
 
@@ -117,50 +149,60 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
             });
             continue;
         };
-        let Some(option) = point.option(&selection.option_id) else {
+        // 选择基数复核：单选点被塞多选、多选点主选缺失/越界，都不许进 FrozenDesign。
+        for problem in adm4_decision::validate_selection_mode(point, selection) {
             gate2_findings.push(GateFinding {
-                code: "unknown_option".into(),
-                message: format!(
-                    "{} 选择了不存在的选项 {}",
-                    selection.decision_id, selection.option_id
-                ),
+                code: "selection_mode_violated".into(),
+                message: format!("{}：{problem}", selection.decision_id),
             });
-            continue;
-        };
-        for required in &option.requires {
-            let satisfied = state
-                .selections
-                .get(&required.decision)
-                .is_some_and(|other| other.option_id == required.option);
-            if !satisfied {
-                gate2_findings.push(GateFinding {
-                    code: "requires_violated".into(),
-                    message: format!(
-                        "{}/{} 的前置 {}/{} 未满足",
-                        selection.decision_id,
-                        selection.option_id,
-                        required.decision,
-                        required.option
-                    ),
-                });
-            }
         }
-        for conflict in &option.conflicts {
-            let conflicted = state
-                .selections
-                .get(&conflict.decision)
-                .is_some_and(|other| other.option_id == conflict.option);
-            if conflicted {
+        // 多选点逐个已选选项复核 requires/conflicts（判定按「对方已选集合是否包含」）。
+        for item in selection.selected_options() {
+            let Some(option) = point.option(item.option_id) else {
                 gate2_findings.push(GateFinding {
-                    code: "conflict_violated".into(),
+                    code: "unknown_option".into(),
                     message: format!(
-                        "{}/{} 与 {}/{} 冲突",
-                        selection.decision_id,
-                        selection.option_id,
-                        conflict.decision,
-                        conflict.option
+                        "{} 选择了不存在的选项 {}",
+                        selection.decision_id, item.option_id
                     ),
                 });
+                continue;
+            };
+            for required in &option.requires {
+                let satisfied = state
+                    .selections
+                    .get(&required.decision)
+                    .is_some_and(|other| other.contains_option(&required.option));
+                if !satisfied {
+                    gate2_findings.push(GateFinding {
+                        code: "requires_violated".into(),
+                        message: format!(
+                            "{}/{} 的前置 {}/{} 未满足",
+                            selection.decision_id,
+                            item.option_id,
+                            required.decision,
+                            required.option
+                        ),
+                    });
+                }
+            }
+            for conflict in &option.conflicts {
+                let conflicted = state
+                    .selections
+                    .get(&conflict.decision)
+                    .is_some_and(|other| other.contains_option(&conflict.option));
+                if conflicted {
+                    gate2_findings.push(GateFinding {
+                        code: "conflict_violated".into(),
+                        message: format!(
+                            "{}/{} 与 {}/{} 冲突",
+                            selection.decision_id,
+                            item.option_id,
+                            conflict.decision,
+                            conflict.option
+                        ),
+                    });
+                }
             }
         }
     }
@@ -170,20 +212,25 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
                 matrix_decision,
                 table_decision,
             } => {
-                let matrix_rows: Vec<String> = state
-                    .selections
-                    .get(matrix_decision)
-                    .map(|selection| match &selection.parameters {
-                        ParameterValues::Cells { cells } => {
-                            let mut rows: Vec<String> =
-                                cells.iter().map(|cell| cell.row.clone()).collect();
-                            rows.sort();
-                            rows.dedup();
-                            rows
-                        }
-                        _ => Vec::new(),
-                    })
-                    .unwrap_or_default();
+                // 多选点：全部已选选项的格数据合并后取行集合。
+                let matrix_rows: Vec<String> = match state.selections.get(matrix_decision) {
+                    None => Vec::new(),
+                    Some(selection) => {
+                        let mut rows: Vec<String> = selection
+                            .selected_options()
+                            .into_iter()
+                            .flat_map(|item| match item.parameters {
+                                ParameterValues::Cells { cells } => {
+                                    cells.iter().map(|cell| cell.row.clone()).collect()
+                                }
+                                _ => Vec::new(),
+                            })
+                            .collect();
+                        rows.sort();
+                        rows.dedup();
+                        rows
+                    }
+                };
                 let table_rows = {
                     let axis = adm4_decision::AxisRef::TableRows {
                         decision: table_decision.clone(),
@@ -239,42 +286,46 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
     let mut gate3_findings = Vec::new();
     for selection in state.selections.values() {
         let is_template = matches!(selection.provenance, Provenance::Template { .. });
-        if is_template && let Some(original) = &selection.template_original {
-            let Some(point) = engine.space().graph.point(&selection.decision_id) else {
-                continue;
-            };
-            for skin_field in &point.skin_fields {
-                let current = extract_field(&selection.parameters, skin_field);
-                let template_value = extract_field(original, skin_field);
-                if let (Some(current_value), Some(template_value)) = (current, template_value)
-                    && current_value == template_value
-                {
-                    gate3_findings.push(GateFinding {
-                        code: "skin_field_unchanged".into(),
-                        message: format!(
-                            "{} 的皮字段 {skin_field} 与模板原值相同，必须换皮",
-                            selection.decision_id
-                        ),
-                    });
+        let point = engine.space().graph.point(&selection.decision_id);
+        // 多选点逐个已选选项过换皮门：皮字段比对与参考名扫描都不许漏掉附加选项。
+        for item in selection.selected_options() {
+            if is_template
+                && let Some(original) = item.template_original
+                && let Some(point) = point
+            {
+                for skin_field in &point.skin_fields {
+                    let current = extract_field(item.parameters, skin_field);
+                    let template_value = extract_field(original, skin_field);
+                    if let (Some(current_value), Some(template_value)) = (current, template_value)
+                        && current_value == template_value
+                    {
+                        gate3_findings.push(GateFinding {
+                            code: "skin_field_unchanged".into(),
+                            message: format!(
+                                "{} 的皮字段 {skin_field} 与模板原值相同，必须换皮",
+                                selection.decision_id
+                            ),
+                        });
+                    }
                 }
             }
-        }
-        // 参考名扫描：理由与全部文本参数。
-        for hit in scanner.scan(
-            &format!("selection:{}", selection.decision_id),
-            &selection.rationale,
-        ) {
-            gate3_findings.push(GateFinding {
-                code: "reference_name_hit".into(),
-                message: format!("{} 命中参考名 {}", hit.location, hit.matched_word),
-            });
-        }
-        for text in collect_text_values(&selection.parameters) {
-            for hit in scanner.scan(&format!("selection:{}", selection.decision_id), &text) {
+            // 参考名扫描：理由与全部文本参数。
+            for hit in scanner.scan(
+                &format!("selection:{}", selection.decision_id),
+                item.rationale,
+            ) {
                 gate3_findings.push(GateFinding {
                     code: "reference_name_hit".into(),
-                    message: format!("{} 参数命中参考名 {}", hit.location, hit.matched_word),
+                    message: format!("{} 命中参考名 {}", hit.location, hit.matched_word),
                 });
+            }
+            for text in collect_text_values(item.parameters) {
+                for hit in scanner.scan(&format!("selection:{}", selection.decision_id), &text) {
+                    gate3_findings.push(GateFinding {
+                        code: "reference_name_hit".into(),
+                        message: format!("{} 参数命中参考名 {}", hit.location, hit.matched_word),
+                    });
+                }
             }
         }
     }
@@ -359,7 +410,12 @@ pub fn execute_freeze(
         )));
     }
     let state = engine.state();
-    let decisions: Vec<Selection> = state.selections.values().cloned().collect();
+    // 多选点主选落在首位（产物里字面可见主次），单选点等价于原样克隆。
+    let decisions: Vec<Selection> = state
+        .selections
+        .values()
+        .map(Selection::with_primary_first)
+        .collect();
     let not_applicable: Vec<(DecisionId, NaJustification)> = state
         .not_applicable
         .iter()

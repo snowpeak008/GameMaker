@@ -65,9 +65,19 @@
       "target_key_column": "id"
     }
   ],
+  "nodes": [
+    {"id":"grid_battlefield","domain_id":"gameplay_system_design","name":"网格战棋·战场与移动","description":"网格战场结构与单位移动规则。","role_class":"system_concrete"},
+    {"id":"grid_combat","domain_id":"gameplay_system_design","name":"网格战棋·战斗结算","description":"伤害公式、命中暴击判定、反击与兵种克制。","role_class":"system_concrete"},
+    {"id":"grid_progression","domain_id":"balance_design","name":"网格战棋·养成与平衡","description":"经验获取、强化成本与养成数值曲线。","role_class":"system_concrete"},
+    {"id":"grid_stage","domain_id":"content_design","name":"网格战棋·关卡战役内容","description":"关卡名单、胜负条件与敌方配置数据。","role_class":"content_concrete"},
+    {"id":"grid_terrain","domain_id":"gameplay_system_design","name":"网格战棋·地形交互","description":"地形效果规则与地形表。","role_class":"system_concrete"},
+    {"id":"grid_turn","domain_id":"gameplay_system_design","name":"网格战棋·回合与行动点","description":"回合结构与行动点消耗规则。","role_class":"system_concrete"},
+    {"id":"grid_unit","domain_id":"content_design","name":"网格战棋·单位与兵种内容","description":"单位名单、兵种表等内容实体。","role_class":"content_concrete"}
+  ],
   "decision_points": [
     {
       "id": "grid.battlefield_system",
+      "node_id": "grid_battlefield",
       "domain": "battlefield",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -91,6 +101,7 @@
     },
     {
       "id": "grid.turn_system",
+      "node_id": "grid_turn",
       "domain": "turn",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -117,6 +128,7 @@
     },
     {
       "id": "grid.combat_system",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -140,6 +152,7 @@
     },
     {
       "id": "grid.unit_system",
+      "node_id": "grid_unit",
       "domain": "unit",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -163,6 +176,7 @@
     },
     {
       "id": "grid.progression_system",
+      "node_id": "grid_progression",
       "domain": "progression",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -186,6 +200,7 @@
     },
     {
       "id": "grid.stage_system",
+      "node_id": "grid_stage",
       "domain": "stage",
       "level": "L3",
       "genre_scope": { "pack": "grid_strategy" },
@@ -209,6 +224,7 @@
     },
     {
       "id": "grid.move_rule",
+      "node_id": "grid_battlefield",
       "domain": "battlefield",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -245,6 +261,7 @@
     },
     {
       "id": "grid.action_point_rule",
+      "node_id": "grid_turn",
       "domain": "turn",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -285,6 +302,7 @@
     },
     {
       "id": "grid.damage_formula",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -320,6 +338,7 @@
     },
     {
       "id": "grid.hit_rule",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -356,6 +375,7 @@
     },
     {
       "id": "grid.crit_rule",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -396,6 +416,7 @@
     },
     {
       "id": "grid.terrain_effect_rule",
+      "node_id": "grid_terrain",
       "domain": "terrain",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -434,6 +455,7 @@
     },
     {
       "id": "grid.counter_attack_rule",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -466,6 +488,7 @@
     },
     {
       "id": "grid.exp_gain_rule",
+      "node_id": "grid_progression",
       "domain": "progression",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -504,6 +527,7 @@
     },
     {
       "id": "grid.upgrade_cost_rule",
+      "node_id": "grid_progression",
       "domain": "progression",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -542,6 +566,7 @@
     },
     {
       "id": "grid.victory_condition_rule",
+      "node_id": "grid_stage",
       "domain": "stage",
       "level": "L4",
       "genre_scope": { "pack": "grid_strategy" },
@@ -575,6 +600,7 @@
     },
     {
       "id": "grid.unit_roster",
+      "node_id": "grid_unit",
       "domain": "unit",
       "level": "L5",
       "genre_scope": { "pack": "grid_strategy" },
@@ -618,6 +644,7 @@
     },
     {
       "id": "grid.class_roster",
+      "node_id": "grid_unit",
       "domain": "unit",
       "level": "L5",
       "genre_scope": { "pack": "grid_strategy" },
@@ -655,6 +682,7 @@
     },
     {
       "id": "grid.class_counter_matrix",
+      "node_id": "grid_combat",
       "domain": "combat",
       "level": "L5",
       "genre_scope": { "pack": "grid_strategy" },
@@ -687,6 +715,7 @@
     },
     {
       "id": "grid.terrain_table",
+      "node_id": "grid_terrain",
       "domain": "terrain",
       "level": "L5",
       "genre_scope": { "pack": "grid_strategy" },
@@ -725,6 +754,7 @@
     },
     {
       "id": "grid.stage_table",
+      "node_id": "grid_stage",
       "domain": "stage",
       "level": "L6",
       "genre_scope": { "pack": "grid_strategy" },
@@ -763,6 +793,7 @@
     },
     {
       "id": "grid.progression_table",
+      "node_id": "grid_progression",
       "domain": "progression",
       "level": "L6",
       "genre_scope": { "pack": "grid_strategy" },
@@ -801,6 +832,7 @@
     },
     {
       "id": "grid.enemy_deploy_table",
+      "node_id": "grid_stage",
       "domain": "stage",
       "level": "L6",
       "genre_scope": { "pack": "grid_strategy" },

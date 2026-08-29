@@ -1,0 +1,2260 @@
+{
+ "generated_by": "W6-T10 二版知识库批量迁移",
+ "answers_by_reason": {
+  "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）": 280,
+  "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载": 5,
+  "Template 无节点文本字段（项目态才有 node_design_notes）": 25,
+  "多选附加系统 action_rule、objective、settlement、content_delivery 无 TemplateAnswer 承载": 4,
+  "多选附加系统 objective、settlement、progression、resource_economy、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载": 2,
+  "多选附加系统 action_rule、objective、settlement、progression、buildcraft、randomness、content_delivery、meta_structure 无 TemplateAnswer 承载": 1,
+  "多选附加系统 action_rule、objective、settlement、randomness、resource_economy、meta_structure 无 TemplateAnswer 承载": 1,
+  "多选附加系统 input_control、objective、settlement、progression、buildcraft、randomness、meta_structure 无 TemplateAnswer 承载": 1,
+  "多选附加系统 input_control、action_rule、objective、settlement、resource_economy、social_competition、content_delivery 无 TemplateAnswer 承载": 1,
+  "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载": 5,
+  "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载": 5
+ },
+ "answer_entries": [
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.targetScale=3a",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.referenceGame=Guacamelee! 2",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "profile.referenceArchetype=premium 2D brawler metroidvania",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_3a_guacamelee_2.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.targetScale=3a",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.referenceGame=Mark of the Ninja",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "profile.referenceArchetype=premium 2D stealth action",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_3a_mark_of_the_ninja.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.targetScale=3a",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.referenceGame=Metroid Dread",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "profile.referenceArchetype=premium 2D sci-fi metroidvania",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_3a_metroid_dread.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.targetScale=3a",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.referenceGame=Rayman Legends",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "profile.referenceArchetype=premium 2D platform adventure",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_3a_rayman_legends.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.targetScale=3a",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.referenceGame=Rogue Legacy 2",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "profile.referenceArchetype=premium 2D legacy roguelite platformer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_3a_rogue_legacy_2.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.socialModel=async_light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.contentRating=all_ages",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.targetSessionBand=session_1_3",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.targetScale=iaa_hypercasual",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.referenceGame=Angry Birds",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "profile.referenceArchetype=2D physics slingshot puzzle",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_angry_birds.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.socialModel=async_light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.contentRating=all_ages",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.targetSessionBand=session_1_3",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.targetScale=iaa_hypercasual",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.referenceGame=Bejeweled",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "profile.referenceArchetype=2D match-3 score puzzle",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、resource_economy、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_bejeweled.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.socialModel=async_light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.contentRating=all_ages",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.targetSessionBand=session_1_3",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.targetScale=iaa_hypercasual",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.referenceGame=Doodle Jump",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "profile.referenceArchetype=2D endless vertical jumper",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_doodle_jump.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.socialModel=async_light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.contentRating=all_ages",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.targetSessionBand=session_1_3",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.targetScale=iaa_hypercasual",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.referenceGame=Mini Metro",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "profile.referenceArchetype=2D minimalist transit puzzle",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_mini_metro.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.socialModel=async_light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.contentRating=all_ages",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.targetSessionBand=session_1_3",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.targetScale=iaa_hypercasual",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.referenceGame=Plants vs. Zombies",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "profile.referenceArchetype=2D lane defense casual strategy",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、resource_economy、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_iaa_hypercasual_plants_vs_zombies.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.targetScale=indie",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.referenceGame=Baba Is You",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "profile.referenceArchetype=2D rule manipulation puzzle",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_indie_baba_is_you.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.targetScale=indie",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.referenceGame=FTL: Faster Than Light",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "profile.referenceArchetype=2D spaceship management roguelike",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、progression、buildcraft、randomness、content_delivery、meta_structure 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_indie_ftl_faster_than_light.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.targetScale=indie",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.referenceGame=Into the Breach",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "profile.referenceArchetype=2D deterministic tactical strategy",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、randomness、resource_economy、meta_structure 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_indie_into_the_breach.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.targetScale=indie",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.referenceGame=Noita",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "profile.referenceArchetype=2D pixel-physics action roguelite",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 input_control、objective、settlement、progression、buildcraft、randomness、meta_structure 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_indie_noita.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.operationModel=content_updates",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.socialModel=community_driven",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.primaryPlatform=pc_console",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.targetSessionBand=session_20_40",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.targetScale=indie",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.referenceGame=Papers, Please",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "profile.referenceArchetype=2D document inspection narrative simulation",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 input_control、action_rule、objective、settlement、resource_economy、social_competition、content_delivery 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_indie_papers_please.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.primaryPlatform=cross_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.targetSessionBand=session_40_plus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.targetScale=large_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.referenceGame=AdventureQuest Worlds",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "profile.referenceArchetype=2D browser MMORPG service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_large_service_adventurequest_worlds.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.primaryPlatform=cross_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.targetSessionBand=session_40_plus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.targetScale=large_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.referenceGame=Dofus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "profile.referenceArchetype=2D tactical MMORPG service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_large_service_dofus.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.primaryPlatform=cross_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.targetSessionBand=session_40_plus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.targetScale=large_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.referenceGame=Habbo Hotel",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "profile.referenceArchetype=2D isometric social virtual world service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_large_service_habbo_hotel.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.primaryPlatform=cross_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.targetSessionBand=session_40_plus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.targetScale=large_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.referenceGame=Realm of the Mad God",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "profile.referenceArchetype=2D MMO bullet-hell permadeath service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_large_service_realm_of_the_mad_god.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.primaryPlatform=cross_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.targetSessionBand=session_40_plus",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.targetScale=large_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.referenceGame=Tibia",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "profile.referenceArchetype=2D open-world MMORPG service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 action_rule、objective、settlement、buildcraft、resource_economy、meta_structure、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_large_service_tibia.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.targetSessionBand=session_3_10",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.targetScale=midcore",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.referenceGame=Arknights",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "profile.referenceArchetype=2D squad tower defense gacha",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_midcore_arknights.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.targetSessionBand=session_3_10",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.targetScale=midcore",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.referenceGame=Brawlhalla",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "profile.referenceArchetype=2D platform fighting service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_midcore_brawlhalla.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.targetSessionBand=session_3_10",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.targetScale=midcore",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.referenceGame=Fire Emblem Heroes",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "profile.referenceArchetype=2D collectible tactical RPG service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_midcore_fire_emblem_heroes.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.targetSessionBand=session_3_10",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.targetScale=midcore",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.referenceGame=Legends of Runeterra",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "profile.referenceArchetype=2D competitive collectible card game",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_midcore_legends_of_runeterra.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.businessModel=free_to_play",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.operationModel=live_service",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.socialModel=multiplayer",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.platformScope=multi_platform",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.regionScope=global",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.contentRating=teen",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.targetSessionBand=session_3_10",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.targetScale=midcore",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.dimension=2D",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.referenceGame=Skullgirls",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "profile.referenceArchetype=2D team fighting game",
+   "reason": "四版无对应决策点/选项（既有 u.* 选项集不含该取值，禁止改既有选项）"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "v2.gameplay_system_scope",
+   "reason": "多选附加系统 objective、settlement、progression、buildcraft、social_competition、content_delivery、liveops_event 无 TemplateAnswer 承载"
+  },
+  {
+   "source": "builtin_midcore_skullgirls.json",
+   "item": "nodes[].designNote x103",
+   "reason": "Template 无节点文本字段（项目态才有 node_design_notes）"
+  }
+ ],
+ "rules": {
+  "cross_layer_rules": [
+   {
+    "id": "platform_pc_console_vs_mobile_input",
+    "severity": "CRITICAL",
+    "if": {
+     "profile.primaryPlatform": [
+      "pc_console"
+     ]
+    },
+    "forbids_option_id": [
+     "mobile_touch",
+     "touch_only",
+     "phone_touch_primary"
+    ],
+    "reason": "PC / 主机为主的项目不应把手机触屏作为目标玩家的主要设备场景。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   },
+   {
+    "id": "buyout_vs_low_payment_intent",
+    "severity": "CRITICAL",
+    "if": {
+     "profile.businessModel": [
+      "buyout",
+      "premium_with_dlc"
+     ]
+    },
+    "forbids_option_id": [
+     "non_payer",
+     "high_frequency_iap",
+     "gacha_primary"
+    ],
+    "reason": "买断制项目需要玩家有明确购买意愿,不应把目标玩家标为倾向不付费。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   },
+   {
+    "id": "rated_m_vs_low_age_band",
+    "severity": "CRITICAL",
+    "if": {
+     "profile.contentRating": [
+      "mature_17_plus"
+     ]
+    },
+    "forbids_option_id": [
+     "age_0_6",
+     "age_7_12"
+    ],
+    "reason": "M / 17+ 内容分级不应匹配低龄儿童目标年龄段。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   },
+   {
+    "id": "long_session_vs_short_session_option",
+    "severity": "CRITICAL",
+    "if": {
+     "profile.targetSessionBand": [
+      "session_20_40",
+      "session_40_plus"
+     ]
+    },
+    "forbids_option_id": [
+     "session_1_3",
+     "session_3_10",
+     "session_1_3_min",
+     "session_1_5_min"
+    ],
+    "reason": "20 分钟以上目标会话不应同时选择 1-3 分钟或极短会话作为目标玩家单次时长。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   },
+   {
+    "id": "indie_vs_large_team_scope",
+    "severity": "WARNING",
+    "if": {
+     "profile.targetScale": [
+      "indie"
+     ]
+    },
+    "forbids_option_id": [
+     "large_team",
+     "large_team_pipeline",
+     "department_scale_content"
+    ],
+    "reason": "独立游戏规模不应依赖大型团队生产结构作为核心范围假设。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   },
+   {
+    "id": "global_release_vs_single_language_lock",
+    "severity": "WARNING",
+    "if": {
+     "profile.regionScope": [
+      "global"
+     ]
+    },
+    "forbids_option_id": [
+     "single_language",
+     "single_locale_only",
+     "local_only_copy"
+    ],
+    "reason": "全球发行不应把单语种或单区域文案锁定作为发布前提。",
+    "not_migrated_because": "四版的等价物是选项级 conflicts（硬冲突、需成对声明、必须引用具体决策点 id）；本规则的条件端是二版项目画像字段（profile.*），禁止端只给 option id 不给决策点，且 WARNING 级软冲突在四版无承载（ConsistencyRule 只有 answered_together / matrix_axis_matches_table_rows / row_reference 三种，且只能声明在品类包里，通用层无容器）"
+   }
+  ],
+  "option_relation_definitions": 81,
+  "option_relations_not_migrated_because": "全部是 soft_conflict/severity=warning 的软冲突提示；四版 DecisionOption.conflicts 是硬冲突（选中即被拦截、且要求双向对称声明），把警告级关系迁成硬冲突会改变语义并锁死合法组合，故整体不迁移，等四版补软冲突（提示级）承载后再迁",
+  "option_relations": [
+   {
+    "source": "templates/shared_balance_meta_template_v1",
+    "id": "soft_conflict_balance_goal_fair_competition_vs_growth_pace",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_balance_meta_template_v1",
+    "id": "soft_conflict_balance_goal_difficulty_pressure_vs_content_value",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_balance_meta_template_v1",
+    "id": "soft_conflict_balance_numeric_dynamic_power_growth_vs_winrate_distribution",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_balance_meta_template_v1",
+    "id": "soft_conflict_balance_numeric_dynamic_resource_flow_vs_risk_reward",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_compliance_meta_template_v1",
+    "id": "soft_conflict_compliance_protection_goal_community_safety_vs_fairness_trust",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_content_meta_template_v1",
+    "id": "soft_conflict_content_experience_narrative_immersion_vs_challenge_conquest",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_content_meta_template_v1",
+    "id": "soft_conflict_content_experience_discovery_surprise_vs_collection_growth",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_content_meta_template_v1",
+    "id": "soft_conflict_content_consumption_dynamic_first_discovery_vs_repeat_farming",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_content_meta_template_v1",
+    "id": "soft_conflict_content_consumption_dynamic_branch_choice_vs_stage_unlock",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_core_meta_template_v1",
+    "id": "soft_conflict_core_feeling_target_tense_choice_vs_flow_release",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_core_meta_template_v1",
+    "id": "soft_conflict_core_feeling_target_flow_release_vs_curiosity_discovery",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_core_meta_template_v1",
+    "id": "soft_conflict_core_feeling_target_mastery_growth_vs_belonging_expression",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_core_meta_template_v1",
+    "id": "soft_conflict_core_behavior_mechanic_input_response_vs_choice_cost",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_core_meta_template_v1",
+    "id": "soft_conflict_core_behavior_mechanic_pressure_timing_vs_progress_structure",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_data_meta_template_v1",
+    "id": "soft_conflict_data_validation_goal_experience_valid_vs_payment_valid",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_data_meta_template_v1",
+    "id": "soft_conflict_data_validation_goal_retention_valid_vs_payment_valid",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_data_meta_template_v1",
+    "id": "soft_conflict_data_sampling_mechanic_telemetry_vs_interview",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_data_meta_template_v1",
+    "id": "soft_conflict_data_sampling_mechanic_ab_test_vs_gray_observation",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_documentation_meta_template_v1",
+    "id": "soft_conflict_documentation_alignment_goal_align_vision_vs_asset_requirement",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_documentation_meta_template_v1",
+    "id": "soft_conflict_documentation_alignment_goal_describe_rule_vs_change_trace",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_economy_meta_template_v1",
+    "id": "soft_conflict_economy_value_experience_fair_growth_vs_scarcity_chase",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_economy_meta_template_v1",
+    "id": "soft_conflict_economy_value_experience_satisfying_gain_vs_scarcity_chase",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_economy_meta_template_v1",
+    "id": "soft_conflict_economy_value_experience_payment_trust_vs_scarcity_chase",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_economy_meta_template_v1",
+    "id": "soft_conflict_economy_resource_dynamic_source_sink_vs_storage_deposit",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_economy_meta_template_v1",
+    "id": "soft_conflict_economy_resource_dynamic_inflation_pressure_vs_rare_value_preserve",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_gameplay_meta_template_v1",
+    "id": "soft_conflict_gameplay_control_experience_direct_control_vs_strategic_choice",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_gameplay_meta_template_v1",
+    "id": "soft_conflict_gameplay_control_experience_direct_control_vs_meta_linkage",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_gameplay_meta_template_v1",
+    "id": "soft_conflict_gameplay_action_dynamic_continuous_decision_vs_failure_retry",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_gameplay_meta_template_v1",
+    "id": "soft_conflict_gameplay_action_dynamic_resource_tradeoff_vs_objective_tracking",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_launch_meta_template_v1",
+    "id": "soft_conflict_launch_experience_launch_loop_closed_vs_followup_clear",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_launch_meta_template_v1",
+    "id": "soft_conflict_launch_experience_server_stable_vs_launch_loop_closed",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_liveops_meta_template_v1",
+    "id": "soft_conflict_liveops_version_experience_freshness_vs_honor_chase",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_liveops_meta_template_v1",
+    "id": "soft_conflict_liveops_version_experience_return_reason_vs_stage_goal",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_meta_template_v1",
+    "id": "soft_conflict_positioning_promise_user_value_vs_business_outcome",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_meta_template_v1",
+    "id": "soft_conflict_positioning_expression_mechanic_selling_point_copy_vs_scope_list",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_presentation_meta_template_v1",
+    "id": "soft_conflict_presentation_feeling_target_clear_readable_vs_strong_impact",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_presentation_meta_template_v1",
+    "id": "soft_conflict_presentation_feeling_target_clear_readable_vs_immersive_mood",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_presentation_meta_template_v1",
+    "id": "soft_conflict_presentation_feeling_target_friendly_light_vs_strong_impact",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_release_meta_template_v1",
+    "id": "soft_conflict_release_external_promise_clear_selling_point_vs_content_visible",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_release_meta_template_v1",
+    "id": "soft_conflict_release_external_promise_playproof_vs_price_understood",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_retention_meta_template_v1",
+    "id": "soft_conflict_retention_experience_daily_reason_vs_loss_buffer",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_retention_meta_template_v1",
+    "id": "soft_conflict_retention_experience_long_chase_vs_return_compensation",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_retention_meta_template_v1",
+    "id": "soft_conflict_retention_return_dynamic_daily_checkin_vs_content_waiting",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_social_meta_template_v1",
+    "id": "soft_conflict_social_relation_experience_companionship_vs_competitive_honor",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_social_meta_template_v1",
+    "id": "soft_conflict_social_relation_experience_cooperative_achievement_vs_competitive_honor",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_social_meta_template_v1",
+    "id": "soft_conflict_social_interaction_dynamic_friend_help_vs_ranking_competition",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_social_meta_template_v1",
+    "id": "soft_conflict_social_interaction_dynamic_temporary_team_vs_ranking_competition",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_ux_meta_template_v1",
+    "id": "soft_conflict_ux_understanding_experience_quick_understanding_vs_clear_state",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "templates/shared_ux_meta_template_v1",
+    "id": "soft_conflict_ux_understanding_experience_low_browsing_load_vs_clear_state",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.he_xin_ti_yan_cheng_nuo",
+    "id": "soft_conflict_core_feeling_type_tense_choice_vs_satisfying_release",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.he_xin_ti_yan_cheng_nuo",
+    "id": "soft_conflict_core_feeling_type_satisfying_release_vs_immersive_discovery",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.he_xin_ti_yan_cheng_nuo",
+    "id": "soft_conflict_promise_carrier_behavior_action_reaction_vs_strategic_choice",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.he_xin_ti_yan_cheng_nuo",
+    "id": "soft_conflict_promise_carrier_behavior_action_reaction_vs_resource_management",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.she_ji_mu_biao_you_xian_ji",
+    "id": "soft_conflict_priority_dimension_clarity_vs_depth",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.she_ji_mu_biao_you_xian_ji",
+    "id": "soft_conflict_priority_dimension_clarity_vs_content_volume",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.she_ji_mu_biao_you_xian_ji",
+    "id": "soft_conflict_priority_dimension_content_volume_vs_maintainability",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.she_ji_mu_biao_you_xian_ji",
+    "id": "soft_conflict_priority_dimension_monetization_vs_clarity",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#product_vision_decision.she_ji_mu_biao_you_xian_ji",
+    "id": "soft_conflict_priority_dimension_monetization_vs_retention",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_game_experience_almost_none_vs_genre_expert",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_game_experience_casual_vs_core_player",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_session_length_session_1_3_vs_session_60_plus",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_session_length_session_3_10_vs_session_30_60",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_payment_tendency_non_payer_vs_competitive_spender",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_payment_tendency_small_spender_vs_competitive_spender",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_social_tendency_solo_vs_community_driven",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_social_tendency_solo_vs_competitive",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_content_preference_challenge_skill_vs_relax_companion",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_hua_xiang",
+    "id": "soft_conflict_content_preference_story_character_vs_creation_expression",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_dong_ji",
+    "id": "soft_conflict_motivation_type_relaxation_vs_competition_rank",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_dong_ji",
+    "id": "soft_conflict_motivation_type_relaxation_vs_challenge_mastery",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_neng_li_jia_she",
+    "id": "soft_conflict_operation_skill_very_low_vs_high_precision",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_neng_li_jia_she",
+    "id": "soft_conflict_operation_skill_very_low_vs_multitask_control",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_neng_li_jia_she",
+    "id": "soft_conflict_system_literacy_instant_rule_vs_numeric_build",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_neng_li_jia_she",
+    "id": "soft_conflict_system_literacy_instant_rule_vs_guide_dependent",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_shi_jian_jie_gou",
+    "id": "soft_conflict_daily_play_window_window_1_5_vs_window_60_plus",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_shi_jian_jie_gou",
+    "id": "soft_conflict_daily_play_window_window_5_15_vs_window_30_60",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_shi_jian_jie_gou",
+    "id": "soft_conflict_weekly_frequency_multi_daily_vs_weekend_batch",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_fu_fei_yi_yuan_jia_she",
+    "id": "soft_conflict_payment_intent_level_none_vs_high_commitment",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_fu_fei_yi_yuan_jia_she",
+    "id": "soft_conflict_payment_intent_level_trial_low_vs_high_commitment",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_fu_fei_yi_yuan_jia_she",
+    "id": "soft_conflict_fairness_boundary_cosmetic_only_vs_pve_growth_ok",
+    "type": "soft_conflict",
+    "severity": "warning"
+   },
+   {
+    "source": "domains/product_positioning_design#target_player_decision.wan_jia_fu_fei_yi_yuan_jia_she",
+    "id": "soft_conflict_fairness_boundary_cosmetic_only_vs_clear_segmentation",
+    "type": "soft_conflict",
+    "severity": "warning"
+   }
+  ]
+ }
+}

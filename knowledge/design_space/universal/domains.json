@@ -1,0 +1,831 @@
+{
+  "space_version": "0.1.0",
+  "domains": [
+    {
+      "id": "product_positioning_design",
+      "name": "立项与产品定位设计",
+      "description": "确认项目愿景、目标用户、市场定位、商业目标、项目范围、平台场景和品牌资产。",
+      "order": 1
+    },
+    {
+      "id": "core_experience_design",
+      "name": "核心体验设计",
+      "description": "确认游戏乐趣、循环、行为、压力、奖励、学习曲线和会话节奏。",
+      "order": 2
+    },
+    {
+      "id": "gameplay_system_design",
+      "name": "玩法系统设计",
+      "description": "确认操作、行动规则、目标、结算、成长、构筑、随机性和局外结构。",
+      "order": 3
+    },
+    {
+      "id": "content_design",
+      "name": "内容设计",
+      "description": "确认内容类型、关卡空间、任务事件、角色单位、道具资源、叙事、消耗和供给。",
+      "order": 4
+    },
+    {
+      "id": "economy_monetization_design",
+      "name": "经济与商业化设计",
+      "description": "确认经济循环、货币、奖励、付费点、商品、价格、公平性和经济安全。",
+      "order": 5
+    },
+    {
+      "id": "ux_interface_design",
+      "name": "用户体验与界面设计",
+      "description": "确认信息架构、操作流程、HUD 反馈、新手引导、可读性、可访问性和求助体验。",
+      "order": 6
+    },
+    {
+      "id": "presentation_feel_design",
+      "name": "表现与感受设计",
+      "description": "确认美术方向、动效感受、音频体验、手感和演出。",
+      "order": 7
+    },
+    {
+      "id": "balance_design",
+      "name": "数值与平衡设计",
+      "description": "确认基础数值模型、难度、经济、内容、对抗和付费平衡。",
+      "order": 8
+    },
+    {
+      "id": "social_community_design",
+      "name": "社交与社区设计",
+      "description": "确认社交关系、协作、竞争、表达和社区行为。",
+      "order": 9
+    },
+    {
+      "id": "retention_lifecycle_design",
+      "name": "留存与生命周期设计",
+      "description": "确认新手期、日常循环、中长期目标、回流和流失控制。",
+      "order": 10
+    },
+    {
+      "id": "liveops_version_design",
+      "name": "活动与版本设计",
+      "description": "确认首发内容、活动结构、版本节奏、赛季和更新沟通。",
+      "order": 11
+    },
+    {
+      "id": "data_validation_design",
+      "name": "数据指标与验证设计",
+      "description": "确认目标指标、行为路径、测试、反馈收集、迭代判断和灰度实验。",
+      "order": 12
+    },
+    {
+      "id": "compliance_risk_design",
+      "name": "合规、伦理与风险设计",
+      "description": "确认年龄适配、玩家保护、社区安全、公平性、舆情、本地化、滥用防护和隐私数据体验。",
+      "order": 13
+    },
+    {
+      "id": "documentation_collaboration_design",
+      "name": "设计文档与协作设计",
+      "description": "确认核心设计文档、设计表结构、验收标准、变更管理和跨职能沟通。",
+      "order": 14
+    },
+    {
+      "id": "release_growth_design",
+      "name": "发行与增长设计",
+      "description": "确认商店入口、宣发内容、预注册预约、社群预热、区域发行和平台上架材料。",
+      "order": 15
+    },
+    {
+      "id": "launch_readiness_design",
+      "name": "上线准备设计",
+      "description": "确认上线版本、节奏、活动、反馈、玩家支持、上线后承接和准入复核。",
+      "order": 16
+    }
+  ],
+  "nodes": [
+    {
+      "id": "product_vision_decision",
+      "domain_id": "product_positioning_design",
+      "name": "项目愿景决策",
+      "description": "确认项目核心体验承诺、边界、差异化和不做范围。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "target_player_decision",
+      "domain_id": "product_positioning_design",
+      "name": "目标用户决策",
+      "description": "确认目标玩家是谁、为什么来、有什么能力和时间结构。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "market_category_positioning_decision",
+      "domain_id": "product_positioning_design",
+      "name": "市场与品类定位决策",
+      "description": "确认品类边界、竞品参照、迁移理由和外部卖点表达。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "business_goal_decision",
+      "domain_id": "product_positioning_design",
+      "name": "商业目标决策",
+      "description": "确认收入、留存、活跃、内容消耗和生命周期目标假设。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "project_scope_decision",
+      "domain_id": "product_positioning_design",
+      "name": "项目范围决策",
+      "description": "确认 MVP、首发、延期内容、必须验证风险和上线边界。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "platform_play_context_decision",
+      "domain_id": "product_positioning_design",
+      "name": "平台与游玩场景决策",
+      "description": "确认平台、单次时长、设备操作、网络中断和区域语言范围。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "brand_ip_asset_decision",
+      "domain_id": "product_positioning_design",
+      "name": "品牌与 IP 资产决策",
+      "description": "确认命名、品牌承诺、视觉识别和长期资产边界。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "core_fun_decision",
+      "domain_id": "core_experience_design",
+      "name": "核心乐趣决策",
+      "description": "确认游戏最主要的乐趣来源、情绪曲线和挫折控制边界。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "core_loop_decision",
+      "domain_id": "core_experience_design",
+      "name": "核心循环决策",
+      "description": "确认玩家从行动、决策、反馈、奖励到再次投入的闭环。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "player_behavior_decision",
+      "domain_id": "core_experience_design",
+      "name": "玩家行为决策",
+      "description": "确认基础行为、进阶行为、高频行为、关键低频行为和限制行为。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "pressure_source_decision",
+      "domain_id": "core_experience_design",
+      "name": "压力来源决策",
+      "description": "确认主要压力来自时间、资源、对抗、空间还是风险选择。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "reward_experience_decision",
+      "domain_id": "core_experience_design",
+      "name": "奖励体验决策",
+      "description": "确认即时、延迟、稀有、成就和社交奖励如何支撑循环。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "learning_curve_decision",
+      "domain_id": "core_experience_design",
+      "name": "学习曲线决策",
+      "description": "确认玩家从初次理解到长期精通的体验阶梯。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "session_rhythm_decision",
+      "domain_id": "core_experience_design",
+      "name": "会话节奏决策",
+      "description": "确认单局目标、入口成本、中断恢复、退出反馈和再进入动机。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "gameplay_system_scope_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "玩法系统范围决策",
+      "description": "先确认本项目包含哪些玩法系统，再逐系统细化（二版玩法系统选项库的归宿）。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "input_control_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "操作与控制决策",
+      "description": "确认输入意图、响应、容错、节奏和反馈。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "action_rule_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "行动规则决策",
+      "description": "确认玩家行动的条件、成本、收益、限制和失败结果。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "objective_system_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "目标系统决策",
+      "description": "确认主目标、子目标、可选目标、隐藏目标和失败目标。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "settlement_system_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "结算系统决策",
+      "description": "确认胜负、评分、奖励、惩罚和重试规则。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "progression_system_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "成长系统决策",
+      "description": "确认等级、能力、装备、收藏和账号成长结构。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "build_system_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "构筑系统决策",
+      "description": "确认构筑组件、约束、组合、反制和更新节奏。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "randomness_system_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "随机性决策",
+      "description": "确认随机入口、权重、保底、可控随机和结果反馈。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "meta_structure_decision",
+      "domain_id": "gameplay_system_design",
+      "name": "局外结构决策",
+      "description": "确认局外准备、成长、收藏、结算承接和局内外转换。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "content_type_decision",
+      "domain_id": "content_design",
+      "name": "内容类型决策",
+      "description": "确认核心、消耗、重复、长期和活动内容的结构。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "level_space_decision",
+      "domain_id": "content_design",
+      "name": "关卡与空间决策",
+      "description": "确认空间结构、路径选择、节奏节点、风险区和奖励区。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "quest_event_decision",
+      "domain_id": "content_design",
+      "name": "任务与事件决策",
+      "description": "确认任务目标、条件、奖励、分支和失败处理。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "character_unit_decision",
+      "domain_id": "content_design",
+      "name": "角色与单位决策",
+      "description": "确认角色或单位的定位、能力、行为、成长和可读特征。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "item_resource_content_decision",
+      "domain_id": "content_design",
+      "name": "道具与资源内容决策",
+      "description": "确认道具资源的定位、来源、使用条件、消耗和价值层级。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "narrative_content_decision",
+      "domain_id": "content_design",
+      "name": "叙事内容决策",
+      "description": "确认世界观、剧情结构、角色关系、文本风格和叙事节奏。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "content_consumption_decision",
+      "domain_id": "content_design",
+      "name": "内容消耗决策",
+      "description": "确认首次、重复、解锁、回收和枯竭预警。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "content_supply_structure_decision",
+      "domain_id": "content_design",
+      "name": "内容供给结构决策",
+      "description": "确认首发结构、复用模板、版本槽位、质量分层和淘汰回收。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "economy_loop_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "经济循环决策",
+      "description": "确认资源产出、消耗、储备、转换和通胀控制。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "currency_system_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "货币体系决策",
+      "description": "确认基础、稀有、付费、限时货币及兑换关系。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "reward_distribution_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "奖励投放决策",
+      "description": "确认日常、阶段、成就、活动和补偿奖励投放。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "payment_point_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "付费点决策",
+      "description": "确认便利、外观、内容、成长和订阅付费是否进入设计。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "product_structure_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "商品结构决策",
+      "description": "确认单品、礼包、限时、分层和新手商品结构。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "pricing_value_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "价格与价值决策",
+      "description": "确认价格梯度、价值锚点、折扣、性价比和付费预期。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "payment_fairness_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "付费公平性决策",
+      "description": "确认免费可达性、付费优势、竞争公平、未成年人保护和诱导控制。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "economy_security_dispute_decision",
+      "domain_id": "economy_monetization_design",
+      "name": "经济安全与争议控制决策",
+      "description": "确认奖励滥用、交易争议、退款补偿、稀有价值争议和异常处理口径。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "ux_information_architecture_decision",
+      "domain_id": "ux_interface_design",
+      "name": "信息架构决策",
+      "description": "确认主界面、功能入口、信息优先级、状态和异常表达。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "ux_flow_decision",
+      "domain_id": "ux_interface_design",
+      "name": "操作流程决策",
+      "description": "确认首次进入、核心操作、购买、领奖、返回和退出流程。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "hud_feedback_decision",
+      "domain_id": "ux_interface_design",
+      "name": "HUD 与反馈决策",
+      "description": "确认关键状态、资源、风险、成功和失败反馈。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "onboarding_guidance_decision",
+      "domain_id": "ux_interface_design",
+      "name": "新手引导决策",
+      "description": "确认引导目标、顺序、触发、跳过和复习机制。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "readability_decision",
+      "domain_id": "ux_interface_design",
+      "name": "可读性决策",
+      "description": "确认视觉层级、文案、图标、数值展示和状态区分。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "accessibility_decision",
+      "domain_id": "ux_interface_design",
+      "name": "可访问性决策",
+      "description": "确认色彩、字号、替代操作、重复表达和节奏调节。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "help_support_experience_decision",
+      "domain_id": "ux_interface_design",
+      "name": "帮助与求助体验决策",
+      "description": "确认帮助入口、规则解释、错误恢复、反馈入口和客服转接体验。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "art_direction_decision",
+      "domain_id": "presentation_feel_design",
+      "name": "美术方向决策",
+      "description": "确认风格定位、色彩语义、造型规则、场景氛围和视觉一致性。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "animation_feel_decision",
+      "domain_id": "presentation_feel_design",
+      "name": "动效感受决策",
+      "description": "确认行为、反馈、界面、奖励和节奏动效的感受目标。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "audio_experience_decision",
+      "domain_id": "presentation_feel_design",
+      "name": "音频体验决策",
+      "description": "确认音乐情绪、音效反馈、环境声、UI 声音和声音优先级。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "juice_control_feel_decision",
+      "domain_id": "presentation_feel_design",
+      "name": "手感决策",
+      "description": "确认响应感、重量感、命中感、移动感和操作节奏感。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "cinematic_presentation_decision",
+      "domain_id": "presentation_feel_design",
+      "name": "演出决策",
+      "description": "确认关键节点、奖励、失败、剧情和宣传可用演出。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_model_decision",
+      "domain_id": "balance_design",
+      "name": "基础数值模型决策",
+      "description": "确认属性、关系、成长公式、收益曲线和阈值区间。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_difficulty_decision",
+      "domain_id": "balance_design",
+      "name": "难度曲线决策",
+      "description": "确认初期、中期、后期、峰值难度和失败恢复。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_economy_decision",
+      "domain_id": "balance_design",
+      "name": "经济平衡决策",
+      "description": "确认产出、消耗、储备、稀缺和通胀监控。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_content_decision",
+      "domain_id": "balance_design",
+      "name": "内容平衡决策",
+      "description": "确认内容强度、收益、时间成本、风险成本和重复价值。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_competition_decision",
+      "domain_id": "balance_design",
+      "name": "对抗平衡决策",
+      "description": "确认角色、策略、匹配、先后手和滚雪球控制。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "balance_payment_decision",
+      "domain_id": "balance_design",
+      "name": "付费平衡决策",
+      "description": "确认免费进度、付费进度、效率差、付费上限和长期公平感。",
+      "role_class": "system_concrete"
+    },
+    {
+      "id": "social_relationship_decision",
+      "domain_id": "social_community_design",
+      "name": "社交关系决策",
+      "description": "确认好友、临时、团队、竞争和师徒关系。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "social_collaboration_decision",
+      "domain_id": "social_community_design",
+      "name": "协作决策",
+      "description": "确认协作目标、分工、奖励、失败和门槛。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "social_competition_decision",
+      "domain_id": "social_community_design",
+      "name": "竞争决策",
+      "description": "确认竞争目标、排名、匹配、赛季和反挫败设计。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "social_expression_decision",
+      "domain_id": "social_community_design",
+      "name": "表达决策",
+      "description": "确认个人展示、成就、外观、文本和情绪表达。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "community_behavior_decision",
+      "domain_id": "social_community_design",
+      "name": "社区行为决策",
+      "description": "确认正向激励、负向约束、举报、新老玩家关系和社区活动。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "retention_onboarding_decision",
+      "domain_id": "retention_lifecycle_design",
+      "name": "新手期决策",
+      "description": "确认首次体验、首日、首周、新手奖励和流失预警。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "retention_daily_loop_decision",
+      "domain_id": "retention_lifecycle_design",
+      "name": "日常循环决策",
+      "description": "确认每日、每周、常驻任务、日常奖励和疲劳控制。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "retention_mid_long_goal_decision",
+      "domain_id": "retention_lifecycle_design",
+      "name": "中长期目标决策",
+      "description": "确认阶段成长、收藏、排名、社交和终局目标。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "retention_returning_player_decision",
+      "domain_id": "retention_lifecycle_design",
+      "name": "回流决策",
+      "description": "确认回流触发、奖励、追赶、引导和再留存。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "retention_loss_control_decision",
+      "domain_id": "retention_lifecycle_design",
+      "name": "流失控制决策",
+      "description": "确认失败、卡点、内容枯竭、社交和付费挫败流失控制。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "liveops_launch_content_decision",
+      "domain_id": "liveops_version_design",
+      "name": "首发内容决策",
+      "description": "确认首发核心、成长、社交、付费和活动内容。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "liveops_activity_structure_decision",
+      "domain_id": "liveops_version_design",
+      "name": "活动结构决策",
+      "description": "确认活动主题、目标、任务、奖励和结束回收。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "liveops_version_rhythm_decision",
+      "domain_id": "liveops_version_design",
+      "name": "版本节奏决策",
+      "description": "确认版本主题、内容量、消耗周期、目标分层和承接关系。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "liveops_season_decision",
+      "domain_id": "liveops_version_design",
+      "name": "赛季决策",
+      "description": "确认赛季目标、成长、奖励、重置和荣誉。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "liveops_update_communication_decision",
+      "domain_id": "liveops_version_design",
+      "name": "更新沟通决策",
+      "description": "确认更新重点、补偿、改动解释、预告节奏和反馈回收。",
+      "role_class": "content_concrete"
+    },
+    {
+      "id": "data_goal_metric_decision",
+      "domain_id": "data_validation_design",
+      "name": "设计目标指标决策",
+      "description": "确认留存、活跃、付费、内容消耗和体验质量指标。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "data_path_metric_decision",
+      "domain_id": "data_validation_design",
+      "name": "行为路径指标决策",
+      "description": "确认新手、核心循环、付费、社交和流失路径指标。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "data_test_design_decision",
+      "domain_id": "data_validation_design",
+      "name": "测试设计决策",
+      "description": "确认体验、难度、经济、付费和留存测试方式。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "data_feedback_collection_decision",
+      "domain_id": "data_validation_design",
+      "name": "反馈收集决策",
+      "description": "确认问卷、访谈、行为观察、负反馈分类和需求优先级。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "data_iteration_decision",
+      "domain_id": "data_validation_design",
+      "name": "迭代判断决策",
+      "description": "确认保留、调整、删除、延后和重新验证条件。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "data_experiment_decision",
+      "domain_id": "data_validation_design",
+      "name": "灰度与实验验证决策",
+      "description": "确认灰度目标、观察窗口、样本分层、成功判定和停止回滚条件。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_age_rating_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "年龄适配决策",
+      "description": "确认内容、表现、社交、付费和文案尺度。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_player_protection_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "玩家保护决策",
+      "description": "确认时长、消费、随机概率、未成年人限制和成瘾风险控制。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_community_safety_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "社区安全决策",
+      "description": "确认违规行为、举报入口、惩罚层级、申诉和正向社区引导。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_fairness_risk_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "公平性风险决策",
+      "description": "确认付费、匹配、活动、新老玩家差距和随机争议风险。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_opinion_risk_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "舆情风险决策",
+      "description": "确认定价、平衡、内容、补偿和沟通争议。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_localization_culture_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "本地化与文化适配决策",
+      "description": "确认语言、文化禁忌、付费习惯、节日活动和区域沟通口径。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_abuse_fairness_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "滥用行为与公平防护决策",
+      "description": "确认作弊、脚本、刷资源、处罚层级和误伤恢复体验。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "compliance_privacy_data_decision",
+      "domain_id": "compliance_risk_design",
+      "name": "隐私与数据使用体验决策",
+      "description": "确认授权解释、数据用途、撤回删除、个性化边界和隐私争议沟通。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "documentation_core_doc_decision",
+      "domain_id": "documentation_collaboration_design",
+      "name": "核心设计文档决策",
+      "description": "确认愿景、核心玩法、系统、内容和上线说明文档结构。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "documentation_table_schema_decision",
+      "domain_id": "documentation_collaboration_design",
+      "name": "设计表结构决策",
+      "description": "确认系统表、内容表、数值表、奖励表和活动表结构。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "documentation_acceptance_decision",
+      "domain_id": "documentation_collaboration_design",
+      "name": "验收标准决策",
+      "description": "确认体验、系统、内容、数值和上线验收标准。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "documentation_change_management_decision",
+      "domain_id": "documentation_collaboration_design",
+      "name": "变更管理决策",
+      "description": "确认变更原因、影响范围、回滚条件、依赖同步和版本记录。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "documentation_cross_function_decision",
+      "domain_id": "documentation_collaboration_design",
+      "name": "跨职能沟通决策",
+      "description": "确认美术、音频、文案、测试和运营需求表达方式。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_store_entry_decision",
+      "domain_id": "release_growth_design",
+      "name": "商店与外部入口体验决策",
+      "description": "确认卖点、截图顺序、商店承诺、版本说明和下载预期。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_promotion_content_decision",
+      "domain_id": "release_growth_design",
+      "name": "宣发内容决策",
+      "description": "确认宣发主线、玩法证明、内容展示、商业卖点和风险边界。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_preregistration_decision",
+      "domain_id": "release_growth_design",
+      "name": "预注册与预约决策",
+      "description": "确认预约动机、奖励、阶段目标、转化承接和预期管理。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_community_warmup_decision",
+      "domain_id": "release_growth_design",
+      "name": "社群预热决策",
+      "description": "确认社群主题、话题、测试反馈、创作者边界和上线前情绪管理。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_regional_experience_decision",
+      "domain_id": "release_growth_design",
+      "name": "区域发行体验决策",
+      "description": "确认区域卖点、文案语气、活动偏好、付费预期和社区沟通。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "release_platform_material_decision",
+      "domain_id": "release_growth_design",
+      "name": "平台规范与上架材料决策",
+      "description": "确认商店分类、分级信息、付费说明、权限说明和审核风险口径。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_version_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线版本决策",
+      "description": "确认首发体验、内容、商业化、留存路径和风险清单。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_rhythm_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线节奏决策",
+      "description": "确认预热、开服、首日、首周和首月节奏。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_activity_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线活动决策",
+      "description": "确认登录、新手、成长、付费和社交活动。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_feedback_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线反馈决策",
+      "description": "确认问题分级、反馈入口、补偿规则、公告口径和快速调整边界。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_player_support_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "玩家支持体验决策",
+      "description": "确认 FAQ、客服入口、处理预期、补偿申诉和负反馈安抚口径。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_post_launch_followup_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线后承接决策",
+      "description": "确认第一版本、第一活动、第一赛季、首批平衡调整和长期内容预告。",
+      "role_class": "meta_planning"
+    },
+    {
+      "id": "launch_readiness_review_decision",
+      "domain_id": "launch_readiness_design",
+      "name": "上线准入复核决策",
+      "description": "汇总所有领域覆盖率、未完成项、条件不适用项和上线风险。",
+      "role_class": "meta_planning"
+    }
+  ]
+}

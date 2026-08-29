@@ -77,52 +77,47 @@ fn check_one(
     rule: &RowReference,
     out: &mut Vec<RowReferenceViolation>,
 ) {
-    let Ok(source) = table_view(graph, selections, &rule.source_decision) else {
+    let Ok(source_views) = table_views(graph, selections, &rule.source_decision) else {
         return; // 源侧尚未答到可校验的状态：缺答由完成度门负责。
     };
-    if !has_column(source.columns, &rule.source_column) {
-        return; // 当前选项的表结构不含该列：本规则对这个分支不适用。
-    }
-    let referencing: Vec<(usize, String)> = source
-        .rows
+    // 多选点逐个已选选项分别生效：只要某个已选选项的表带该列，规则就对它适用。
+    let sources: Vec<&TableView<'_>> = source_views
         .iter()
-        .enumerate()
-        .filter_map(|(index, row)| {
-            row.get(&rule.source_column)
-                .map(|value| (index + 1, value.render()))
-        })
-        .filter(|(_, value)| !value.trim().is_empty())
+        .filter(|view| has_column(view.columns, &rule.source_column))
         .collect();
+    if sources.is_empty() {
+        return; // 已选选项的表结构都不含该列：本规则对这个分支不适用。
+    }
+    let multi_source = sources.len() > 1;
+    let mut referencing: Vec<(&str, usize, String)> = Vec::new();
+    for view in &sources {
+        for (index, row) in view.rows.iter().enumerate() {
+            let Some(value) = row.get(&rule.source_column).map(TypedValue::render) else {
+                continue;
+            };
+            if !value.trim().is_empty() {
+                referencing.push((view.option_id, index + 1, value));
+            }
+        }
+    }
     if referencing.is_empty() {
         return;
     }
+    let source_option_hint = sources
+        .iter()
+        .map(|view| view.option_id)
+        .collect::<Vec<_>>()
+        .join("、");
 
-    let target = match table_view(graph, selections, &rule.target_decision) {
-        Ok(target) if has_column(target.columns, &rule.target_key_column) => target,
-        Ok(target) => {
-            out.push(violation(
-                rule,
-                format!(
-                    "表 {}（选项 {}）的 {} 列引用 {} 的 {} 行键，但 {} 当前选项 {} 的表结构不含该键列，{} 行引用无法判定（R2 未知即停）",
-                    rule.source_decision,
-                    source.option_id,
-                    rule.source_column,
-                    rule.target_decision,
-                    rule.target_key_column,
-                    rule.target_decision,
-                    target.option_id,
-                    referencing.len()
-                ),
-            ));
-            return;
-        }
+    let target_views = match table_views(graph, selections, &rule.target_decision) {
+        Ok(views) => views,
         Err(reason) => {
             out.push(violation(
                 rule,
                 format!(
                     "表 {}（选项 {}）的 {} 列引用 {} 的 {} 行键，但{}，{} 行引用无法判定（R2 未知即停）",
                     rule.source_decision,
-                    source.option_id,
+                    source_option_hint,
                     rule.source_column,
                     rule.target_decision,
                     rule.target_key_column,
@@ -133,22 +128,54 @@ fn check_one(
             return;
         }
     };
-
-    let keys: BTreeSet<String> = target
-        .rows
+    let keyed_targets: Vec<&TableView<'_>> = target_views
         .iter()
+        .filter(|view| has_column(view.columns, &rule.target_key_column))
+        .collect();
+    if keyed_targets.is_empty() {
+        let target_option_hint = target_views
+            .iter()
+            .map(|view| view.option_id)
+            .collect::<Vec<_>>()
+            .join("、");
+        out.push(violation(
+            rule,
+            format!(
+                "表 {}（选项 {}）的 {} 列引用 {} 的 {} 行键，但 {} 当前选项 {} 的表结构不含该键列，{} 行引用无法判定（R2 未知即停）",
+                rule.source_decision,
+                source_option_hint,
+                rule.source_column,
+                rule.target_decision,
+                rule.target_key_column,
+                rule.target_decision,
+                target_option_hint,
+                referencing.len()
+            ),
+        ));
+        return;
+    }
+
+    // 多选目标点：行键集合取全部已选选项的并集。
+    let keys: BTreeSet<String> = keyed_targets
+        .iter()
+        .flat_map(|view| view.rows.iter())
         .filter_map(|row| row.get(&rule.target_key_column).map(TypedValue::render))
         .filter(|value| !value.trim().is_empty())
         .collect();
     let key_hint = render_keys(&keys);
-    for (row_number, value) in referencing {
+    for (option_id, row_number, value) in referencing {
         if !keys.contains(&value) {
+            let row_hint = if multi_source {
+                format!("（选项 {option_id}）第 {row_number} 行")
+            } else {
+                format!("第 {row_number} 行")
+            };
             out.push(violation(
                 rule,
                 format!(
-                    "表 {} 第 {} 行的 {}=「{}」在 {} 的 {} 行键集合中不存在（{}）",
+                    "表 {} {}的 {}=「{}」在 {} 的 {} 行键集合中不存在（{}）",
                     rule.source_decision,
-                    row_number,
+                    row_hint,
                     rule.source_column,
                     value,
                     rule.target_decision,
@@ -200,35 +227,50 @@ struct TableView<'a> {
     rows: &'a [BTreeMap<String, TypedValue>],
 }
 
-/// 取表视图；取不到时返回中文原因（可直接拼进违规信息）。
-fn table_view<'a>(
+/// 取全部已选选项的表视图（主选在前）；一个都取不到时返回中文原因（可直接拼进违规信息）。
+///
+/// 多选点的每个已选选项各带一份参数，因此可能有多份表视图；非表结构或未填行数据的
+/// 已选选项被跳过，全部跳过才算取不到（返回首个跳过原因，保持单选点的报错措辞不变）。
+fn table_views<'a>(
     graph: &'a DecisionGraph,
     selections: &'a BTreeMap<DecisionId, Selection>,
     decision: &str,
-) -> Result<TableView<'a>, String> {
+) -> Result<Vec<TableView<'a>>, String> {
     let Some(selection) = selections.get(decision) else {
         return Err(format!("{decision} 尚未回答"));
     };
     let Some(point) = graph.point(decision) else {
         return Err(format!("{decision} 不在当前决策图内"));
     };
-    let Some(option) = point.option(&selection.option_id) else {
-        return Err(format!(
-            "{decision} 选择了清单外的选项 {}",
-            selection.option_id
-        ));
-    };
-    let ParameterSchema::Table(table) = &option.parameter_schema else {
-        return Err(format!("{decision}/{} 的参数结构不是表", option.id));
-    };
-    let ParameterValues::Rows { rows } = &selection.parameters else {
-        return Err(format!("{decision}/{} 尚未填写行数据", option.id));
-    };
-    Ok(TableView {
-        option_id: &option.id,
-        columns: &table.columns,
-        rows,
-    })
+    let mut views = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    for item in selection.selected_options() {
+        let Some(option) = point.option(item.option_id) else {
+            skipped.push(format!("{decision} 选择了清单外的选项 {}", item.option_id));
+            continue;
+        };
+        let ParameterSchema::Table(table) = &option.parameter_schema else {
+            skipped.push(format!("{decision}/{} 的参数结构不是表", option.id));
+            continue;
+        };
+        let ParameterValues::Rows { rows } = item.parameters else {
+            skipped.push(format!("{decision}/{} 尚未填写行数据", option.id));
+            continue;
+        };
+        views.push(TableView {
+            option_id: &option.id,
+            columns: &table.columns,
+            rows,
+        });
+    }
+    if views.is_empty() {
+        // 措辞与单选点一致：只有一个已选选项时就是它的原因，多选点列全部。
+        return Err(match skipped.len() {
+            0 => format!("{decision} 无可校验的表视图"),
+            _ => skipped.join("；"),
+        });
+    }
+    Ok(views)
 }
 
 #[cfg(test)]
@@ -236,7 +278,7 @@ mod tests {
     use super::*;
     use crate::types::{
         DecisionOption, DecisionPoint, DesignLevel, GenreScope, PointRequirement, Provenance,
-        TableSchema,
+        SelectedOption, SelectionMode, TableSchema,
     };
     use adm4_contracts::ValueKind;
 
@@ -263,6 +305,9 @@ mod tests {
             genre_scope: GenreScope::Universal,
             question: "q".into(),
             mda_layer: None,
+            design_question: None,
+            node_id: None,
+            selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
             options: vec![DecisionOption {
                 id: option_id.into(),
@@ -328,6 +373,8 @@ mod tests {
             provenance: Provenance::UserManual,
             confirmed_by_user: true,
             template_original: None,
+            additional_options: Vec::new(),
+            primary_option: None,
         }
     }
 
@@ -486,5 +533,93 @@ mod tests {
             problems[0].starts_with("[waves_reference_stages]"),
             "{problems:?}"
         );
+    }
+
+    /// 多选点的外键校验对每个已选选项分别生效：
+    /// 目标侧行键取全部已选选项的并集（并集内的引用放行），源侧逐选项逐行报点。
+    #[test]
+    fn multi_selection_checks_every_selected_option() {
+        let mut stages = table_point(
+            "stages",
+            "stage_table",
+            vec![text_column("stage_id")],
+            "stage_id",
+        );
+        stages.selection_mode = SelectionMode::Multi {
+            allow_primary: false,
+        };
+        stages.options.push(DecisionOption {
+            id: "dlc_stage_table".into(),
+            label: "资料片关卡表".into(),
+            parameter_schema: ParameterSchema::Table(TableSchema {
+                columns: vec![text_column("stage_id")],
+                row_key: "stage_id".into(),
+                cardinality_key: "k".into(),
+            }),
+            ..Default::default()
+        });
+        let mut waves = table_point(
+            "waves",
+            "wave_rows",
+            vec![text_column("row_id"), text_column("stage_id")],
+            "row_id",
+        );
+        waves.selection_mode = SelectionMode::Multi {
+            allow_primary: false,
+        };
+        waves.options.push(DecisionOption {
+            id: "dlc_wave_rows".into(),
+            label: "资料片波次表".into(),
+            parameter_schema: ParameterSchema::Table(TableSchema {
+                columns: vec![text_column("row_id"), text_column("stage_id")],
+                row_key: "row_id".into(),
+                cardinality_key: "k".into(),
+            }),
+            ..Default::default()
+        });
+        let graph = match DecisionGraph::new(vec![stages, waves]) {
+            Ok(graph) => graph,
+            Err(error) => panic!("测试图构造失败：{}", error.message),
+        };
+
+        let mut stage_selection = selection(
+            "stages",
+            "stage_table",
+            rows(&[&[("stage_id", "dawn_ridge")]]),
+        );
+        stage_selection.additional_options = vec![SelectedOption {
+            option_id: "dlc_stage_table".into(),
+            parameters: rows(&[&[("stage_id", "salt_flats")]]),
+            ..Default::default()
+        }];
+        let mut wave_selection = selection(
+            "waves",
+            "wave_rows",
+            rows(&[&[("row_id", "w1"), ("stage_id", "dawn_ridge")]]),
+        );
+        wave_selection.additional_options = vec![SelectedOption {
+            option_id: "dlc_wave_rows".into(),
+            // salt_flats 在目标并集内 → 放行；ghost_stage 不在 → 违规。
+            parameters: rows(&[
+                &[("row_id", "d1"), ("stage_id", "salt_flats")],
+                &[("row_id", "d2"), ("stage_id", "ghost_stage")],
+            ]),
+            ..Default::default()
+        }];
+        let selections: BTreeMap<_, _> = [
+            ("stages".to_string(), stage_selection),
+            ("waves".to_string(), wave_selection),
+        ]
+        .into_iter()
+        .collect();
+
+        let violations = check_row_references(&graph, &selections, &[rule()]);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        let detail = &violations[0].detail;
+        assert!(detail.contains("ghost_stage"), "{detail}");
+        // 多选点必须点名是哪个已选选项的第几行。
+        assert!(detail.contains("dlc_wave_rows"), "{detail}");
+        assert!(detail.contains("第 2 行"), "{detail}");
+        assert!(detail.contains("salt_flats"), "{detail}");
     }
 }

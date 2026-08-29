@@ -1,6 +1,6 @@
 use crate::model::{DesignSpace, GenrePack, UniversalLayer};
 use crate::validate::validate_design_space;
-use adm4_decision::DecisionGraph;
+use adm4_decision::{DecisionGraph, DesignOrganization};
 use adm4_foundation::{Adm4Error, Adm4Result, read_json_file};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -86,6 +86,8 @@ fn load_universal(root: &DesignSpaceRoot) -> Adm4Result<UniversalLayer> {
                     )));
                 }
                 existing.decision_points.extend(layer.decision_points);
+                existing.domains.extend(layer.domains);
+                existing.nodes.extend(layer.nodes);
             }
         }
     }
@@ -117,12 +119,22 @@ pub fn load_design_space(root: &DesignSpaceRoot, pack_id: &str) -> Adm4Result<De
     let mut points = universal.decision_points.clone();
     points.extend(pack.decision_points.clone());
     let graph = DecisionGraph::new(points)?;
+    // 组织维度：通用层领域 + 通用层节点 + 本包节点（保留领域/节点由装配内置）。
+    let declared_domains = universal.domains.clone();
+    let mut declared_nodes = universal.nodes.clone();
+    declared_nodes.extend(pack.nodes.clone());
     let space = DesignSpace {
         universal_version: universal.space_version,
         pack,
         graph,
+        organization: DesignOrganization::new(declared_domains.clone(), declared_nodes.clone()),
     };
-    let violations = validate_design_space(&space, &universal.decision_points);
+    let violations = validate_design_space(
+        &space,
+        &universal.decision_points,
+        &declared_domains,
+        &declared_nodes,
+    );
     if !violations.is_empty() {
         let summary = violations
             .iter()

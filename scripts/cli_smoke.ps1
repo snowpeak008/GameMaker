@@ -297,6 +297,37 @@ foreach ($id in $PrefilledIds) {
 }
 
 # ---------------------------------------------------------------------------
+# 5b. 二版十六领域检查单：本冒烟项目显式豁免（W6 T10 迁移后新增的通用层内容）
+#
+# 迁移把二版 16 领域 / 103 节点 / 515 检查单项 × L4 选项组落成 2575 个通用层决策点，
+# 每个领域的入口点是 requirement=baseline 的根点（恒适用），其余点靠域内 unlocks 顺序链激活。
+# 本冒烟只验证「逆向→预填→访谈→冻结→C0-C6」工具链闭环，不做全域设计巡视，
+# 因此按 baseline 点的结构化理由码通道逐个豁免入口点（豁免在冻结门第 1 道逐条在案、不拦截，
+# 被豁免的入口点不激活下游链）。断言一条未改：下面所有既有断言与迁移前逐字相同。
+# ---------------------------------------------------------------------------
+$V2DomainEntryPoints = @(
+    'v2.product_vision_decision.he_xin_ti_yan_cheng_nuo.core_feeling_type',
+    'v2.core_fun_decision.zhu_yao_le_qu_lai_yuan.core_feeling_target',
+    'v2.gameplay_system_scope',
+    'v2.content_type_decision.he_xin_nei_rong.content_experience',
+    'v2.economy_loop_decision.zi_yuan_chan_chu.economy_value_experience',
+    'v2.ux_information_architecture_decision.zhu_jie_mian_jie_gou.ux_understanding_experience',
+    'v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target',
+    'v2.balance_model_decision.shu_xing_ding_yi.balance_goal',
+    'v2.social_relationship_decision.hao_you_guan_xi.social_relation_experience',
+    'v2.retention_onboarding_decision.shou_ci_ti_yan_mu_biao.retention_experience',
+    'v2.liveops_launch_content_decision.shou_fa_he_xin_nei_rong.liveops_version_experience',
+    'v2.data_goal_metric_decision.liu_cun_zhi_biao.data_validation_goal',
+    'v2.compliance_age_rating_decision.nei_rong_chi_du.compliance_protection_goal',
+    'v2.documentation_core_doc_decision.xiang_mu_yuan_jing_wen_dang.documentation_alignment_goal',
+    'v2.release_store_entry_decision.he_xin_mai_dian_biao_da.release_external_promise',
+    'v2.launch_version_decision.shou_fa_ti_yan_bi_huan.launch_experience'
+)
+foreach ($entry in $V2DomainEntryPoints) {
+    Invoke-Adm4 "豁免二版领域入口点 $entry" @('authoring', 'na', $ArchiveId, $entry, 'smoke_scope_toolchain_only') | Out-Null
+}
+
+# ---------------------------------------------------------------------------
 # 6. AI 访谈补齐剩余决策（拒绝重提 + 例外下钻 + stdin 原样传回）
 # ---------------------------------------------------------------------------
 $script:TurnIndex = 0

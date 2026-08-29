@@ -5,12 +5,15 @@ use adm4_archive::{
     ArchiveLock, ArchiveManifest, ArchiveStore, DataRoot, export_package, import_package,
 };
 use adm4_authoring::{
-    AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, InterviewProgress,
-    InterviewProposal, InterviewService, InterviewTurn, evaluate_freeze_gates, execute_freeze,
-    run_red_team,
+    AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, GateFinding,
+    InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, evaluate_freeze_gates,
+    execute_freeze, run_red_team,
 };
 use adm4_contracts::SkinScanner;
-use adm4_decision::{DepthProfile, DesignLevel, ParameterValues};
+use adm4_decision::{
+    DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress, ParameterValues,
+    PointApplicability, PointRequirement, ProgressCounts, SelectionMode, check_row_references,
+};
 use adm4_foundation::{
     Adm4Error, Adm4Result, ensure_dir, ensure_within_root, new_id, read_json_file, write_json_file,
 };
@@ -22,6 +25,7 @@ use adm4_template::{
     load_skin_wordlist,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// 应用服务门面：GUI/CLI 的唯一入口。
@@ -190,6 +194,420 @@ impl AppServices {
             &format!("导入项目 {project_name} → {archive_id}"),
         )?;
         Ok(archive_id)
+    }
+
+    // ------------------------------------------------------------------
+    // 创作：多选点、人工豁免、节点文本（CLI 子命令由 T11/T12 统一补）
+    // ------------------------------------------------------------------
+
+    /// 多选点追加一个已选选项。
+    pub fn authoring_add_option(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        option_id: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.add_option(decision_id, option_id)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!("项目 {archive_id} 多选点 {decision_id} 追加选项 {option_id}"),
+        )
+    }
+
+    /// 多选点移除一个已选选项（整点撤销请用 `authoring_clear_selection` 语义的引擎方法）。
+    pub fn authoring_remove_option(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        option_id: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.remove_option(decision_id, option_id)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!("项目 {archive_id} 多选点 {decision_id} 移除选项 {option_id}"),
+        )
+    }
+
+    /// 标记多选点主选。
+    pub fn authoring_set_primary_option(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        option_id: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.set_primary_option(decision_id, option_id)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!("项目 {archive_id} 决策点 {decision_id} 主选设为 {option_id}"),
+        )
+    }
+
+    /// 为多选点的某个已选选项填参数；返回参数校验问题清单（非空进待填清单，不阻断保存）。
+    pub fn authoring_set_option_parameters(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        option_id: &str,
+        parameters: ParameterValues,
+    ) -> Adm4Result<Vec<String>> {
+        self.with_project(archive_id, |engine| {
+            engine.set_option_parameters(decision_id, option_id, parameters)
+        })
+    }
+
+    /// 人工豁免：把决策点标记为不适用（理由码 + 说明 + 署名三者必填，R3）。
+    pub fn authoring_set_not_applicable(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        reason_code: &str,
+        note: &str,
+        actor: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.set_not_applicable(decision_id, reason_code, note, actor)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!(
+                "项目 {archive_id} 决策点 {decision_id} 人工豁免为不适用[{reason_code}]（署名 {actor}）"
+            ),
+        )
+    }
+
+    /// 解除不适用；返回 false 表示该点本来就不是 N/A（幂等）。
+    pub fn authoring_clear_not_applicable(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+    ) -> Adm4Result<bool> {
+        let cleared = self.with_project(archive_id, |engine| {
+            engine.clear_not_applicable(decision_id)
+        })?;
+        if cleared {
+            self.log.append(
+                "authoring",
+                &format!("项目 {archive_id} 决策点 {decision_id} 解除不适用"),
+            )?;
+        }
+        Ok(cleared)
+    }
+
+    /// 节点级设计说明（空串 = 清除）。
+    pub fn authoring_set_node_design_note(
+        &self,
+        archive_id: &str,
+        node_id: &str,
+        note: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.set_node_design_note(node_id, note)
+        })
+    }
+
+    /// 节点级风险说明（空串 = 清除）。
+    pub fn authoring_set_node_risk_note(
+        &self,
+        archive_id: &str,
+        node_id: &str,
+        note: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.set_node_risk_note(node_id, note)
+        })
+    }
+
+    // ------------------------------------------------------------------
+    // 工作台只读聚合查询（左栏领域卡片 / 画像卡片 / 右栏四页签）
+    // ------------------------------------------------------------------
+
+    /// 按领域/节点聚合的进度（左栏领域卡片 + 中栏节点列表）。
+    pub fn organization_progress(&self, archive_id: &str) -> Adm4Result<OrganizationProgress> {
+        let engine = self.open_engine(archive_id)?;
+        Ok(engine.organization_progress())
+    }
+
+    /// 全部决策点的 UI 视图（中栏检查单数据源）：带领域/节点归属、MDA 标注、设计提问、
+    /// 选择基数、逐选项已选/主选状态、适用性与豁免记录。
+    ///
+    /// 一次返回全图（现有包 20-30 个点，量级可忽略），由 UI 按节点/层级过滤——
+    /// 避免为每种筛选条件各开一个查询。
+    pub fn decision_points(&self, archive_id: &str) -> Adm4Result<Vec<DecisionPointView>> {
+        let engine = self.open_engine(archive_id)?;
+        let state = engine.state();
+        let space = engine.space();
+        let applicability = engine.applicability();
+        let mut views = Vec::with_capacity(space.graph.points().len());
+        for point in space.graph.points() {
+            let selection = state.selections.get(&point.id);
+            let node_id = space
+                .organization
+                .effective_node_id(point.node_id.as_deref())
+                .to_string();
+            let (status, exemption) = match applicability.get(&point.id) {
+                Some(PointApplicability::Active) => ("active", None),
+                Some(PointApplicability::Inactive) => ("inactive", None),
+                Some(PointApplicability::BeyondDepth) => ("beyond_depth", None),
+                Some(PointApplicability::NotApplicable(justification)) => (
+                    "not_applicable",
+                    Some(ExemptionView {
+                        reason_code: justification.reason_code.clone(),
+                        note: justification.note.clone(),
+                        actor: state
+                            .na_signoffs
+                            .get(&point.id)
+                            .map(|signoff| signoff.actor.clone()),
+                        at: state
+                            .na_signoffs
+                            .get(&point.id)
+                            .map(|signoff| signoff.at.clone()),
+                    }),
+                ),
+                None => ("unknown", None),
+            };
+            let options = point
+                .options
+                .iter()
+                .map(|option| DecisionOptionView {
+                    option_id: option.id.clone(),
+                    label: option.label.clone(),
+                    summary: option.summary.clone(),
+                    selected: selection.is_some_and(|item| item.contains_option(&option.id)),
+                    is_primary: selection
+                        .and_then(|item| item.primary_option.as_deref())
+                        .is_some_and(|primary| primary == option.id),
+                })
+                .collect();
+            views.push(DecisionPointView {
+                decision_id: point.id.clone(),
+                level: point.level,
+                domain_id: space.organization.domain_of_node(&node_id).to_string(),
+                node_id,
+                question: point.question.clone(),
+                design_question: point.design_question.clone(),
+                mda_layer: point.mda_layer.map(|layer| layer.label().to_string()),
+                selection_mode: point.selection_mode,
+                requirement: point.requirement,
+                applicability: status.to_string(),
+                confirmed: selection.is_some_and(|item| item.confirmed_by_user),
+                options,
+                exemption,
+            });
+        }
+        Ok(views)
+    }
+
+    /// 项目画像卡片：L0/L1 已确认决策点 → 「决策点提问 + 已选选项名」条目。
+    ///
+    /// 二版的画像六字段在四版不再单独存一份数据（那会与决策点重复存储、双向同步），
+    /// 而是从 L0/L1 决策点聚合出来：字段集合由清单决定，代码里没有任何硬编码字段名。
+    pub fn project_profile(&self, archive_id: &str) -> Adm4Result<ProjectProfile> {
+        let engine = self.open_engine(archive_id)?;
+        let state = engine.state();
+        let space = engine.space();
+        let mut fields = Vec::new();
+        for point in space.graph.points() {
+            if !matches!(point.level, DesignLevel::L0 | DesignLevel::L1) {
+                continue;
+            }
+            let Some(selection) = state.selections.get(&point.id) else {
+                continue;
+            };
+            if !selection.confirmed_by_user {
+                continue; // 未确认的提案/预填不上画像卡（与完成度口径一致）。
+            }
+            let mut selected = Vec::new();
+            for item in selection.selected_options() {
+                let Some(option) = point.option(item.option_id) else {
+                    continue;
+                };
+                selected.push(ProfileOption {
+                    option_id: item.option_id.to_string(),
+                    label: option.label.clone(),
+                    is_primary: item.is_primary,
+                });
+            }
+            let node_id = space
+                .organization
+                .effective_node_id(point.node_id.as_deref())
+                .to_string();
+            fields.push(ProfileField {
+                decision_id: point.id.clone(),
+                level: point.level,
+                label: point.question.clone(),
+                design_question: point.design_question.clone(),
+                mda_layer: point.mda_layer.map(|layer| layer.label().to_string()),
+                domain_id: space.organization.domain_of_node(&node_id).to_string(),
+                node_id,
+                selected,
+            });
+        }
+        Ok(ProjectProfile {
+            project_name: state.project_name.clone(),
+            genre_pack: state.genre_pack.clone(),
+            depth_target: state.depth_profile.target,
+            fields,
+        })
+    }
+
+    /// 工作台右栏四页签一次取齐：摘要 / 缺失项 / 风险 / 校验。
+    ///
+    /// 四块全部复用既有引擎查询（完成度、组织聚合、一致性引擎、冻结门预检），
+    /// 不引入第二套算法、不落任何派生存储——UI 每次拿到的都是当前状态的实时投影。
+    pub fn workbench_overview(&self, archive_id: &str) -> Adm4Result<WorkbenchOverview> {
+        let engine = self.open_engine(archive_id)?;
+        let state = engine.state();
+        let space = engine.space();
+        let applicability = engine.applicability();
+        let completeness = engine.completeness();
+        let progress = engine.organization_progress();
+
+        // --- 摘要 ---
+        let summary = WorkbenchSummary {
+            project_name: state.project_name.clone(),
+            genre_pack: state.genre_pack.clone(),
+            pack_version: state.pack_version.clone(),
+            depth_target: state.depth_profile.target,
+            revision: state.revision,
+            frozen_versions: state.frozen_versions,
+            done: completeness.done,
+            total: completeness.total,
+            percent: completeness.percent(),
+            domains: progress.domains.clone(),
+            nodes: progress.nodes.clone(),
+            counts: progress.total,
+        };
+
+        // --- 缺失项：未确认且适用的决策点，按领域分组 ---
+        let mut blocking_by_decision: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for item in &completeness.blocking {
+            blocking_by_decision
+                .entry(item.decision_id.as_str())
+                .or_default()
+                .push(item.detail.as_str());
+        }
+        let mut missing_by_domain: BTreeMap<String, Vec<MissingEntry>> = BTreeMap::new();
+        for point in space.graph.points() {
+            if !matches!(
+                applicability.get(&point.id),
+                Some(PointApplicability::Active)
+            ) {
+                continue;
+            }
+            let selection = state.selections.get(&point.id);
+            let details = blocking_by_decision.get(point.id.as_str());
+            let confirmed = selection.is_some_and(|item| item.confirmed_by_user);
+            if confirmed && details.is_none() {
+                continue;
+            }
+            let reasons = match details {
+                Some(items) => items.iter().map(|detail| (*detail).to_string()).collect(),
+                None if selection.is_none() => vec!["未选择".to_string()],
+                None => vec!["未经用户确认".to_string()],
+            };
+            let node_id = space
+                .organization
+                .effective_node_id(point.node_id.as_deref())
+                .to_string();
+            let domain_id = space.organization.domain_of_node(&node_id).to_string();
+            missing_by_domain
+                .entry(domain_id)
+                .or_default()
+                .push(MissingEntry {
+                    decision_id: point.id.clone(),
+                    node_id,
+                    level: point.level,
+                    question: point.question.clone(),
+                    reasons,
+                });
+        }
+        let mut missing = Vec::new();
+        for domain in space.organization.domains() {
+            if let Some(items) = missing_by_domain.remove(&domain.id) {
+                missing.push(MissingByDomain {
+                    domain_id: domain.id.clone(),
+                    domain_name: domain.name.clone(),
+                    items,
+                });
+            }
+        }
+
+        // --- 风险：节点风险说明 + 最近一次红队发现 ---
+        let node_risks = state
+            .node_risk_notes
+            .iter()
+            .map(|(node_id, note)| NodeRiskNote {
+                node_id: node_id.clone(),
+                node_name: match space.organization.node(node_id) {
+                    Some(node) => node.name.clone(),
+                    None => node_id.clone(),
+                },
+                domain_id: space.organization.domain_of_node(node_id).to_string(),
+                note: note.clone(),
+            })
+            .collect();
+        let red_team = state.red_team.as_ref().map(|record| RedTeamSummary {
+            reviewed_revision: record.reviewed_revision,
+            stale: record.reviewed_revision != state.revision,
+            reviewer: record.proof.reviewer.clone(),
+            findings: record
+                .findings
+                .iter()
+                .map(|finding| RedTeamFinding {
+                    id: finding.id.clone(),
+                    severity: finding.severity.clone(),
+                    target: finding.target.clone(),
+                    text: finding.text.clone(),
+                    disposed: finding.disposition.is_some(),
+                })
+                .collect(),
+        });
+        let risk = WorkbenchRisk {
+            node_risks,
+            red_team,
+        };
+
+        // --- 校验：外键违规 + 冻结门预检 ---
+        let scanner = self.skin_scanner(space)?;
+        let gate_report = evaluate_freeze_gates(&engine, &scanner);
+        let validation = WorkbenchValidation {
+            row_reference_violations: check_row_references(
+                &space.graph,
+                &state.selections,
+                &space.row_references(),
+            )
+            .into_iter()
+            .map(|violation| RowReferenceIssue {
+                rule_id: violation.rule_id,
+                decision_id: violation.decision_id,
+                detail: violation.detail,
+            })
+            .collect(),
+            all_gates_passed: gate_report.all_passed(),
+            gates: gate_report
+                .gates
+                .iter()
+                .map(|gate| GateSummary {
+                    gate: gate.gate.clone(),
+                    passed: gate.passed,
+                    finding_count: gate.findings.len(),
+                    findings: gate.findings.clone(),
+                })
+                .collect(),
+        };
+
+        Ok(WorkbenchOverview {
+            summary,
+            missing,
+            risk,
+            validation,
+        })
     }
 
     // ------------------------------------------------------------------
@@ -738,6 +1156,191 @@ impl InterviewTurnDto {
             Self::Complete => None,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 工作台 DTO（左栏画像卡片 + 右栏四页签；全部只读投影，不落存储）
+// ---------------------------------------------------------------------------
+
+/// 决策点视图上的一个选项。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DecisionOptionView {
+    pub option_id: String,
+    pub label: String,
+    pub summary: String,
+    pub selected: bool,
+    /// 多选点的主选标记。
+    pub is_primary: bool,
+}
+
+/// 人工豁免/理由码跳过的在案记录（`actor` 为 None = baseline 理由码跳过，无署名）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExemptionView {
+    pub reason_code: String,
+    pub note: String,
+    pub actor: Option<String>,
+    pub at: Option<String>,
+}
+
+/// 决策点的 UI 视图（中栏检查单一行）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DecisionPointView {
+    pub decision_id: String,
+    pub level: DesignLevel,
+    pub domain_id: String,
+    pub node_id: String,
+    pub question: String,
+    /// 二版「设计提问」。
+    pub design_question: Option<String>,
+    /// MDA 层展示标签（已本地化）。
+    pub mda_layer: Option<String>,
+    pub selection_mode: SelectionMode,
+    pub requirement: PointRequirement,
+    /// `active` / `inactive` / `not_applicable` / `beyond_depth`。
+    pub applicability: String,
+    pub confirmed: bool,
+    pub options: Vec<DecisionOptionView>,
+    pub exemption: Option<ExemptionView>,
+}
+
+/// 画像字段上的一个已选选项。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileOption {
+    pub option_id: String,
+    pub label: String,
+    /// 多选点的主选标记（单选点恒 false）。
+    pub is_primary: bool,
+}
+
+/// 画像卡片的一行：一个 L0/L1 决策点及其已选选项（主选在前）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileField {
+    pub decision_id: String,
+    pub level: DesignLevel,
+    /// 展示名 = 决策点的 `question`（决策点没有独立 label 字段，question 即 UI 展示文本）。
+    pub label: String,
+    /// 二版「设计提问」（清单未声明时为 None）。
+    pub design_question: Option<String>,
+    /// MDA 层展示标签（已本地化）。
+    pub mda_layer: Option<String>,
+    pub domain_id: String,
+    pub node_id: String,
+    pub selected: Vec<ProfileOption>,
+}
+
+/// 项目画像卡片：字段集合完全由清单的 L0/L1 决策点决定。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectProfile {
+    pub project_name: String,
+    pub genre_pack: String,
+    pub depth_target: DesignLevel,
+    pub fields: Vec<ProfileField>,
+}
+
+/// 摘要页签：领域 × 进度总览 + 总完成度。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkbenchSummary {
+    pub project_name: String,
+    pub genre_pack: String,
+    pub pack_version: String,
+    pub depth_target: DesignLevel,
+    pub revision: u64,
+    pub frozen_versions: u32,
+    /// 总完成度分子/分母/百分比（口径同 `CompletenessReport`）。
+    pub done: usize,
+    pub total: usize,
+    pub percent: u8,
+    pub domains: Vec<DomainProgress>,
+    pub nodes: Vec<NodeProgress>,
+    /// 各领域计数求和（与 done/total 同源）。
+    pub counts: ProgressCounts,
+}
+
+/// 缺失项页签的一条：未确认或参数未填齐的适用决策点。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MissingEntry {
+    pub decision_id: String,
+    pub node_id: String,
+    pub level: DesignLevel,
+    pub question: String,
+    /// 缺什么（未选择 / 未确认 / 参数与外键明细，逐条列出）。
+    pub reasons: Vec<String>,
+}
+
+/// 缺失项按领域分组（领域顺序同左栏卡片）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MissingByDomain {
+    pub domain_id: String,
+    pub domain_name: String,
+    pub items: Vec<MissingEntry>,
+}
+
+/// 风险页签：节点风险说明。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NodeRiskNote {
+    pub node_id: String,
+    pub node_name: String,
+    pub domain_id: String,
+    pub note: String,
+}
+
+/// 风险页签：最近一次红队发现摘要。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RedTeamFinding {
+    pub id: String,
+    pub severity: String,
+    pub target: String,
+    pub text: String,
+    pub disposed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RedTeamSummary {
+    pub reviewed_revision: u64,
+    /// 设计已变更 → 该次评审过期，冻结门第 4 道会要求重跑。
+    pub stale: bool,
+    pub reviewer: String,
+    pub findings: Vec<RedTeamFinding>,
+}
+
+/// 风险页签：无红队记录时 `red_team` 为 None，`node_risks` 为空表。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkbenchRisk {
+    pub node_risks: Vec<NodeRiskNote>,
+    pub red_team: Option<RedTeamSummary>,
+}
+
+/// 校验页签：跨表外键违规。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RowReferenceIssue {
+    pub rule_id: String,
+    pub decision_id: String,
+    pub detail: String,
+}
+
+/// 校验页签：冻结门预检单门摘要。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GateSummary {
+    pub gate: String,
+    pub passed: bool,
+    pub finding_count: usize,
+    pub findings: Vec<GateFinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkbenchValidation {
+    pub row_reference_violations: Vec<RowReferenceIssue>,
+    pub gates: Vec<GateSummary>,
+    pub all_gates_passed: bool,
+}
+
+/// 工作台右栏四页签的一次性投影。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkbenchOverview {
+    pub summary: WorkbenchSummary,
+    pub missing: Vec<MissingByDomain>,
+    pub risk: WorkbenchRisk,
+    pub validation: WorkbenchValidation,
 }
 
 /// 模板对照条目：某决策点上「模板怎么选」与「项目当前怎么选」的并排视图。

@@ -1,48 +1,101 @@
-import { Button, ComboBox, LineEdit, ListView, ScrollView, TabWidget, TextEdit, VerticalBox, HorizontalBox, GroupBox, ProgressIndicator } from "std-widgets.slint";
+// adm4 桌面工作台：布局与交互沿用二版（顶部六视图导航 + 设计工作台三栏 + 底部状态栏），
+// 语义（决策点/多选主选/人工豁免/自动保存/冻结门）按四版设计承载。
+// 本文件只做呈现与手势转发，全部数据与可用性由 Rust 侧从后端聚合结果推出（D14）。
 
-export struct ProjectItem { id: string, name: string, updated: string }
-export struct DecisionItem { id: string, domain: string, level: string, question: string, status: string, selected: string }
-export struct OptionItem { id: string, label: string, summary: string, selected: bool }
-export struct StageItem { id: string, name: string, status: string, waiting: bool }
-export struct LogItem { at: string, category: string, message: string }
-// 冻结门明细：门标题行（is-header=true）与逐条 finding 行的扁平混排。
-export struct GateRow { gate: string, is-header: bool, passed: bool, text: string }
-// 访谈分层进度：一层一行。
+import { Button, ComboBox, GroupBox, LineEdit, ListView, ProgressIndicator, ScrollView, TextEdit } from "std-widgets.slint";
+
+// —— 项目/存档 ——
+export struct ProjectItem { id: string, name: string, updated: string, active: bool }
+
+// —— 左栏：领域总览卡片（含 0 点领域）/ 项目画像 ——
+export struct DomainCard { id: string, name: string, summary: string, progress: string, percent: int, active: bool, empty: bool }
+export struct ProfileRow { label: string, value: string, hint: string }
+
+// —— 中栏：节点列表 / 决策点检查单 / 选项 ——
+export struct NodeCard { id: string, name: string, role: string, progress: string, detail: string, active: bool }
+export struct CheckRow { id: string, question: string, meta: string, badge: string, badge-kind: string, active: bool }
+export struct OptionRow { id: string, label: string, summary: string, selected: bool, is-primary: bool, focused: bool }
+
+// —— 右栏四页签统一行模型：kind = header/ok/bad/info；target 非空则可点击跳转决策点 ——
+export struct TextRow { title: string, text: string, kind: string, target: string }
+
+// —— 访谈分层进度：一层一行 ——
 export struct LevelRow { label: string, text: string, current: bool }
-// 逆向面板：模板列表行 / 产线五步 / 交叉核验冲突 / 对照结果。
-export struct TemplateRow { id: string, game: string, status: string, depth: string, answers: string }
+
+// —— 流水线全版图：segment = C 段（实跑）/ P 段（Phase 2 占位）——
+export struct StageItem { id: string, name: string, status: string, summary: string, segment: string, waiting: bool, placeholder: bool }
+
+export struct LogItem { at: string, category: string, message: string }
+
+// —— 逆向模板维护面板 ——
+export struct TemplateRow { id: string, game: string, status: string, depth: string, answers: string, active: bool }
 export struct StepRow { name: string, reached: bool, current: bool }
 export struct ConflictRow { decision: string, reason: string }
 export struct CompareRow { decision: string, template-option: string, project-option: string, same: bool, params: string }
 
 export component MainWindow inherits Window {
-    title: "AutoDesignMaker V4 · 决策驱动设计工作台";
-    preferred-width: 1280px;
-    preferred-height: 820px;
+    title: "AutoDesignMaker V4 · 设计工作台";
+    preferred-width: 1440px;
+    preferred-height: 960px;
+    min-width: 1180px;
+    min-height: 760px;
+    background: #f3f5f7;
 
-    in property <[ProjectItem]> projects: [];
-    in property <[string]> packs: [];
-    in property <[string]> domains: [];
-    in property <[DecisionItem]> decisions: [];
-    in property <[OptionItem]> options: [];
-    in property <[StageItem]> stages: [];
-    in property <[LogItem]> logs: [];
-    in property <string> current-project-name: "（未打开项目）";
+    // ---------------- 视图与页签状态（纯 UI 状态）----------------
+    in-out property <string> active-view: "design";
+    in-out property <string> right-tab: "summary";
+    in-out property <bool> archive-panel-open: false;
+    in-out property <bool> template-panel-open: false;
+    in-out property <bool> interview-open: true;
+
+    // ---------------- 顶栏与状态栏 ----------------
+    in property <string> project-title: "（未打开项目）";
+    in property <string> project-pack: "";
+    in property <string> autosave-text: "事务自动保存（V4 无手动保存按钮）";
+    in property <string> status-message: "就绪";
     in property <string> completeness-text: "";
     in property <float> completeness-ratio: 0.0;
-    in property <string> current-decision: "";
-    in property <string> current-decision-question: "";
-    in-out property <string> param-json: "";
-    in property <string> status-message: "";
 
-    // —— 结构化表格/矩阵编辑器（后端 schema 驱动；JSON 文本框保留为高级模式）——
+    // ---------------- 项目/存档 ----------------
+    in property <[ProjectItem]> projects: [];
+    in property <[string]> packs: [];
+
+    // ---------------- 左栏 ----------------
+    in property <[DomainCard]> domain-cards: [];
+    in property <[ProfileRow]> profile-rows: [];
+    in property <string> profile-title: "项目画像（L0/L1 已确认决策点聚合）";
+    in property <string> level-brief: "尚未选择决策点。";
+
+    // ---------------- 中栏 ----------------
+    in property <[NodeCard]> node-cards: [];
+    in property <[CheckRow]> check-rows: [];
+    in property <string> center-title: "节点列表";
+    in property <string> node-title: "（未选择节点）";
+    in property <string> node-meta: "";
+    in-out property <string> node-design-note: "";
+    in-out property <string> node-risk-note: "";
+
+    in property <[OptionRow]> options: [];
+    in property <string> decision-title: "（未选择决策点）";
+    in property <string> decision-meta: "";
+    in property <string> decision-question: "";
+    in property <bool> decision-active: false;
+    in property <bool> decision-multi: false;
+    in property <bool> decision-allow-primary: false;
+    in property <bool> decision-primary-missing: false;
+    in property <bool> decision-exempted: false;
+    in property <string> decision-exemption-text: "";
+    in property <string> focused-option-text: "";
+
+    // 结构化表格/矩阵编辑器（后端 schema 驱动；JSON 文本框为高级模式）
     in property <bool> structured-active: false;
     in property <bool> advanced-mode: false;
     in property <string> editor-title: "";
     in property <[string]> table-columns: [];
     in property <[[string]]> table-rows-model: [];
+    in-out property <string> param-json: "";
 
-    // —— 访谈面板 ——
+    // 访谈
     in property <[LevelRow]> interview-levels: [];
     in property <string> interview-progress-text: "";
     in property <string> interview-turn-kind: "";
@@ -53,7 +106,20 @@ export component MainWindow inherits Window {
     in property <bool> interview-has-proposal: false;
     in property <bool> interview-params-editable: false;
 
-    // —— 逆向维护面板 ——
+    // ---------------- 右栏四页签 ----------------
+    in property <[TextRow]> summary-rows: [];
+    in property <[TextRow]> missing-rows: [];
+    in property <[TextRow]> risk-rows: [];
+    in property <[TextRow]> validation-rows: [];
+    in property <bool> freeze-ready: false;
+    in property <string> freeze-hint: "";
+
+    // ---------------- 流水线 / 日志 ----------------
+    in property <[StageItem]> stages: [];
+    in property <string> pipeline-note: "";
+    in property <[LogItem]> logs: [];
+
+    // ---------------- 逆向模板维护 ----------------
     in property <[TemplateRow]> template-list: [];
     in property <[StepRow]> template-steps: [];
     in property <string> reverse-selected: "（未选择模板）";
@@ -61,38 +127,46 @@ export component MainWindow inherits Window {
     in property <[CompareRow]> compare-rows: [];
     in property <string> compare-title: "";
 
-    // —— 冻结门明细 ——
-    in property <[GateRow]> gate-rows: [];
-    in property <bool> freeze-ready: false;
-
+    // ---------------- 回调 ----------------
     callback refresh-projects();
     callback create-project(string, string, string);
     callback open-project(string);
-    callback select-domain(string);
-    callback select-decision(string);
-    callback choose-option(string);
-    callback save-params(string);
-    callback confirm-decision();
-    callback run-red-team();
-    callback freeze-check();
-    callback freeze-run();
-    callback pipeline-run();
-    callback pipeline-confirm(string, string);
-    callback refresh-logs();
+    callback refresh-workbench();
 
-    // 结构化编辑器：格编辑 / 行增删 / 保存 / 高级模式切换。
+    callback select-domain(string);
+    callback select-node(string);
+    callback select-decision(string);
+    callback save-node-notes(string, string);
+
+    callback choose-option(string);
+    callback toggle-option(string, bool);
+    callback set-primary-option(string);
+    callback focus-option(string);
+    callback confirm-decision();
+    callback set-not-applicable(string, string, string);
+    callback clear-not-applicable();
+
     callback edit-table-cell(int, int, string);
     callback add-table-row();
     callback remove-table-row(int);
     callback save-table();
     callback set-advanced-mode(bool);
+    callback save-params(string);
 
-    // 访谈：下一提案 / 确认（携编辑后参数 JSON，供例外下钻）/ 拒绝（附理由）。
     callback interview-next();
     callback interview-confirm(string);
     callback interview-reject(string);
 
-    // 逆向产线：选包 / 刷新 / 选模板 / 五步操作 / 对照查询。
+    callback run-red-team();
+    callback freeze-check();
+    callback freeze-run();
+    callback export-workbench(string);
+
+    callback pipeline-run();
+    callback pipeline-confirm(string, string);
+    callback refresh-logs(string);
+    callback export-logs(string);
+
     callback reverse-select-pack(string);
     callback reverse-refresh();
     callback reverse-select-template(string);
@@ -103,465 +177,1884 @@ export component MainWindow inherits Window {
     callback reverse-review(string, string);
     callback reverse-certify();
     callback reverse-compare();
+    callback template-prefill();
 
-    VerticalBox {
-        // 顶栏：项目选择与创建。
-        HorizontalBox {
-            height: 44px;
-            Text { text: root.current-project-name; font-size: 16px; vertical-alignment: center; }
-            Rectangle { horizontal-stretch: 1; }
-            new-name := LineEdit { placeholder-text: "新项目名"; width: 160px; }
-            pack-box := ComboBox { model: root.packs; width: 150px; }
-            depth-box := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 70px; }
-            Button {
-                text: "创建项目";
-                clicked => { root.create-project(new-name.text, pack-box.current-value, depth-box.current-value); }
+    VerticalLayout {
+        // =====================================================================
+        // 顶栏：六视图导航（对照二版 main.slint 383-388 行）
+        // =====================================================================
+        Rectangle {
+            height: 58px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                spacing: 8px;
+
+                Text {
+                    text: "AutoDesignMaker";
+                    width: 168px;
+                    font-size: 19px;
+                    font-weight: 700;
+                    color: #1f2328;
+                    vertical-alignment: center;
+                }
+                Button {
+                    text: "设计工作台";
+                    width: 100px;
+                    primary: root.active-view == "design";
+                    clicked => { root.active-view = "design"; }
+                }
+                Button {
+                    text: "开发流水线";
+                    width: 100px;
+                    primary: root.active-view == "pipeline";
+                    clicked => { root.active-view = "pipeline"; }
+                }
+                Button {
+                    text: "补充开发";
+                    width: 92px;
+                    primary: root.active-view == "patch";
+                    clicked => { root.active-view = "patch"; }
+                }
+                Button {
+                    text: "打包阶段";
+                    width: 92px;
+                    primary: root.active-view == "package";
+                    clicked => { root.active-view = "package"; }
+                }
+                Button {
+                    text: "运行日志";
+                    width: 92px;
+                    primary: root.active-view == "logs";
+                    clicked => { root.active-view = "logs"; }
+                }
+                Button {
+                    text: "SDK知识库";
+                    width: 104px;
+                    primary: root.active-view == "sdk";
+                    clicked => { root.active-view = "sdk"; }
+                }
+                Text {
+                    text: root.status-message;
+                    horizontal-stretch: 1;
+                    color: #0969da;
+                    font-size: 12px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
             }
-            Button { text: "刷新"; clicked => { root.refresh-projects(); } }
         }
 
-        TabWidget {
-            Tab {
-                title: "项目";
-                ListView {
-                    for project in root.projects: Rectangle {
-                        height: 40px;
-                        background: touch.has-hover ? #2a2f3a : transparent;
-                        touch := TouchArea { clicked => { root.open-project(project.id); } }
-                        HorizontalBox {
-                            Text { text: project.name; width: 30%; vertical-alignment: center; }
-                            Text { text: project.id; width: 45%; color: #9aa4b2; vertical-alignment: center; }
-                            Text { text: project.updated; color: #9aa4b2; vertical-alignment: center; }
+        // =====================================================================
+        // 视图区
+        // =====================================================================
+        Rectangle {
+            vertical-stretch: 1;
+            background: #f3f5f7;
+
+            // -----------------------------------------------------------------
+            // 一、设计工作台（对照二版 410-707 行的三栏比例与交互模式）
+            // -----------------------------------------------------------------
+            if root.active-view == "design": VerticalLayout {
+                // 条件元素在非布局父节点里不会自动拉满，必须显式贴合视图区。
+                width: parent.width;
+                height: parent.height;
+                padding: 12px;
+                spacing: 10px;
+
+                // 顶部工具条
+                Rectangle {
+                    height: 52px;
+                    background: #ffffff;
+                    border-color: #d0d7de;
+                    border-width: 1px;
+                    border-radius: 6px;
+
+                    HorizontalLayout {
+                        padding: 10px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "项目";
+                            width: 34px;
+                            font-size: 12px;
+                            color: #57606a;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.project-title;
+                            width: 210px;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: root.autosave-text;
+                            width: 232px;
+                            font-size: 11px;
+                            color: #1a7f37;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Button {
+                            text: root.archive-panel-open ? "关闭存档管理" : "存档管理";
+                            width: 108px;
+                            clicked => {
+                                root.archive-panel-open = !root.archive-panel-open;
+                                root.template-panel-open = false;
+                                root.refresh-projects();
+                            }
+                        }
+                        Button {
+                            text: root.template-panel-open ? "关闭模板面板" : "模板/逆向维护";
+                            width: 122px;
+                            clicked => {
+                                root.template-panel-open = !root.template-panel-open;
+                                root.archive-panel-open = false;
+                                root.reverse-refresh();
+                            }
+                        }
+                        Button {
+                            text: "刷新工作台";
+                            width: 96px;
+                            clicked => { root.refresh-workbench(); }
+                        }
+                        export-path := LineEdit {
+                            placeholder-text: "导出路径，例如 D:\\snapshot.md";
+                            horizontal-stretch: 1;
+                        }
+                        Button {
+                            text: "导出快照";
+                            width: 88px;
+                            clicked => { root.export-workbench(export-path.text); }
                         }
                     }
                 }
-            }
 
-            Tab {
-                title: "设计工作台";
-                HorizontalBox {
-                    // 左：领域。
-                    VerticalBox {
-                        width: 150px;
-                        Text { text: "领域"; font-size: 14px; }
-                        ListView {
-                            for domain in root.domains: Rectangle {
-                                height: 32px;
-                                background: domain-touch.has-hover ? #2a2f3a : transparent;
-                                domain-touch := TouchArea { clicked => { root.select-domain(domain); } }
-                                Text { text: domain; vertical-alignment: center; x: 8px; }
-                            }
-                        }
-                    }
-                    // 中：决策点。
-                    VerticalBox {
-                        horizontal-stretch: 1;
-                        HorizontalBox {
-                            height: 30px;
-                            Text { text: root.completeness-text; vertical-alignment: center; }
-                            ProgressIndicator { progress: root.completeness-ratio; horizontal-stretch: 1; }
-                        }
-                        ListView {
-                            for decision in root.decisions: Rectangle {
-                                height: 56px;
-                                background: decision-touch.has-hover ? #2a2f3a : transparent;
-                                decision-touch := TouchArea { clicked => { root.select-decision(decision.id); } }
-                                VerticalBox {
-                                    padding: 4px;
-                                    HorizontalBox {
-                                        Text { text: "[" + decision.level + "] " + decision.question; font-size: 13px; horizontal-stretch: 1; }
-                                        Text { text: decision.status; color: decision.status == "已确认" ? #4caf50 : #ffb74d; }
-                                    }
-                                    Text { text: decision.id + (decision.selected == "" ? "" : "  →  " + decision.selected); color: #9aa4b2; font-size: 11px; }
-                                }
-                            }
-                        }
-                    }
-                    // 右：当前决策点的选项与参数编辑。
-                    VerticalBox {
-                        width: 460px;
-                        Text { text: root.current-decision-question; font-size: 14px; wrap: word-wrap; }
-                        ListView {
-                            height: 30%;
-                            for option in root.options: Rectangle {
-                                height: 52px;
-                                background: option.selected ? #1d3a2a : (option-touch.has-hover ? #2a2f3a : transparent);
-                                option-touch := TouchArea { clicked => { root.choose-option(option.id); } }
-                                VerticalBox {
-                                    padding: 4px;
-                                    Text { text: (option.selected ? "● " : "○ ") + option.label; font-size: 13px; }
-                                    Text { text: option.summary; color: #9aa4b2; font-size: 11px; wrap: word-wrap; }
-                                }
-                            }
-                        }
+                // 三栏：与二版一致用显式几何摆位（左 286 / 中自适应 / 右 348）。
+                // 不用 HorizontalLayout：中栏内含固定宽子元素，会把自身最大宽度收窄，
+                // 导致右栏被挤到窗口中部、右侧留白。
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: transparent;
 
-                        // 结构化表格/矩阵编辑器（schema 为 Table/Matrix 时启用；列名来自 schema）。
-                        if root.structured-active && !root.advanced-mode: VerticalBox {
-                            vertical-stretch: 1;
-                            padding: 0;
-                            HorizontalBox {
-                                height: 34px;
-                                Text { text: root.editor-title; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
-                                Button { text: "新增行"; clicked => { root.add-table-row(); } }
-                                Button { text: "保存表格"; primary: true; clicked => { root.save-table(); } }
-                                Button { text: "高级JSON"; clicked => { root.set-advanced-mode(true); } }
+                    // ---------------- 左栏 ----------------
+                    Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: 286px;
+                        height: parent.height;
+                        background: #ffffff;
+                        border-color: #d0d7de;
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 6px;
+
+                            Text {
+                                text: "领域总览（全部领域，含 0 点域）";
+                                height: 22px;
+                                font-size: 13px;
+                                font-weight: 700;
+                                color: #1f2328;
                             }
-                            ScrollView {
-                                vertical-stretch: 1;
-                                VerticalLayout {
-                                    spacing: 2px;
-                                    HorizontalLayout {
+                            ListView {
+                                vertical-stretch: 3;
+                                for domain in root.domain-cards: Rectangle {
+                                    height: 68px;
+                                    background: domain.active ? #ddf4ff : #f6f8fa;
+                                    border-color: domain.active ? #54aeff : #d8dee4;
+                                    border-width: 1px;
+                                    border-radius: 6px;
+                                    TouchArea { clicked => { root.select-domain(domain.id); } }
+                                    VerticalLayout {
+                                        padding: 6px;
                                         spacing: 2px;
-                                        for column in root.table-columns: Text {
-                                            text: column;
-                                            width: 110px;
-                                            font-size: 11px;
-                                            color: #9aa4b2;
+                                        Text {
+                                            text: domain.name;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            color: domain.empty ? #6e7781 : #1f2328;
                                             overflow: elide;
                                         }
-                                        Rectangle { width: 40px; }
-                                    }
-                                    for row[row-index] in root.table-rows-model: HorizontalLayout {
-                                        spacing: 2px;
-                                        for cell[col-index] in row: LineEdit {
-                                            text: cell;
-                                            width: 110px;
-                                            font-size: 12px;
-                                            edited(text) => { root.edit-table-cell(row-index, col-index, text); }
+                                        Text {
+                                            text: domain.progress;
+                                            font-size: 11px;
+                                            color: #0969da;
                                         }
-                                        Button {
-                                            text: "删";
-                                            width: 40px;
-                                            clicked => { root.remove-table-row(row-index); }
+                                        // 进度条：完成度百分比来自后端聚合，UI 不重算。
+                                        Rectangle {
+                                            height: 4px;
+                                            background: #eaeef2;
+                                            border-radius: 2px;
+                                            Rectangle {
+                                                x: 0px;
+                                                y: 0px;
+                                                width: parent.width * domain.percent / 100;
+                                                height: parent.height;
+                                                background: domain.percent == 100 ? #1a7f37 : #54aeff;
+                                                border-radius: 2px;
+                                            }
+                                        }
+                                        Text {
+                                            text: domain.summary;
+                                            font-size: 10px;
+                                            color: #6e7781;
+                                            overflow: elide;
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        // JSON 文本框：标量/无参数时的默认编辑区；表/矩阵时作为「高级模式」。
-                        if !root.structured-active || root.advanced-mode: VerticalBox {
-                            vertical-stretch: 1;
-                            padding: 0;
-                            HorizontalBox {
-                                height: 30px;
-                                Text { text: "参数（JSON，表/矩阵/标量）"; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
-                                if root.structured-active: Button {
-                                    text: "返回结构化表格";
-                                    clicked => { root.set-advanced-mode(false); }
-                                }
-                            }
-                            param-editor := TextEdit {
-                                text <=> root.param-json;
-                                vertical-stretch: 1;
-                            }
-                            HorizontalBox {
-                                height: 40px;
-                                Button { text: "保存参数"; clicked => { root.save-params(param-editor.text); } }
-                            }
-                        }
-
-                        HorizontalBox {
-                            height: 40px;
-                            Button { text: "确认此决策"; primary: true; clicked => { root.confirm-decision(); } }
-                        }
-                    }
-                }
-            }
-
-            Tab {
-                title: "AI 访谈";
-                VerticalBox {
-                    // 顶部：分层进度（interview_progress）。
-                    HorizontalBox {
-                        height: 36px;
-                        Button { text: "下一提案"; primary: true; clicked => { root.interview-next(); } }
-                        Text { text: root.interview-progress-text; vertical-alignment: center; horizontal-stretch: 1; }
-                    }
-                    HorizontalBox {
-                        height: 30px;
-                        for level in root.interview-levels: Text {
-                            text: level.label + " " + level.text;
-                            font-size: 12px;
-                            vertical-alignment: center;
-                            color: level.current ? #ffb74d : #9aa4b2;
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                    }
-                    GroupBox {
-                        title: "当前提案（确认/拒绝必须由你点击——AI 永不代提交）";
-                        vertical-stretch: 1;
-                        VerticalBox {
-                            Text { text: root.interview-turn-kind; font-size: 13px; color: #64b5f6; }
-                            Text { text: root.interview-decision; font-size: 13px; wrap: word-wrap; }
-                            Text { text: root.interview-option; font-size: 13px; wrap: word-wrap; }
-                            Text { text: root.interview-rationale == "" ? "" : "理由：" + root.interview-rationale; font-size: 12px; color: #9aa4b2; wrap: word-wrap; }
                             Text {
-                                text: root.interview-params-editable
-                                    ? "参数预览（整表提案：可先编辑再确认，改动将作为例外下钻 overrides 提交）"
-                                    : "参数预览（只读）";
-                                font-size: 12px;
+                                text: root.profile-title;
+                                height: 22px;
+                                font-size: 13px;
+                                font-weight: 700;
+                                color: #1f2328;
+                                overflow: elide;
                             }
-                            interview-params := TextEdit {
-                                text <=> root.interview-params-json;
-                                read-only: !root.interview-params-editable;
-                                vertical-stretch: 1;
-                            }
-                            HorizontalBox {
-                                height: 40px;
-                                Button {
-                                    text: "确认提案";
-                                    primary: true;
-                                    enabled: root.interview-has-proposal;
-                                    clicked => { root.interview-confirm(interview-params.text); }
+                            ListView {
+                                vertical-stretch: 2;
+                                for field in root.profile-rows: Rectangle {
+                                    height: 50px;
+                                    background: #ffffff;
+                                    border-color: #d8dee4;
+                                    border-width: 1px;
+                                    border-radius: 6px;
+                                    VerticalLayout {
+                                        padding: 5px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: field.label;
+                                            font-size: 11px;
+                                            font-weight: 700;
+                                            color: #24292f;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: field.value;
+                                            font-size: 11px;
+                                            color: #0969da;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: field.hint;
+                                            font-size: 10px;
+                                            color: #6e7781;
+                                            overflow: elide;
+                                        }
+                                    }
                                 }
-                                reject-note := LineEdit { placeholder-text: "拒绝理由"; horizontal-stretch: 1; }
-                                Button {
-                                    text: "拒绝（附理由）";
-                                    enabled: root.interview-has-proposal;
-                                    clicked => { root.interview-reject(reject-note.text); }
-                                }
                             }
-                        }
-                    }
-                }
-            }
 
-            Tab {
-                title: "冻结门";
-                VerticalBox {
-                    HorizontalBox {
-                        height: 40px;
-                        Button { text: "评估五道门"; clicked => { root.freeze-check(); } }
-                        Button { text: "运行 AI 红队"; clicked => { root.run-red-team(); } }
-                        Button {
-                            text: root.freeze-ready ? "执行冻结" : "执行冻结（需五道门全绿）";
-                            primary: true;
-                            enabled: root.freeze-ready;
-                            clicked => { root.freeze-run(); }
-                        }
-                    }
-                    Text {
-                        height: 26px;
-                        text: "提示：模板预填的决策理由若含原游戏名会被换皮门拦截（预期行为）——请在设计工作台重写理由后重新评估。";
-                        font-size: 11px;
-                        color: #9aa4b2;
-                        wrap: word-wrap;
-                    }
-                    ListView {
-                        for row in root.gate-rows: Rectangle {
-                            height: row.is-header ? 34px : 28px;
-                            HorizontalBox {
-                                padding: 2px;
-                                if row.is-header: Text {
-                                    text: (row.passed ? "✔ " : "✘ ") + row.gate + " · " + row.text;
-                                    color: row.passed ? #4caf50 : #ef5350;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                }
-                                if !row.is-header: Text {
-                                    text: "    " + row.text;
-                                    color: #9aa4b2;
+                            Text {
+                                text: "L5/L6 编辑入口（表格编辑在中栏决策点详情内）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                                overflow: elide;
+                            }
+                            Rectangle {
+                                height: 132px;
+                                background: #f6f8fa;
+                                border-color: #d8dee4;
+                                border-width: 1px;
+                                border-radius: 6px;
+                                Text {
+                                    x: 8px;
+                                    y: 6px;
+                                    width: parent.width - 16px;
+                                    height: parent.height - 12px;
+                                    text: root.level-brief;
                                     font-size: 11px;
-                                    vertical-alignment: center;
+                                    color: #57606a;
                                     wrap: word-wrap;
                                 }
                             }
                         }
                     }
+
+                    // ---------------- 中栏 ----------------
+                    Rectangle {
+                        x: 296px;
+                        y: 0px;
+                        width: parent.width - 654px;
+                        height: parent.height;
+                        background: #ffffff;
+                        border-color: #d0d7de;
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 6px;
+
+                            HorizontalLayout {
+                                height: 24px;
+                                spacing: 8px;
+                                Text {
+                                    text: root.center-title;
+                                    font-size: 13px;
+                                    font-weight: 700;
+                                    color: #1f2328;
+                                    horizontal-stretch: 1;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: root.completeness-text;
+                                    font-size: 11px;
+                                    color: #57606a;
+                                    width: 260px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            // 节点列表
+                            ListView {
+                                vertical-stretch: 3;
+                                for node in root.node-cards: Rectangle {
+                                    height: 56px;
+                                    background: node.active ? #ddf4ff : #f6f8fa;
+                                    border-color: node.active ? #54aeff : #d8dee4;
+                                    border-width: 1px;
+                                    border-radius: 6px;
+                                    TouchArea { clicked => { root.select-node(node.id); } }
+                                    VerticalLayout {
+                                        padding: 5px;
+                                        spacing: 1px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text {
+                                                text: node.name;
+                                                font-size: 12px;
+                                                font-weight: 700;
+                                                color: #1f2328;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: node.progress;
+                                                font-size: 11px;
+                                                color: #0969da;
+                                                width: 120px;
+                                                horizontal-alignment: right;
+                                            }
+                                        }
+                                        Text {
+                                            text: node.role;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: node.detail;
+                                            font-size: 10px;
+                                            color: #6e7781;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 节点详情：设计说明 / 风险说明
+                            Rectangle {
+                                height: 96px;
+                                background: #f6f8fa;
+                                border-color: #d8dee4;
+                                border-width: 1px;
+                                border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 6px;
+                                    spacing: 4px;
+                                    HorizontalLayout {
+                                        height: 18px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: root.node-title;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            color: #1f2328;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: root.node-meta;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            width: 300px;
+                                            horizontal-alignment: right;
+                                            overflow: elide;
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        height: 28px;
+                                        spacing: 6px;
+                                        design-note := LineEdit {
+                                            placeholder-text: "节点设计说明";
+                                            text <=> root.node-design-note;
+                                            horizontal-stretch: 1;
+                                        }
+                                        risk-note := LineEdit {
+                                            placeholder-text: "节点风险说明（进右栏「风险」页签）";
+                                            text <=> root.node-risk-note;
+                                            horizontal-stretch: 1;
+                                        }
+                                        Button {
+                                            text: "保存节点文本";
+                                            width: 104px;
+                                            clicked => { root.save-node-notes(design-note.text, risk-note.text); }
+                                        }
+                                    }
+                                    Text {
+                                        text: "节点文本按节点保存；决策点级理由是选项的 rationale（层级不同，互不替代）。";
+                                        font-size: 10px;
+                                        color: #6e7781;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+
+                            // 决策点检查单
+                            Text {
+                                text: "决策点检查单（= 二版三级检查单；勾选语义 = 已确认）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                                overflow: elide;
+                            }
+                            ListView {
+                                vertical-stretch: 4;
+                                for item in root.check-rows: Rectangle {
+                                    height: 50px;
+                                    background: item.active ? #ddf4ff : #ffffff;
+                                    border-color: item.active ? #54aeff : #d8dee4;
+                                    border-width: 1px;
+                                    border-radius: 6px;
+                                    TouchArea { clicked => { root.select-decision(item.id); } }
+                                    HorizontalLayout {
+                                        padding: 5px;
+                                        padding-right: 14px;
+                                        spacing: 6px;
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 1px;
+                                            Text {
+                                                text: item.question;
+                                                font-size: 12px;
+                                                font-weight: 700;
+                                                color: #1f2328;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: item.meta;
+                                                font-size: 10px;
+                                                color: #57606a;
+                                                overflow: elide;
+                                            }
+                                        }
+                                        Text {
+                                            text: item.badge;
+                                            width: 72px;
+                                            font-size: 11px;
+                                            horizontal-alignment: right;
+                                            vertical-alignment: center;
+                                            color: item.badge-kind == "done"
+                                                ? #1a7f37
+                                                : (item.badge-kind == "warn"
+                                                    ? #bf8700
+                                                    : (item.badge-kind == "off" ? #6e7781 : #cf222e));
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 决策点详情
+                            Rectangle {
+                                vertical-stretch: 6;
+                                background: #f6f8fa;
+                                border-color: #d8dee4;
+                                border-width: 1px;
+                                border-radius: 6px;
+
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 5px;
+
+                                    Text {
+                                        text: root.decision-title;
+                                        height: 18px;
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                        color: #1f2328;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: root.decision-meta;
+                                        height: 16px;
+                                        font-size: 11px;
+                                        color: #0969da;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: root.decision-question;
+                                        height: 16px;
+                                        font-size: 11px;
+                                        color: #57606a;
+                                        overflow: elide;
+                                    }
+                                    if root.decision-primary-missing: Text {
+                                        text: "多选点缺主选：请在下方选项行点「设主」——否则完成度门 1 会拦截冻结。";
+                                        height: 16px;
+                                        font-size: 11px;
+                                        color: #cf222e;
+                                        overflow: elide;
+                                    }
+                                    if root.decision-exempted: Text {
+                                        text: root.decision-exemption-text;
+                                        height: 16px;
+                                        font-size: 11px;
+                                        color: #bf8700;
+                                        overflow: elide;
+                                    }
+
+                                    // 选项列表：单选 = 选择按钮；多选 = 勾选 + 设主
+                                    ListView {
+                                        vertical-stretch: 2;
+                                        for option in root.options: Rectangle {
+                                            height: 52px;
+                                            background: option.selected ? #dafbe1 : #ffffff;
+                                            border-color: option.focused
+                                                ? #54aeff
+                                                : (option.selected ? #4ac26b : #d8dee4);
+                                            border-width: option.focused ? 2px : 1px;
+                                            border-radius: 6px;
+                                            HorizontalLayout {
+                                                padding: 5px;
+                                                spacing: 6px;
+                                                VerticalLayout {
+                                                    horizontal-stretch: 1;
+                                                    spacing: 1px;
+                                                    Text {
+                                                        text: (option.is-primary ? "★ " : (option.selected ? "● " : "○ ")) + option.label;
+                                                        font-size: 12px;
+                                                        color: #1f2328;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: option.summary;
+                                                        font-size: 10px;
+                                                        color: #57606a;
+                                                        overflow: elide;
+                                                    }
+                                                }
+                                                if !root.decision-multi: Button {
+                                                    text: option.selected ? "已选" : "选择";
+                                                    width: 66px;
+                                                    enabled: !option.selected;
+                                                    clicked => { root.choose-option(option.id); }
+                                                }
+                                                if root.decision-multi: Button {
+                                                    text: option.selected ? "取消勾选" : "勾选";
+                                                    width: 80px;
+                                                    clicked => { root.toggle-option(option.id, !option.selected); }
+                                                }
+                                                if root.decision-multi && root.decision-allow-primary: Button {
+                                                    text: option.is-primary ? "主选" : "设主";
+                                                    width: 66px;
+                                                    enabled: option.selected && !option.is-primary;
+                                                    clicked => { root.set-primary-option(option.id); }
+                                                }
+                                                Button {
+                                                    text: "编辑参数";
+                                                    width: 78px;
+                                                    enabled: option.selected && !option.focused;
+                                                    clicked => { root.focus-option(option.id); }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 参数编辑：结构化表格 / 高级 JSON 双模式
+                                    Text {
+                                        text: root.focused-option-text;
+                                        height: 16px;
+                                        font-size: 11px;
+                                        color: #57606a;
+                                        overflow: elide;
+                                    }
+                                    if root.structured-active && !root.advanced-mode: VerticalLayout {
+                                        vertical-stretch: 2;
+                                        spacing: 4px;
+                                        HorizontalLayout {
+                                            height: 30px;
+                                            spacing: 6px;
+                                            Text {
+                                                text: root.editor-title;
+                                                font-size: 11px;
+                                                color: #57606a;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            Button { text: "新增行"; width: 76px; clicked => { root.add-table-row(); } }
+                                            Button { text: "保存表格"; width: 86px; primary: true; clicked => { root.save-table(); } }
+                                            Button { text: "高级JSON"; width: 88px; clicked => { root.set-advanced-mode(true); } }
+                                        }
+                                        ScrollView {
+                                            vertical-stretch: 1;
+                                            VerticalLayout {
+                                                spacing: 2px;
+                                                HorizontalLayout {
+                                                    spacing: 2px;
+                                                    for column in root.table-columns: Text {
+                                                        text: column;
+                                                        width: 112px;
+                                                        font-size: 11px;
+                                                        color: #57606a;
+                                                        overflow: elide;
+                                                    }
+                                                    Rectangle { width: 44px; }
+                                                }
+                                                for row[row-index] in root.table-rows-model: HorizontalLayout {
+                                                    spacing: 2px;
+                                                    for cell[col-index] in row: LineEdit {
+                                                        text: cell;
+                                                        width: 112px;
+                                                        font-size: 12px;
+                                                        edited(text) => { root.edit-table-cell(row-index, col-index, text); }
+                                                    }
+                                                    Button {
+                                                        text: "删";
+                                                        width: 44px;
+                                                        clicked => { root.remove-table-row(row-index); }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if !root.structured-active || root.advanced-mode: VerticalLayout {
+                                        vertical-stretch: 2;
+                                        spacing: 4px;
+                                        HorizontalLayout {
+                                            height: 28px;
+                                            spacing: 6px;
+                                            Text {
+                                                text: "参数（JSON：标量/表/矩阵）";
+                                                font-size: 11px;
+                                                color: #57606a;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                            }
+                                            if root.structured-active: Button {
+                                                text: "返回结构化表格";
+                                                width: 122px;
+                                                clicked => { root.set-advanced-mode(false); }
+                                            }
+                                            Button {
+                                                text: "保存参数";
+                                                width: 86px;
+                                                clicked => { root.save-params(param-editor.text); }
+                                            }
+                                        }
+                                        param-editor := TextEdit {
+                                            text <=> root.param-json;
+                                            vertical-stretch: 1;
+                                        }
+                                    }
+
+                                    // 确认（= 二版勾选）
+                                    HorizontalLayout {
+                                        height: 30px;
+                                        spacing: 6px;
+                                        Button {
+                                            text: "确认此决策点（= 二版检查单勾选）";
+                                            horizontal-stretch: 1;
+                                            primary: true;
+                                            enabled: root.decision-active;
+                                            clicked => { root.confirm-decision(); }
+                                        }
+                                        Button {
+                                            text: "解除不适用";
+                                            width: 100px;
+                                            enabled: root.decision-exempted;
+                                            clicked => { root.clear-not-applicable(); }
+                                        }
+                                    }
+                                    // N/A 人工豁免：理由码 + 说明 + 署名（三者必填，后端校验 R3）
+                                    HorizontalLayout {
+                                        height: 30px;
+                                        spacing: 6px;
+                                        na-code := LineEdit {
+                                            placeholder-text: "N/A 理由码";
+                                            horizontal-stretch: 1;
+                                        }
+                                        na-note := LineEdit {
+                                            placeholder-text: "N/A 说明（必填）";
+                                            horizontal-stretch: 2;
+                                        }
+                                        na-actor := LineEdit {
+                                            placeholder-text: "署名（必填）";
+                                            horizontal-stretch: 1;
+                                        }
+                                        Button {
+                                            text: "标记不适用";
+                                            width: 100px;
+                                            clicked => { root.set-not-applicable(na-code.text, na-note.text, na-actor.text); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // AI 访谈区（中栏底部；可折叠，给检查单/详情腾高度）
+                            Rectangle {
+                                height: root.interview-open ? 186px : 46px;
+                                background: #ffffff;
+                                border-color: #d8dee4;
+                                border-width: 1px;
+                                border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 4px;
+                                    HorizontalLayout {
+                                        height: 28px;
+                                        spacing: 6px;
+                                        Text {
+                                            text: "AI 访谈（分层确认；AI 永不代提交）";
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            color: #1f2328;
+                                            vertical-alignment: center;
+                                            width: 230px;
+                                            overflow: elide;
+                                        }
+                                        Button {
+                                            text: root.interview-open ? "收起" : "展开";
+                                            width: 66px;
+                                            clicked => { root.interview-open = !root.interview-open; }
+                                        }
+                                        Button { text: "下一提案"; width: 88px; clicked => { root.interview-next(); } }
+                                        Text {
+                                            text: root.interview-progress-text;
+                                            font-size: 11px;
+                                            color: #57606a;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                    }
+                                    // 分层进度（一层一个小格：已确认/适用）
+                                    if root.interview-open: HorizontalLayout {
+                                        height: 16px;
+                                        spacing: 4px;
+                                        for level in root.interview-levels: Text {
+                                            text: level.label + " " + level.text;
+                                            font-size: 10px;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                            color: level.current ? #bf8700 : #6e7781;
+                                        }
+                                    }
+                                    if root.interview-open: HorizontalLayout {
+                                        vertical-stretch: 1;
+                                        spacing: 8px;
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 2px;
+                                            Text {
+                                                text: root.interview-turn-kind;
+                                                font-size: 11px;
+                                                color: #0969da;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: root.interview-decision;
+                                                font-size: 11px;
+                                                color: #24292f;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: root.interview-option;
+                                                font-size: 11px;
+                                                color: #24292f;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: root.interview-rationale == "" ? "" : "理由：" + root.interview-rationale;
+                                                font-size: 10px;
+                                                color: #57606a;
+                                                vertical-stretch: 1;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            width: 300px;
+                                            spacing: 3px;
+                                            Text {
+                                                text: root.interview-params-editable
+                                                    ? "参数（整表提案：可改后确认 = 例外下钻）"
+                                                    : "参数预览（只读）";
+                                                font-size: 10px;
+                                                color: #57606a;
+                                                height: 14px;
+                                                overflow: elide;
+                                            }
+                                            interview-params := TextEdit {
+                                                text <=> root.interview-params-json;
+                                                read-only: !root.interview-params-editable;
+                                                vertical-stretch: 1;
+                                            }
+                                            HorizontalLayout {
+                                                height: 28px;
+                                                spacing: 4px;
+                                                Button {
+                                                    text: "确认提案";
+                                                    primary: true;
+                                                    enabled: root.interview-has-proposal;
+                                                    clicked => { root.interview-confirm(interview-params.text); }
+                                                }
+                                                reject-note := LineEdit {
+                                                    placeholder-text: "拒绝理由";
+                                                    horizontal-stretch: 1;
+                                                }
+                                                Button {
+                                                    text: "拒绝";
+                                                    width: 64px;
+                                                    enabled: root.interview-has-proposal;
+                                                    clicked => { root.interview-reject(reject-note.text); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------------- 右栏四页签 ----------------
+                    Rectangle {
+                        x: parent.width - 348px;
+                        y: 0px;
+                        width: 348px;
+                        height: parent.height;
+                        background: #ffffff;
+                        border-color: #d0d7de;
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 6px;
+
+                            HorizontalLayout {
+                                height: 30px;
+                                spacing: 4px;
+                                Button {
+                                    text: "摘要";
+                                    primary: root.right-tab == "summary";
+                                    clicked => { root.right-tab = "summary"; }
+                                }
+                                Button {
+                                    text: "缺失项";
+                                    primary: root.right-tab == "missing";
+                                    clicked => { root.right-tab = "missing"; }
+                                }
+                                Button {
+                                    text: "风险";
+                                    primary: root.right-tab == "risk";
+                                    clicked => { root.right-tab = "risk"; }
+                                }
+                                Button {
+                                    text: "校验";
+                                    primary: root.right-tab == "validation";
+                                    clicked => { root.right-tab = "validation"; }
+                                }
+                            }
+
+                            if root.right-tab == "summary": ListView {
+                                vertical-stretch: 1;
+                                for row in root.summary-rows: Rectangle {
+                                    height: row.kind == "header" ? 30px : 46px;
+                                    background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: row.kind == "bad" ? #cf222e : #57606a;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.right-tab == "missing": ListView {
+                                vertical-stretch: 1;
+                                for row in root.missing-rows: Rectangle {
+                                    height: row.kind == "header" ? 30px : 50px;
+                                    background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                    border-color: #eaeef2;
+                                    border-width: row.kind == "header" ? 0px : 1px;
+                                    if row.target != "": TouchArea {
+                                        clicked => { root.select-decision(row.target); }
+                                    }
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: #cf222e;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.right-tab == "risk": ListView {
+                                vertical-stretch: 1;
+                                for row in root.risk-rows: Rectangle {
+                                    height: row.kind == "header" ? 30px : 52px;
+                                    background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: row.kind == "bad" ? #cf222e : #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.right-tab == "validation": VerticalLayout {
+                                vertical-stretch: 1;
+                                spacing: 5px;
+                                HorizontalLayout {
+                                    height: 30px;
+                                    spacing: 4px;
+                                    Button { text: "四门预检"; clicked => { root.freeze-check(); } }
+                                    Button { text: "AI 红队"; clicked => { root.run-red-team(); } }
+                                    Button {
+                                        text: root.freeze-ready ? "执行冻结" : "执行冻结（需全绿）";
+                                        primary: true;
+                                        enabled: root.freeze-ready;
+                                        clicked => { root.freeze-run(); }
+                                    }
+                                }
+                                if root.freeze-hint != "": HorizontalLayout {
+                                    height: 28px;
+                                    spacing: 4px;
+                                    Text {
+                                        text: root.freeze-hint;
+                                        font-size: 11px;
+                                        color: #1a7f37;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    Button {
+                                        text: "前往开发流水线";
+                                        width: 126px;
+                                        clicked => { root.active-view = "pipeline"; }
+                                    }
+                                }
+                                ListView {
+                                    vertical-stretch: 1;
+                                    for row in root.validation-rows: Rectangle {
+                                        height: row.kind == "header" ? 30px : 46px;
+                                        background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                        VerticalLayout {
+                                            padding: 4px;
+                                            spacing: 1px;
+                                            Text {
+                                                text: row.title;
+                                                font-size: row.kind == "header" ? 12px : 11px;
+                                                font-weight: row.kind == "header" ? 700 : 400;
+                                                color: row.kind == "bad"
+                                                    ? #cf222e
+                                                    : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                                overflow: elide;
+                                            }
+                                            if row.kind != "header": Text {
+                                                text: row.text;
+                                                font-size: 10px;
+                                                color: #57606a;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            Tab {
-                title: "开发流水线";
-                VerticalBox {
-                    HorizontalBox {
-                        height: 40px;
-                        Button { text: "运行 C0-C6"; primary: true; clicked => { root.pipeline-run(); } }
-                        confirm-note := LineEdit { placeholder-text: "人工确认备注"; horizontal-stretch: 1; }
+            // -----------------------------------------------------------------
+            // 二、开发流水线（全版图：C0-C6 实跑 + P0-P5 占位，不断头）
+            // -----------------------------------------------------------------
+            if root.active-view == "pipeline": Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: transparent;
+
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: 300px;
+                    height: parent.height;
+                    background: #ffffff;
+                    border-color: #d0d7de;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 6px;
+                        Text {
+                            text: "流程版图";
+                            height: 22px;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #1f2328;
+                        }
+                        Text {
+                            text: "设计冻结 → C0-C6（文档编译段，已实现）→ P0-P5（开发执行段，Phase 2）";
+                            height: 46px;
+                            font-size: 11px;
+                            color: #57606a;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 6px;
+                            Button { text: "运行 C0-C6"; primary: true; clicked => { root.pipeline-run(); } }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for stage in root.stages: Rectangle {
+                                height: 52px;
+                                background: stage.placeholder ? #f6f8fa : #ffffff;
+                                border-color: #eaeef2;
+                                border-width: 1px;
+                                VerticalLayout {
+                                    padding: 4px;
+                                    spacing: 1px;
+                                    Text {
+                                        text: stage.segment + " " + stage.id + " · " + stage.name;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        color: stage.placeholder ? #6e7781 : #1f2328;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: stage.status;
+                                        font-size: 10px;
+                                        color: stage.waiting ? #bf8700 : #57606a;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
                     }
-                    ListView {
-                        for stage in root.stages: Rectangle {
-                            height: 48px;
-                            VerticalBox {
-                                padding: 4px;
-                                HorizontalBox {
-                                    Text { text: stage.id + " · " + stage.name; width: 40%; font-size: 13px; vertical-alignment: center; }
-                                    Text { text: stage.status; horizontal-stretch: 1; color: stage.status == "成功" ? #4caf50 : (stage.waiting ? #ffb74d : #9aa4b2); vertical-alignment: center; wrap: word-wrap; }
+                }
+
+                Rectangle {
+                    x: 310px;
+                    y: 0px;
+                    width: parent.width - 310px;
+                    height: parent.height;
+                    background: #ffffff;
+                    border-color: #d0d7de;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 6px;
+                        Text {
+                            text: "阶段详情与人工门";
+                            height: 22px;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #1f2328;
+                        }
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 6px;
+                            confirm-note := LineEdit {
+                                placeholder-text: "人工确认备注（C5 风格门 / C6 签收门）";
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        ListView {
+                            vertical-stretch: 1;
+                            for stage in root.stages: Rectangle {
+                                height: 58px;
+                                background: stage.placeholder ? #f6f8fa : #ffffff;
+                                border-color: #eaeef2;
+                                border-width: 1px;
+                                HorizontalLayout {
+                                    padding: 5px;
+                                    spacing: 6px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 1px;
+                                        Text {
+                                            text: stage.segment + " " + stage.id + " · " + stage.name;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            color: stage.placeholder ? #6e7781 : #1f2328;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: stage.summary;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: stage.status;
+                                            font-size: 10px;
+                                            color: stage.waiting ? #bf8700 : #6e7781;
+                                            overflow: elide;
+                                        }
+                                    }
                                     if stage.waiting: Button {
                                         text: "人工确认";
+                                        width: 96px;
                                         clicked => { root.pipeline-confirm(stage.id, confirm-note.text); }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            Tab {
-                title: "模板逆向";
-                HorizontalBox {
-                    // 左：品类包选择 + 模板列表（认证状态）。
-                    VerticalBox {
-                        width: 300px;
-                        HorizontalBox {
-                            height: 36px;
-                            reverse-pack-box := ComboBox {
-                                model: root.packs;
-                                horizontal-stretch: 1;
-                                selected(value) => { root.reverse-select-pack(value); }
-                            }
-                            Button { text: "刷新"; clicked => { root.reverse-refresh(); } }
-                        }
-                        ListView {
-                            for template in root.template-list: Rectangle {
-                                height: 52px;
-                                background: template-touch.has-hover ? #2a2f3a : transparent;
-                                template-touch := TouchArea { clicked => { root.reverse-select-template(template.id); } }
-                                VerticalBox {
-                                    padding: 4px;
-                                    HorizontalBox {
-                                        Text { text: template.id; font-size: 13px; horizontal-stretch: 1; }
-                                        Text { text: template.status; font-size: 12px; color: template.status == "已认证" ? #4caf50 : #ffb74d; }
-                                    }
-                                    Text { text: template.game + " · " + template.depth + " · " + template.answers; color: #9aa4b2; font-size: 11px; }
-                                }
-                            }
-                        }
-                    }
-
-                    // 中：产线五步状态 + 逐步操作。
-                    VerticalBox {
-                        width: 460px;
-                        Text { text: root.reverse-selected; font-size: 13px; wrap: word-wrap; }
-                        HorizontalBox {
-                            height: 28px;
-                            for step[step-index] in root.template-steps: Text {
-                                text: (step-index == 0 ? "" : "→ ") + step.name;
-                                font-size: 12px;
-                                vertical-alignment: center;
-                                color: step.reached ? #4caf50 : (step.current ? #ffb74d : #9aa4b2);
-                            }
-                            Rectangle { horizontal-stretch: 1; }
-                        }
-                        GroupBox {
-                            title: "S0 新建草稿";
-                            VerticalBox {
-                                HorizontalBox {
-                                    height: 34px;
-                                    draft-id := LineEdit { placeholder-text: "模板 id（snake_case）"; horizontal-stretch: 1; }
-                                    draft-depth := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 70px; }
-                                }
-                                HorizontalBox {
-                                    height: 34px;
-                                    draft-game := LineEdit { placeholder-text: "逆向目标游戏名"; horizontal-stretch: 1; }
-                                    draft-aliases := LineEdit { placeholder-text: "别名（逗号分隔）"; horizontal-stretch: 1; }
-                                    Button {
-                                        text: "建草稿";
-                                        clicked => { root.reverse-new-draft(draft-id.text, draft-game.text, draft-aliases.text, draft-depth.current-value); }
-                                    }
-                                }
-                            }
-                        }
-                        GroupBox {
-                            title: "S1 语料检索（本地目录，零网络）";
-                            VerticalBox {
-                                corpus-dir := LineEdit { placeholder-text: "语料目录路径"; height: 34px; }
-                                HorizontalBox {
-                                    height: 34px;
-                                    corpus-question := LineEdit { placeholder-text: "决策问题（检索上下文）"; horizontal-stretch: 1; }
-                                    corpus-keywords := LineEdit { placeholder-text: "关键词（逗号分隔）"; horizontal-stretch: 1; }
-                                    Button {
-                                        text: "检索";
-                                        clicked => { root.reverse-search(corpus-dir.text, corpus-question.text, corpus-keywords.text); }
-                                    }
-                                }
-                            }
-                        }
-                        HorizontalBox {
-                            height: 40px;
-                            Button { text: "S2 AI 映射"; clicked => { root.reverse-map(); } }
-                            Button { text: "S3 交叉核验"; clicked => { root.reverse-crosscheck(); } }
-                        }
-                        GroupBox {
-                            title: "S4 人工审核（署名与结论必填，R3）";
-                            HorizontalBox {
-                                height: 34px;
-                                reviewer-name := LineEdit { placeholder-text: "评审人署名"; width: 130px; }
-                                review-note := LineEdit { placeholder-text: "审核结论"; horizontal-stretch: 1; }
-                                Button {
-                                    text: "审核通过";
-                                    clicked => { root.reverse-review(reviewer-name.text, review-note.text); }
-                                }
-                            }
-                        }
-                        HorizontalBox {
-                            height: 40px;
-                            Button { text: "S5 认证入库"; primary: true; clicked => { root.reverse-certify(); } }
-                            Button { text: "与当前项目对照"; clicked => { root.reverse-compare(); } }
-                        }
-                        Rectangle { vertical-stretch: 1; }
-                    }
-
-                    // 右：交叉核验冲突清单 + 对照结果表。
-                    VerticalBox {
-                        horizontal-stretch: 1;
-                        Text { text: "交叉核验冲突（待人工裁决）"; font-size: 13px; }
-                        ListView {
-                            height: 35%;
-                            for conflict in root.template-conflicts: VerticalBox {
-                                padding: 2px;
-                                Text { text: "✘ " + conflict.decision; color: #ef5350; font-size: 12px; }
-                                Text { text: conflict.reason; color: #9aa4b2; font-size: 11px; wrap: word-wrap; }
-                            }
-                        }
-                        Text { text: root.compare-title == "" ? "对照结果（先打开项目并选择已认证模板）" : root.compare-title; font-size: 13px; wrap: word-wrap; }
-                        HorizontalBox {
-                            height: 24px;
-                            Text { text: "决策点"; width: 30%; font-size: 11px; color: #9aa4b2; }
-                            Text { text: "模板选项"; width: 20%; font-size: 11px; color: #9aa4b2; }
-                            Text { text: "项目选项"; width: 20%; font-size: 11px; color: #9aa4b2; }
-                            Text { text: "一致"; font-size: 11px; color: #9aa4b2; }
-                        }
-                        ListView {
-                            vertical-stretch: 1;
-                            for entry in root.compare-rows: VerticalBox {
-                                padding: 2px;
-                                HorizontalBox {
-                                    Text { text: entry.decision; width: 30%; font-size: 12px; overflow: elide; }
-                                    Text { text: entry.template-option; width: 20%; font-size: 12px; overflow: elide; }
-                                    Text { text: entry.project-option; width: 20%; font-size: 12px; overflow: elide; }
-                                    Text { text: entry.same ? "✔" : "✘"; color: entry.same ? #4caf50 : #ef5350; font-size: 12px; }
-                                }
-                                if entry.params != "": Text { text: entry.params; color: #9aa4b2; font-size: 10px; wrap: word-wrap; }
+                        Rectangle {
+                            height: 120px;
+                            background: #f6f8fa;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text {
+                                x: 8px;
+                                y: 6px;
+                                width: parent.width - 16px;
+                                height: parent.height - 12px;
+                                text: root.pipeline-note;
+                                font-size: 11px;
+                                color: #57606a;
+                                wrap: word-wrap;
                             }
                         }
                     }
                 }
             }
 
-            Tab {
-                title: "运行日志";
-                VerticalBox {
-                    HorizontalBox { height: 36px; Button { text: "刷新日志"; clicked => { root.refresh-logs(); } } }
+            // -----------------------------------------------------------------
+            // 三、补充开发（骨架页）
+            // -----------------------------------------------------------------
+            if root.active-view == "patch": Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text { text: "补充开发"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    Text {
+                        text: "四版语义：冻结之后的变更走「追加需求 → 影响分析 → 增量重跑受影响段」，而不是在冻结产物上原地改。二版「追加需求/补充任务列表」的能力归宿在此视图。";
+                        height: 52px;
+                        font-size: 12px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #f6f8fa;
+                        border-color: #d8dee4;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        Text {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height - 24px;
+                            text: "占位区块（由 T12 填充）：\n· 追加需求录入与影响分析结果\n· 受影响冻结段与增量重跑范围\n· 补充任务列表与状态追踪\n\n本波次（T11）只负责视图可切换与能力归宿可见，不在此处放不可用的按钮。";
+                            font-size: 12px;
+                            color: #6e7781;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 四、打包阶段（骨架页）
+            // -----------------------------------------------------------------
+            if root.active-view == "package": Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text { text: "打包阶段"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    Text {
+                        text: "四版归宿：项目包导出导入（.adm4proj）已在存档层实现；游戏构建 / Unity / 运行时验证属 P0-P5（Phase 2），本视图先立版图与占位。";
+                        height: 46px;
+                        font-size: 12px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #f6f8fa;
+                        border-color: #d8dee4;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        Text {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height - 24px;
+                            text: "占位区块（由 T12 填充）：\n· 项目包导出/导入 UI（服务层已就绪）\n· 构建目标清单与产物校验\n· SDK 套件暂存、引擎构建、运行时验证\n\n二版「暂存发布/诊断/构建包/Unity 构建/运行时验证」逐项在此视图有归宿。";
+                            font-size: 12px;
+                            color: #6e7781;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 五、运行日志（接现有 RunLog 数据）
+            // -----------------------------------------------------------------
+            if root.active-view == "logs": Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 8px;
+                        Text {
+                            text: "运行日志";
+                            width: 90px;
+                            font-size: 17px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            vertical-alignment: center;
+                        }
+                        log-filter := LineEdit {
+                            placeholder-text: "过滤：类别或关键字（留空 = 全部）";
+                            width: 300px;
+                        }
+                        Button { text: "刷新"; width: 76px; clicked => { root.refresh-logs(log-filter.text); } }
+                        log-path := LineEdit {
+                            placeholder-text: "导出路径，例如 D:\\runlog.md";
+                            horizontal-stretch: 1;
+                        }
+                        Button { text: "导出"; width: 76px; clicked => { root.export-logs(log-path.text); } }
+                    }
+                    Text {
+                        text: "四版语义：日志是 jsonl 追加的审计流，不提供「清空」（清空会破坏可追溯性）——二版的清空按钮在此照实省略。";
+                        height: 30px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
                     ListView {
-                        for log in root.logs: HorizontalBox {
-                            height: 28px;
-                            Text { text: log.at; width: 170px; color: #9aa4b2; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "[" + log.category + "]"; width: 80px; color: #64b5f6; font-size: 11px; vertical-alignment: center; }
-                            Text { text: log.message; font-size: 12px; vertical-alignment: center; wrap: word-wrap; }
+                        vertical-stretch: 1;
+                        for log in root.logs: Rectangle {
+                            height: 30px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                spacing: 8px;
+                                Text {
+                                    text: log.at;
+                                    width: 178px;
+                                    font-size: 11px;
+                                    color: #6e7781;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "[" + log.category + "]";
+                                    width: 92px;
+                                    font-size: 11px;
+                                    color: #0969da;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: log.message;
+                                    font-size: 11px;
+                                    color: #24292f;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 六、SDK 知识库（骨架页）
+            // -----------------------------------------------------------------
+            if root.active-view == "sdk": Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text { text: "SDK 知识库"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    Text {
+                        text: "四版归宿：SDK 资源的登记与审批流是 Phase 2 构建集成的前置；数据模型与审批视图本期立占位，构建集成留 P0-P5。";
+                        height: 46px;
+                        font-size: 12px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #f6f8fa;
+                        border-color: #d8dee4;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        Text {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height - 24px;
+                            text: "占位区块（由 T12 填充）：\n· 新增 SDK 资源与来源登记\n· 审批队列（待审/批准/拒绝）与署名\n· 已索引资源清单与构建必需标记\n\n审批流与四版「取用关卡」同源：未审批的资源不得进入构建。";
+                            font-size: 12px;
+                            color: #6e7781;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 覆盖面板一：存档管理（项目列表 / 新建项目）
+            // -----------------------------------------------------------------
+            if root.active-view == "design" && root.archive-panel-open: Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #54aeff;
+                border-width: 2px;
+                border-radius: 8px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 8px;
+                        Text {
+                            text: "存档管理（V4 事务自动保存：每次变更即原子提交，无手动保存按钮）";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Button { text: "刷新列表"; width: 96px; clicked => { root.refresh-projects(); } }
+                        Button { text: "关闭"; width: 76px; clicked => { root.archive-panel-open = false; } }
+                    }
+                    HorizontalLayout {
+                        height: 34px;
+                        spacing: 8px;
+                        Text {
+                            text: "新建项目";
+                            width: 68px;
+                            font-size: 12px;
+                            color: #57606a;
+                            vertical-alignment: center;
+                        }
+                        new-name := LineEdit { placeholder-text: "项目名"; width: 220px; }
+                        pack-box := ComboBox { model: root.packs; width: 190px; }
+                        depth-box := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 90px; }
+                        Button {
+                            text: "创建";
+                            width: 88px;
+                            primary: true;
+                            clicked => { root.create-project(new-name.text, pack-box.current-value, depth-box.current-value); }
+                        }
+                        Text {
+                            text: "深度档 = L4/L5/L6（最低 L4）；创建后可在模板面板做认证模板预填。";
+                            font-size: 11px;
+                            color: #6e7781;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                    Text {
+                        text: "项目列表（点击载入）";
+                        height: 22px;
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: #1f2328;
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for project in root.projects: Rectangle {
+                            height: 44px;
+                            background: project.active ? #ddf4ff : #ffffff;
+                            border-color: project.active ? #54aeff : #eaeef2;
+                            border-width: 1px;
+                            TouchArea { clicked => { root.open-project(project.id); } }
+                            HorizontalLayout {
+                                padding: 6px;
+                                spacing: 10px;
+                                Text {
+                                    text: project.name;
+                                    width: 30%;
+                                    font-size: 12px;
+                                    color: #1f2328;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: project.id;
+                                    width: 42%;
+                                    font-size: 11px;
+                                    color: #6e7781;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: project.updated;
+                                    font-size: 11px;
+                                    color: #6e7781;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 覆盖面板二：模板查看/预填 + 逆向维护产线五步 + 对照
+            // -----------------------------------------------------------------
+            if root.active-view == "design" && root.template-panel-open: Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #54aeff;
+                border-width: 2px;
+                border-radius: 8px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 8px;
+                        Text {
+                            text: "模板：查看 / 预填（仅认证模板）/ 逆向维护产线";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+                        Button { text: "关闭"; width: 76px; clicked => { root.template-panel-open = false; } }
+                    }
+
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 10px;
+
+                        // 左：品类包 + 模板列表
+                        VerticalLayout {
+                            width: 330px;
+                            spacing: 6px;
+                            HorizontalLayout {
+                                height: 32px;
+                                spacing: 6px;
+                                reverse-pack-box := ComboBox {
+                                    model: root.packs;
+                                    horizontal-stretch: 1;
+                                    selected(value) => { root.reverse-select-pack(value); }
+                                }
+                                Button { text: "刷新"; width: 72px; clicked => { root.reverse-refresh(); } }
+                            }
+                            ListView {
+                                vertical-stretch: 1;
+                                for template in root.template-list: Rectangle {
+                                    height: 66px;
+                                    background: template.active ? #ddf4ff : #ffffff;
+                                    border-color: template.active ? #54aeff : #eaeef2;
+                                    border-width: 1px;
+                                    TouchArea { clicked => { root.reverse-select-template(template.id); } }
+                                    VerticalLayout {
+                                        padding: 5px;
+                                        spacing: 1px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text {
+                                                text: template.id;
+                                                font-size: 12px;
+                                                font-weight: 700;
+                                                color: #1f2328;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: template.status;
+                                                font-size: 11px;
+                                                width: 84px;
+                                                horizontal-alignment: right;
+                                                color: template.status == "已认证" ? #1a7f37 : #bf8700;
+                                            }
+                                        }
+                                        Text {
+                                            text: template.game + " · " + template.depth;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: template.answers;
+                                            font-size: 10px;
+                                            color: #6e7781;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                height: 32px;
+                                spacing: 6px;
+                                Button {
+                                    text: "预填到当前项目";
+                                    primary: true;
+                                    horizontal-stretch: 1;
+                                    clicked => { root.template-prefill(); }
+                                }
+                                Button {
+                                    text: "与当前项目对照";
+                                    horizontal-stretch: 1;
+                                    clicked => { root.reverse-compare(); }
+                                }
+                            }
+                        }
+
+                        // 中：产线五步
+                        VerticalLayout {
+                            width: 430px;
+                            spacing: 6px;
+                            Text {
+                                text: root.reverse-selected;
+                                height: 20px;
+                                font-size: 12px;
+                                color: #1f2328;
+                                overflow: elide;
+                            }
+                            HorizontalLayout {
+                                height: 24px;
+                                spacing: 4px;
+                                for step[step-index] in root.template-steps: Text {
+                                    text: (step-index == 0 ? "" : "→ ") + step.name;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    color: step.reached ? #1a7f37 : (step.current ? #bf8700 : #6e7781);
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                            GroupBox {
+                                title: "S0 新建草稿";
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    HorizontalLayout {
+                                        height: 32px;
+                                        spacing: 4px;
+                                        draft-id := LineEdit { placeholder-text: "模板 id（snake_case）"; horizontal-stretch: 1; }
+                                        draft-depth := ComboBox { model: ["L4", "L5", "L6"]; current-value: "L5"; width: 84px; }
+                                    }
+                                    HorizontalLayout {
+                                        height: 32px;
+                                        spacing: 4px;
+                                        draft-game := LineEdit { placeholder-text: "逆向目标游戏名"; horizontal-stretch: 1; }
+                                        draft-aliases := LineEdit { placeholder-text: "别名（逗号分隔）"; horizontal-stretch: 1; }
+                                        Button {
+                                            text: "建草稿";
+                                            width: 84px;
+                                            clicked => { root.reverse-new-draft(draft-id.text, draft-game.text, draft-aliases.text, draft-depth.current-value); }
+                                        }
+                                    }
+                                }
+                            }
+                            GroupBox {
+                                title: "S1 语料检索（本地目录，零网络）";
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    corpus-dir := LineEdit { placeholder-text: "语料目录路径"; height: 32px; }
+                                    HorizontalLayout {
+                                        height: 32px;
+                                        spacing: 4px;
+                                        corpus-question := LineEdit { placeholder-text: "决策问题"; horizontal-stretch: 1; }
+                                        corpus-keywords := LineEdit { placeholder-text: "关键词（逗号分隔）"; horizontal-stretch: 1; }
+                                        Button {
+                                            text: "检索";
+                                            width: 72px;
+                                            clicked => { root.reverse-search(corpus-dir.text, corpus-question.text, corpus-keywords.text); }
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                height: 32px;
+                                spacing: 6px;
+                                Button { text: "S2 AI 映射"; clicked => { root.reverse-map(); } }
+                                Button { text: "S3 交叉核验"; clicked => { root.reverse-crosscheck(); } }
+                            }
+                            GroupBox {
+                                title: "S4 人工审核（署名与结论必填，R3）";
+                                HorizontalLayout {
+                                    height: 32px;
+                                    spacing: 4px;
+                                    reviewer-name := LineEdit { placeholder-text: "评审人署名"; width: 130px; }
+                                    review-note := LineEdit { placeholder-text: "审核结论"; horizontal-stretch: 1; }
+                                    Button {
+                                        text: "审核通过";
+                                        width: 96px;
+                                        clicked => { root.reverse-review(reviewer-name.text, review-note.text); }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                height: 32px;
+                                spacing: 6px;
+                                Button { text: "S5 认证入库"; primary: true; clicked => { root.reverse-certify(); } }
+                            }
+                            Rectangle { vertical-stretch: 1; }
+                        }
+
+                        // 右：冲突清单 + 对照结果
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text {
+                                text: "交叉核验冲突（待人工裁决）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                            }
+                            ListView {
+                                vertical-stretch: 1;
+                                for conflict in root.template-conflicts: Rectangle {
+                                    height: 46px;
+                                    background: #ffffff;
+                                    border-color: #eaeef2;
+                                    border-width: 1px;
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: "✘ " + conflict.decision;
+                                            font-size: 11px;
+                                            color: #cf222e;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: conflict.reason;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: root.compare-title == "" ? "对照结果（先打开项目并选已认证模板）" : root.compare-title;
+                                height: 32px;
+                                font-size: 11px;
+                                color: #1f2328;
+                                wrap: word-wrap;
+                            }
+                            ListView {
+                                vertical-stretch: 1;
+                                for entry in root.compare-rows: Rectangle {
+                                    height: 46px;
+                                    background: #ffffff;
+                                    border-color: #eaeef2;
+                                    border-width: 1px;
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            Text {
+                                                text: entry.decision;
+                                                width: 34%;
+                                                font-size: 11px;
+                                                color: #1f2328;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: entry.template-option;
+                                                width: 26%;
+                                                font-size: 11px;
+                                                color: #57606a;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: entry.project-option;
+                                                width: 26%;
+                                                font-size: 11px;
+                                                color: #57606a;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: entry.same ? "✔" : "✘";
+                                                font-size: 11px;
+                                                color: entry.same ? #1a7f37 : #cf222e;
+                                            }
+                                        }
+                                        Text {
+                                            text: entry.params;
+                                            font-size: 10px;
+                                            color: #6e7781;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 底栏：状态消息。
+        // =====================================================================
+        // 底部状态栏：左=当前项目/包，中=完成度，右=最近操作结果
+        // =====================================================================
         Rectangle {
-            height: 28px;
-            background: #1c2027;
-            Text { text: root.status-message; x: 10px; vertical-alignment: center; color: #cfd8dc; font-size: 12px; }
+            height: 30px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 12px;
+                Text {
+                    text: root.project-title + (root.project-pack == "" ? "" : "  ·  " + root.project-pack);
+                    width: 34%;
+                    font-size: 11px;
+                    color: #57606a;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                HorizontalLayout {
+                    width: 30%;
+                    spacing: 8px;
+                    Text {
+                        text: root.completeness-text == "" ? "完成度：尚未打开项目" : root.completeness-text;
+                        font-size: 11px;
+                        color: #57606a;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    ProgressIndicator {
+                        progress: root.completeness-ratio;
+                        width: 80px;
+                        height: 8px;
+                    }
+                }
+                Text {
+                    text: root.status-message;
+                    horizontal-stretch: 1;
+                    font-size: 11px;
+                    color: #24292f;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
         }
     }
 }

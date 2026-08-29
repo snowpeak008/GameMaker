@@ -1,0 +1,17 @@
+{
+  "template_id": "t11-draft-demo",
+  "game_name": "demootarget-game",
+  "aliases": [],
+  "genre_pack": "grid_strategy",
+  "pack_version": "0.1.0",
+  "depth_reached": "L5",
+  "answers": [],
+  "certification": {
+    "status": "draft",
+    "reviewed_by": "",
+    "reviewed_at": "",
+    "review_note": ""
+  },
+  "mapping_hash": "",
+  "crosscheck_proof": null
+}
