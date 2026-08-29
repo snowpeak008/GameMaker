@@ -1,0 +1,50 @@
+# UI Visual Audit
+status=passed
+mode=slint_software_backend
+window_source_width=1280
+window_source_height=860
+screenshot_artifacts=generated
+screenshot_artifact_count=6
+
+## Active View Probe
+- design=passed
+- pipeline=passed
+- patch=passed
+- package=passed
+- logs=passed
+- sdk=passed
+
+## Screenshot Probe
+- design: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-design.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11208
+- pipeline: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-pipeline.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11239
+- patch: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-patch.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11255
+- package: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-package.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11255
+- logs: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-logs.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11255
+- sdk: path=.\dist\AutoDesignMaker-rust\ui-visual-audit-sdk.png width=1280 height=860 bytes=4403200 non_zero_bytes=4403200 varied_samples=11255
+
+## Long Text Probe
+- design_summary_text=passed
+- design_ai_interview_text=passed
+- pipeline_service_text=passed
+- stage_detail_text=passed
+- supplement_analysis_text=passed
+- package_text=passed
+- game_build_text=passed
+- run_log_text=passed
+- sdk_review_text=passed
+
+## Scroll And Wrap Contract
+- root.design-ai-interview-text: scrollview=true wrap=true
+- root.design-right-tab: scrollview=true wrap=true
+- root.pipeline-service-text: scrollview=true wrap=true
+- root.supplement-analysis-text: scrollview=true wrap=true
+- root.package-text: scrollview=true wrap=true
+- root.game-build-text: scrollview=true wrap=true
+- root.run-log-text: scrollview=true wrap=true
+- root.sdk-review-text: scrollview=true wrap=true
+
+## Long Row Contract
+- root.stage-items: scrollview=true
+- root.package-file-items: scrollview=true
+- root.sdk-review-items: scrollview=true
+- root.sdk-resource-items: scrollview=true

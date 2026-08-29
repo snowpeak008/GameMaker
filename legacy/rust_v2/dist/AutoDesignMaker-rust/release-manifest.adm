@@ -1,0 +1,8 @@
+# Desktop Release Bundle
+product_name=AutoDesignMaker-rust
+version=0.1.0
+executable=AutoDesignMaker-rust.exe
+source_executable=.\target\release\adm-desktop.exe
+bytes=24715776
+hash=fnv64:6e4290bdd417082b
+legacy_root_exe=not_modified

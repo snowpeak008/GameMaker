@@ -1,0 +1,82 @@
+# Rust Source Bundle
+ready=true
+source_root=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST
+bundle_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\source-bundle
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\source-manifest.adm
+source_handoff_mode=bundled
+file_count=68
+total_bytes=1885901
+bundle_hash=fnv64:c4de2af7f5bd6c7f
+excluded_dir=target
+excluded_dir=dist
+excluded_dir=.adm_rust_data
+excluded_dir=.git
+stale_cleanup=removed_existing_bundle_dir
+- path=.gitignore; bytes=10; hash=fnv64:c414d413e539c39c
+- path=Cargo.lock; bytes=165953; hash=fnv64:77cdfb86ca7f6e43
+- path=Cargo.toml; bytes=629; hash=fnv64:275e94454d7c3d49
+- path=README.md; bytes=34706; hash=fnv64:8228d0fc5be88f10
+- path=apps/adm-cli/Cargo.toml; bytes=492; hash=fnv64:aa9a449f95460419
+- path=apps/adm-cli/src/main.rs; bytes=319753; hash=fnv64:3d2cabd96f5beb91
+- path=apps/adm-desktop/Cargo.toml; bytes=805; hash=fnv64:8ca34ad3be652d14
+- path=apps/adm-desktop/build.rs; bytes=84; hash=fnv64:fe73e05d1810fb2c
+- path=apps/adm-desktop/src/main.rs; bytes=319436; hash=fnv64:041e59a6b8d36c82
+- path=apps/adm-desktop/ui/main.slint; bytes=59910; hash=fnv64:aca952618dc9724a
+- path=crates/adm-ai/Cargo.toml; bytes=340; hash=fnv64:778c0c1af1dcb355
+- path=crates/adm-ai/src/lib.rs; bytes=56937; hash=fnv64:afac3bc84a8605d1
+- path=crates/adm-application/Cargo.toml; bytes=705; hash=fnv64:191e6a444754394d
+- path=crates/adm-application/src/core_pipeline.rs; bytes=115451; hash=fnv64:85f8195c2e9240c1
+- path=crates/adm-application/src/lib.rs; bytes=77249; hash=fnv64:ed428854dbe001d0
+- path=crates/adm-application/src/pipeline_service.rs; bytes=10819; hash=fnv64:b1262e49fab53ff6
+- path=crates/adm-application/src/production_readiness.rs; bytes=17097; hash=fnv64:3d88ad6370cd105b
+- path=crates/adm-application/src/run_log_service.rs; bytes=7947; hash=fnv64:4b2eb40eef0c7d98
+- path=crates/adm-application/src/sdk_knowledge_service.rs; bytes=14085; hash=fnv64:225bf7381990b216
+- path=crates/adm-application/src/supplement_service.rs; bytes=5471; hash=fnv64:fefa68da9c674d41
+- path=crates/adm-application/src/workbench_service.rs; bytes=67999; hash=fnv64:19fc4d2a569d1343
+- path=crates/adm-archive/Cargo.toml; bytes=227; hash=fnv64:e1fce6c51b3acd0f
+- path=crates/adm-archive/src/lib.rs; bytes=54007; hash=fnv64:c24887875a26e66e
+- path=crates/adm-assets/Cargo.toml; bytes=226; hash=fnv64:ab93032a57d4231c
+- path=crates/adm-assets/src/lib.rs; bytes=7531; hash=fnv64:a555baa8cd3d47eb
+- path=crates/adm-config/Cargo.toml; bytes=257; hash=fnv64:bd504e4357a8805f
+- path=crates/adm-config/src/lib.rs; bytes=46309; hash=fnv64:9ed1583eab1a032b
+- path=crates/adm-design/Cargo.toml; bytes=291; hash=fnv64:58ee2d2e5f9f6082
+- path=crates/adm-design/src/data_repository.rs; bytes=25771; hash=fnv64:9e151f0294c5bac0
+- path=crates/adm-design/src/design_engine.rs; bytes=41594; hash=fnv64:1a8693f5df159d5e
+- path=crates/adm-design/src/lib.rs; bytes=12951; hash=fnv64:d3f8e539d11107b1
+- path=crates/adm-design/src/workbench_reference.rs; bytes=9529; hash=fnv64:f715c0fb830d1c5e
+- path=crates/adm-design/src/workbench_state.rs; bytes=5106; hash=fnv64:72daa7bd458e8623
+- path=crates/adm-development/Cargo.toml; bytes=231; hash=fnv64:b5c3b1dba0014db4
+- path=crates/adm-development/src/lib.rs; bytes=5907; hash=fnv64:e99cd340e72d993b
+- path=crates/adm-foundation/Cargo.toml; bytes=182; hash=fnv64:25351c94fc55de88
+- path=crates/adm-foundation/src/error.rs; bytes=1902; hash=fnv64:5b1544f58b9afe83
+- path=crates/adm-foundation/src/fs.rs; bytes=2677; hash=fnv64:f6f2b83a537b457a
+- path=crates/adm-foundation/src/hash.rs; bytes=841; hash=fnv64:564c1211d1203d37
+- path=crates/adm-foundation/src/ids.rs; bytes=2936; hash=fnv64:293bbba02154064a
+- path=crates/adm-foundation/src/lib.rs; bytes=415; hash=fnv64:d149a29967d1e527
+- path=crates/adm-foundation/src/path.rs; bytes=2950; hash=fnv64:4b0161211f1e155f
+- path=crates/adm-foundation/src/time.rs; bytes=686; hash=fnv64:902d6a4ce10cde2d
+- path=crates/adm-packaging/Cargo.toml; bytes=320; hash=fnv64:82112a90c5c7109c
+- path=crates/adm-packaging/src/lib.rs; bytes=218319; hash=fnv64:53d8dfcdbb197951
+- path=crates/adm-pipeline/Cargo.toml; bytes=228; hash=fnv64:34b973f339c3826f
+- path=crates/adm-pipeline/src/lib.rs; bytes=31330; hash=fnv64:de5987beffbc5f94
+- path=crates/adm-runtime/Cargo.toml; bytes=227; hash=fnv64:600aaced7c4aa901
+- path=crates/adm-runtime/src/lib.rs; bytes=21042; hash=fnv64:10979b0f9e2c4b50
+- path=crates/adm-sdk/Cargo.toml; bytes=222; hash=fnv64:b77c0c640e1ee1e9
+- path=crates/adm-sdk/src/lib.rs; bytes=16236; hash=fnv64:b4e334a4235f3b50
+- path=crates/adm-testkit/Cargo.toml; bytes=227; hash=fnv64:0c4a0b9de7c086dd
+- path=crates/adm-testkit/src/lib.rs; bytes=641; hash=fnv64:5aac484336a72e03
+- path=crates/adm-ui-model/Cargo.toml; bytes=228; hash=fnv64:bb577fa0a302fa5b
+- path=crates/adm-ui-model/src/lib.rs; bytes=8964; hash=fnv64:17920050b5990b2d
+- path=crates/adm-validation/Cargo.toml; bytes=182; hash=fnv64:1101d3251c66a47a
+- path=crates/adm-validation/src/lib.rs; bytes=1573; hash=fnv64:350ab83049037a33
+- path=docs/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=resources/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=scripts/ai_acceptance_gate.ps1; bytes=5677; hash=fnv64:d5d89d396a48824b
+- path=scripts/external_acceptance_doctor.ps1; bytes=4124; hash=fnv64:abd0f68127bb9634
+- path=scripts/final_handoff_acceptance.ps1; bytes=18580; hash=fnv64:9994e9729ea3a3d9
+- path=scripts/handoff_operator_preflight.ps1; bytes=11099; hash=fnv64:9c44b4d18091bd43
+- path=scripts/rehydrate_handoff_workspace.ps1; bytes=8958; hash=fnv64:af522a5479874b76
+- path=scripts/release_gate.ps1; bytes=18767; hash=fnv64:e59c5c5d738ac792
+- path=scripts/unity_acceptance_gate.ps1; bytes=8700; hash=fnv64:9ab242ce2dcf95e5
+- path=tests/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=项目最新进度.html; bytes=11850; hash=fnv64:dc23fdfb8b6aecfe

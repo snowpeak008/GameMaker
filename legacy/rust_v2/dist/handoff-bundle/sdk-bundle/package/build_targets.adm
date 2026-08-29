@@ -1,0 +1,18 @@
+# Game Build Targets
+project_id=project_1783253820828_24440_6
+## Game Build Target
+target_id=windows_desktop_playable
+engine=Unity
+platform=windows-desktop
+profile=playable-prototype
+output_file=build/windows/AutoDesignMakerGame.zip
+required_artifacts=
+- project/brief.adm
+- design/project.adm
+- development/plan.adm
+- assets/plan.adm
+- sdk/index.adm
+- validation/acceptance_matrix.adm
+- validation/scenario_test_plan.adm
+- validation/runtime_validation_report.adm
+- validation/production_readiness.adm

@@ -1,0 +1,9 @@
+# SDK Bundle
+bundle_hash=fnv64:a5f8651659bbb6fc
+staged_files=
+- path=sdk/index.adm; bytes=3315; hash=fnv64:07589a4b31d2e43c
+- path=package/build_targets.adm; bytes=503; hash=fnv64:cb0d27939d8b490b
+- path=validation/scenario_test_plan.adm; bytes=2128; hash=fnv64:31567302464ad117
+- path=validation/runtime_validation_report.adm; bytes=1947; hash=fnv64:affbc065c13ef818
+- path=validation/runtime_execution_results.adm; bytes=1441; hash=fnv64:2a4a0691fc388562
+- path=validation/production_readiness.adm; bytes=2494; hash=fnv64:6aee642cfc6e726f

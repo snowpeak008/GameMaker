@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "surface": "patch_panel",
+  "state": "empty_list",
+  "python_source": "core/ui/patch_panel.py",
+  "baseline_surface": "quick patch management",
+  "web_tauri_target": "adm-new-web::pages::patches",
+  "required_state": "empty list",
+  "screenshot_required": true,
+  "python_screenshot": {
+    "path": "",
+    "manual_review_note": "Python Tk baseline requires an interactive desktop session; this record preserves the required source/state and is marked for manual Tk screenshot review."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "NEWrust/gates/ui-patch.png",
+      "width": 1366,
+      "height": 768,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "NEWrust/gates/ui-patch-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open patch_panel",
+      "command_contract": "patch commands",
+      "expected_result": "renders empty list without overlap or layout shift"
+    }
+  ],
+  "parity_notes": {
+    "accepted_differences": [
+      "Native Tk widget chrome is not copied; layout, density, state semantics, and command behavior are reviewed instead."
+    ],
+    "open_p0_p1_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Web uses CSS controls while preserving required state and command semantics."
+      }
+    ]
+  },
+  "command_contract": "patch commands",
+  "record_path": "plan/NEWrust/full_project_reproduction/ui_baselines/patch_panel/empty_list.json"
+}

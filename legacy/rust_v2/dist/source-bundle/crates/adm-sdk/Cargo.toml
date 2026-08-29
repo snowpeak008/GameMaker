@@ -1,0 +1,12 @@
+[package]
+name = "adm-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-validation = { path = "../adm-validation" }
+
+[lints]
+workspace = true

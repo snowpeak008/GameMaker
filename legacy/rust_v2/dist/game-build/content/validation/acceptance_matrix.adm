@@ -1,0 +1,8 @@
+# Acceptance Trace Matrix
+project_id=project_1783241662663_37636_6
+title=Rust Acceptance Matrix Delivery Demo
+rows=3
+artifacts=design/project.adm | development/plan.adm | assets/plan.adm | sdk/index.adm | package/build_targets.adm
+- trace_id=trace_core_loop_step_1; scenario_id=scenario_core_loop_step_1; source_mechanic=Core Loop Mechanic 1; development_task_id=task_1783241662663_37636_8; asset_task_id=task_1783241662663_37636_14; sdk_resources=Unity Build Automation SDK; build_targets=windows_desktop_playable; validation_probe=probe_core_loop_step_1_input_state_feedback; status=ready
+- trace_id=trace_core_loop_step_2; scenario_id=scenario_core_loop_step_2; source_mechanic=Core Loop Mechanic 2; development_task_id=task_1783241662663_37636_9; asset_task_id=task_1783241662663_37636_15; sdk_resources=Unity Build Automation SDK; build_targets=windows_desktop_playable; validation_probe=probe_core_loop_step_2_input_state_feedback; status=ready
+- trace_id=trace_core_loop_step_3; scenario_id=scenario_core_loop_step_3; source_mechanic=Core Loop Mechanic 3; development_task_id=task_1783241662663_37636_10; asset_task_id=task_1783241662663_37636_16; sdk_resources=Unity Build Automation SDK; build_targets=windows_desktop_playable; validation_probe=probe_core_loop_step_3_input_state_feedback; status=ready

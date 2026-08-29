@@ -1,0 +1,133 @@
+{
+  "charterId": "R1-C0",
+  "signedAt": "2026-07-16",
+  "selectedCombination": {
+    "theme": "A_micro_ecodome",
+    "scope": "M_high_polish_vertical_slice",
+    "confirmationPolicy": "P1_quality_first_replayable_automation",
+    "acceptanceLevel": "V2_complete_vertical_slice"
+  },
+  "productEnvelope": {
+    "sceneScale": "medium",
+    "systemComplexity": "medium",
+    "assetScale": "medium",
+    "contentVolume": "medium"
+  },
+  "fixedConstraints": {
+    "dimension": "2d",
+    "players": "single_player",
+    "network": "offline",
+    "contentModel": "authored",
+    "prohibited": [
+      "networked_multiplayer",
+      "account_system",
+      "monetization",
+      "procedural_generation_commitment",
+      "open_world_scope",
+      "3d_asset_pipeline",
+      "external_live_service_dependency",
+      "copying_existing_game_ip_or_assets"
+    ]
+  },
+  "humanConfirmationPolicy": {
+    "charter": "attended",
+    "d4SpecFreeze": "attended",
+    "step07StyleAnchors": "attended",
+    "step07CoreCharactersAndUi": "attended",
+    "step07And12BatchAssets": "sample(n)+hard_gate_all",
+    "highRiskSpecPatch": "attended",
+    "lowRiskSpecPatch": "attended_batch_by_default",
+    "explicitAutoAcceptOnly": true,
+    "step08To10DeterministicCompile": "unattended_audited",
+    "step11ExecutionAndBoundedRetry": "unattended_audited",
+    "step11CorrectionQueue": "attended",
+    "step13Tests": "unattended_audited",
+    "step14Release": "attended"
+  },
+  "acceptanceScenarios": [
+    {
+      "id": "r1c0_tutorial_basic_operation",
+      "kind": "executable",
+      "given": "A first-time player starts a new run from the main menu.",
+      "when": "The tutorial stage asks the player to produce resources, place a basic guardian, and survive the first wave.",
+      "then": "The player can complete all prompted actions without external instructions, the wave resolves, and the game advances to the next available stage."
+    },
+    {
+      "id": "r1c0_resource_positive_loop",
+      "kind": "executable",
+      "given": "A lane has at least one resource producer and the player has enough space to deploy a defender.",
+      "when": "The player waits for resources, spends them on a defender, and survives a normal wave.",
+      "then": "Resource count, cooldown state, unit placement, wave progress, and result state all update visibly and consistently."
+    },
+    {
+      "id": "r1c0_resource_failure_loop",
+      "kind": "executable",
+      "given": "The player has less resource than the selected defender requires.",
+      "when": "The player attempts to deploy that defender.",
+      "then": "The deployment is rejected, no resource is consumed, the board state is unchanged, and an explicit UI/audio feedback event is emitted."
+    },
+    {
+      "id": "r1c0_lane_counter_success",
+      "kind": "executable",
+      "given": "An enemy type with a documented weakness enters a lane and the player has the corresponding guardian unlocked.",
+      "when": "The player places the counter guardian in time.",
+      "then": "The counter interaction triggers, enemy pressure is reduced, and combat logs or telemetry identify the counter rule used."
+    },
+    {
+      "id": "r1c0_lane_breach_failure",
+      "kind": "executable",
+      "given": "A lane has insufficient defense against an incoming wave.",
+      "when": "The player takes no corrective action.",
+      "then": "The enemy breaches the lane, the failure state is reached, and retry/exit actions are available without restarting the application."
+    },
+    {
+      "id": "r1c0_wave_escalation",
+      "kind": "executable",
+      "given": "The player has completed early waves in a stage.",
+      "when": "Later waves spawn normal, elite, and final-pressure enemies according to the authored schedule.",
+      "then": "Enemy composition, timing, warning UI, and win/fail conditions follow the frozen stage definition."
+    },
+    {
+      "id": "r1c0_stage_unlock_and_save_reload",
+      "kind": "executable",
+      "given": "The player wins an authored stage.",
+      "when": "The game saves progress, returns to stage select, exits, and reloads.",
+      "then": "Unlocked stages, completed status, selected settings, and available units are restored exactly."
+    },
+    {
+      "id": "r1c0_pause_resume_settings",
+      "kind": "executable",
+      "given": "A stage is running with active enemies, cooldowns, animations, and audio.",
+      "when": "The player pauses, changes a setting, resumes, and continues playing.",
+      "then": "Simulation time is suspended during pause, settings take effect, and the resumed stage remains playable."
+    },
+    {
+      "id": "r1c0_asset_binding_no_orphans",
+      "kind": "executable",
+      "given": "The frozen asset manifest contains all planned guardians, enemies, UI, effects, audio, and scene assets.",
+      "when": "The integration validator loads every authored scene and prefab/reference graph.",
+      "then": "Every planned asset is referenced at least once, every reference resolves, and there are no placeholder success fallbacks."
+    },
+    {
+      "id": "r1c0_max_load_smoke",
+      "kind": "executable",
+      "given": "The highest authored stage is configured with maximum planned simultaneous lanes, units, enemies, effects, and UI overlays.",
+      "when": "The smoke test runs the stage through the final pressure window.",
+      "then": "The executable remains responsive, produces no blocking errors, and records performance within the frozen R1 execution budget."
+    },
+    {
+      "id": "r1c0_visual_style_anchor_review",
+      "kind": "manual_with_structured_evidence",
+      "given": "Step07 signed style anchors for the micro-ecodome theme exist.",
+      "when": "Representative gameplay screenshots, core character sprites, HUD, and result screens are reviewed against those anchors.",
+      "then": "A human reviewer records pass/fail evidence for readability, originality, and style consistency."
+    },
+    {
+      "id": "r1c0_complete_flow_regression",
+      "kind": "executable",
+      "given": "A fresh installed R1 build is started with no previous save.",
+      "when": "The automated regression path plays from tutorial through final authored stage, including one intentional failure and retry.",
+      "then": "The run reaches the final win state, produces the expected evidence bundle, and leaves no unresolved correction queue entries."
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+# SDK Knowledge Base
+## Unity Runtime SDK
+category=runtime
+target_engines=Unity
+target_platforms=windows-desktop
+required_for_build=false
+purpose=Runtime, scene, time-step, object lifecycle, and player-loop integration for the playable project.
+ai_explanation=Use this when explaining how generated gameplay systems mount into Unity scenes and lifecycle events.
+risks=
+- Unity version mismatch can break scene serialization.
+- Runtime lifecycle hooks can drift from generated system assumptions.
+validation=
+- Confirm Unity editor version and scripting backend.
+- Confirm the bootstrap scene starts without editor-only APIs.
+- Confirm one full core loop runs from a fresh player session.
+## Unity Input And Save SDK
+category=input_save
+target_engines=Unity
+target_platforms=windows-desktop
+required_for_build=false
+purpose=Input actions, local save slots, and session state persistence for repeated playtesting.
+ai_explanation=Use this to map development data contracts to controls, save data, and resumed test sessions.
+risks=
+- Input bindings can conflict across keyboard mouse and controller.
+- Save schema changes can corrupt old playtest state.
+validation=
+- Confirm default keyboard and controller bindings.
+- Confirm save/load preserves core loop progress.
+- Confirm save migration rejects incompatible schema changes.
+## Unity Build Automation SDK
+category=build
+target_engines=Unity
+target_platforms=windows-desktop
+required_for_build=true
+purpose=Command-line build, target platform selection, output path planning, and build-log capture.
+ai_explanation=Use this to explain dry-run and guarded real Unity build execution.
+risks=
+- Unity executable path can be invalid on the local machine.
+- Build target modules may be missing for Windows desktop.
+validation=
+- Confirm Unity executable exists before real build.
+- Confirm build target is Win64 for windows-desktop.
+- Confirm build report captures command status exit code and expected output.
+## Telemetry And Diagnostics SDK
+category=telemetry
+target_engines=Unity
+target_platforms=windows-desktop
+required_for_build=false
+purpose=Gameplay event logging, validation probes, crash context, and reproducible playtest diagnostics.
+ai_explanation=Use this to connect development telemetry events to validation reports and AI review context.
+risks=
+- Too much telemetry can hide actionable failures.
+- Diagnostics can expose local paths if reports are shared without filtering.
+validation=
+- Confirm core loop started/completed events are emitted.
+- Confirm validation probes are visible in failed run reports.
+- Confirm diagnostics redact machine-specific secrets.
+## Windows Desktop Packaging SDK
+category=packaging
+target_engines=Unity
+target_platforms=windows-desktop
+required_for_build=false
+purpose=Desktop bundle layout, manifest generation, release metadata, and delivery readiness checks.
+ai_explanation=Use this to explain release doctor and delivery doctor results to the user.
+risks=
+- Release manifests can drift from staged executable content.
+- Game build and SDK bundles can be stale after pipeline changes.
+validation=
+- Confirm release manifest hash matches the staged executable.
+- Confirm game build bundle contains design development assets and SDK artifacts.
+- Confirm SDK bundle contains sdk/index.adm and required delivery manifest.

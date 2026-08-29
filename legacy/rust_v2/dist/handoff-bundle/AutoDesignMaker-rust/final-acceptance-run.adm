@@ -1,0 +1,67 @@
+﻿# Final Handoff Acceptance Run
+dry_run=true
+started_at=2026-07-06T18:13:25.0846777+08:00
+rust_root=E:\workwork\CrewAi\AutoDesignMaker\RUST
+instructions_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\handoff-instructions.adm
+provider_id=openai_main
+model=gpt-4.1
+preset=openai
+endpoint=
+secret_ref=default
+archive_id=archive_1783253820821_24440_1
+unity_exe=<path-to-Unity.exe>
+unity_exe_source=placeholder
+data_root=E:\workwork\CrewAi\AutoDesignMaker\RUST\.adm_rust_data
+require_ai_invoke=false
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\final-acceptance-run.adm
+final_package_refresh_after_report=false
+final_package_refresh_result=not_required
+step=1; name=Operator preflight; script=handoff_operator_preflight.ps1; status=planned; command=powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\handoff_operator_preflight.ps1 -InstructionsPath .\dist\handoff-bundle\evidence\handoff-instructions.adm -DataRoot '<data_root>' -UnityExe '<path-to-Unity.exe>'
+operator_preflight_ready=false
+operator_preflight_rust_root=E:\workwork\CrewAi\AutoDesignMaker\RUST
+operator_preflight_instructions_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\handoff-instructions.adm
+operator_preflight_instructions_present=true
+operator_preflight_script_count=5
+operator_preflight_script=final_handoff_acceptance.ps1; present=true; path=E:\workwork\CrewAi\AutoDesignMaker\RUST\scripts\final_handoff_acceptance.ps1
+operator_preflight_script=ai_acceptance_gate.ps1; present=true; path=E:\workwork\CrewAi\AutoDesignMaker\RUST\scripts\ai_acceptance_gate.ps1
+operator_preflight_script=unity_acceptance_gate.ps1; present=true; path=E:\workwork\CrewAi\AutoDesignMaker\RUST\scripts\unity_acceptance_gate.ps1
+operator_preflight_script=external_acceptance_doctor.ps1; present=true; path=E:\workwork\CrewAi\AutoDesignMaker\RUST\scripts\external_acceptance_doctor.ps1
+operator_preflight_script=release_gate.ps1; present=true; path=E:\workwork\CrewAi\AutoDesignMaker\RUST\scripts\release_gate.ps1
+operator_preflight_operator_input_count=2
+operator_preflight_ai_secret_required=true
+operator_preflight_ai_secret_env_var=OPENAI_API_KEY
+operator_preflight_ai_secret_present=false
+operator_preflight_unity_exe_required=true
+operator_preflight_unity_exe_supplied=false
+operator_preflight_unity_exe_present=false
+operator_preflight_unity_exe_looks_like_editor=false
+operator_preflight_unity_exe_source=explicit
+operator_preflight_unity_exe=<path-to-Unity.exe>
+operator_preflight_data_root_required=true
+operator_preflight_data_root=E:\workwork\CrewAi\AutoDesignMaker\RUST\.adm_rust_data
+operator_preflight_data_root_present=true
+operator_preflight_archive_id=archive_1783253820821_24440_1
+operator_preflight_archive_id_known=true
+operator_preflight_archive_manifest=E:\workwork\CrewAi\AutoDesignMaker\RUST\.adm_rust_data\archives\archive_1783253820821_24440_1\manifest.adm
+operator_preflight_archive_manifest_present=true
+operator_preflight_missing_input_count=2
+operator_preflight_missing_input=ai_secret; requirement=env:OPENAI_API_KEY; fix=$env:OPENAI_API_KEY='<secret>'
+operator_preflight_missing_input=unity_exe; requirement=compatible-unity-editor-path; fix=pass -UnityExe '<path-to-Unity.exe>' or set ADM_UNITY_EDITOR/UNITY_EDITOR_PATH
+step=1; name=Operator preflight; script=handoff_operator_preflight.ps1; status=passed_dry_run_diagnostic; exit_code=0
+step=2; name=AI acceptance; script=ai_acceptance_gate.ps1; status=planned; command=powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ai_acceptance_gate.ps1 -Cargo cargo -ProviderId openai_main -Model gpt-4.1 -SecretRef default -DataRoot '<data_root>' -RequireReady -Preset openai
+step=2; name=AI acceptance; script=ai_acceptance_gate.ps1; status=skipped_dry_run; exit_code=not_run
+step=3; name=Unity acceptance; script=unity_acceptance_gate.ps1; status=planned; command=powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\unity_acceptance_gate.ps1 -Cargo cargo -ArchiveId archive_1783253820821_24440_1 -DataRoot '<data_root>' -UnityExe '<path-to-Unity.exe>'
+step=3; name=Unity acceptance; script=unity_acceptance_gate.ps1; status=skipped_dry_run; exit_code=not_run
+step=4; name=External acceptance; script=external_acceptance_doctor.ps1; status=planned; command=powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\external_acceptance_doctor.ps1 -Cargo cargo -DataRoot '<data_root>' -RequireReady -UnityExe '<path-to-Unity.exe>'
+step=4; name=External acceptance; script=external_acceptance_doctor.ps1; status=skipped_dry_run; exit_code=not_run
+step=5; name=Strict release gate; script=release_gate.ps1; status=planned; command=powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release_gate.ps1 -Cargo cargo -DataRoot '<data_root>' -RequireExternalAcceptance -UnityExe '<path-to-Unity.exe>'
+step=5; name=Strict release gate; script=release_gate.ps1; status=skipped_dry_run; exit_code=not_run
+result=planned
+completed_at=2026-07-06T18:13:25.3203832+08:00
+final_result=planned
+handoff_bundle_command_data_root_mode=portable-placeholder
+handoff_bundle_command_data_root_placeholder=<data_root>
+handoff_bundle_command_script_path_mode=portable-workspace-relative
+handoff_bundle_command_script_path_placeholder=.\scripts
+handoff_bundle_command_instructions_path_mode=portable-workspace-relative
+handoff_bundle_command_instructions_path_placeholder=.\dist\handoff-bundle\evidence\handoff-instructions.adm

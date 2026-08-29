@@ -1,0 +1,22 @@
+# Handoff Evidence
+ready=true
+release_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust
+bundle_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle
+evidence_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle\evidence
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\handoff-evidence-manifest.adm
+manifest_bundle_path=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle\evidence\handoff-evidence-manifest.adm
+file_count=8
+total_bytes=38877
+evidence_hash=fnv64:229d572ea61b96a4
+stale_cleanup=created_clean_evidence_dir
+handoff_ready=false
+external_acceptance_ready=false
+ai_acceptance_ready=false
+evidence_file=release-acceptance.adm; required=true; present=true; copied=true; bytes=7230; hash=fnv64:467690871e4d45c8
+evidence_file=source-manifest.adm; required=true; present=true; copied=true; bytes=5882; hash=fnv64:86e9ef4b1f1954c7
+evidence_file=handoff-bundle-manifest.adm; required=true; present=true; copied=true; bytes=1453; hash=fnv64:2e336f81d002bbeb
+evidence_file=external-acceptance.adm; required=true; present=true; copied=true; bytes=1989; hash=fnv64:f24ed0ad733c9a69
+evidence_file=ai-acceptance.adm; required=true; present=true; copied=true; bytes=912; hash=fnv64:7b3f365184efba25
+evidence_file=handoff-status.adm; required=true; present=true; copied=true; bytes=2384; hash=fnv64:ba6f8e037135ebd3
+evidence_file=source-handoff-policy.adm; required=true; present=true; copied=true; bytes=1077; hash=fnv64:c76504a240593aaf
+evidence_file=handoff-instructions.adm; required=true; present=true; copied=true; bytes=17950; hash=fnv64:88b4d50eaebd9e02

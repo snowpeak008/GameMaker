@@ -1,0 +1,8 @@
+# Game Design Brief
+title=Runtime Evidence CLI Smoke
+genre=2D action adventure
+player_promise=玩家通过快速探索、精准战斗和持续成长获得清晰反馈
+core_loop_steps=
+- 探索关卡并发现风险
+- 使用核心能力解决战斗或机关
+- 获得反馈、资源和新目标

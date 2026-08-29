@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "surface": "save_manager_dialog",
+  "state": "dirty_save",
+  "python_source": "core/ui/save_manager_dialog.py",
+  "baseline_surface": "save create/load/delete/current state",
+  "web_tauri_target": "adm-new-web::modals::save_manager",
+  "required_state": "dirty save",
+  "screenshot_required": true,
+  "python_screenshot": {
+    "path": "",
+    "manual_review_note": "Python Tk baseline requires an interactive desktop session; this record preserves the required source/state and is marked for manual Tk screenshot review."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "NEWrust/gates/ui-save_manager.png",
+      "width": 1366,
+      "height": 768,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "NEWrust/gates/ui-save_manager-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open save_manager_dialog",
+      "command_contract": "save commands",
+      "expected_result": "renders dirty save without overlap or layout shift"
+    }
+  ],
+  "parity_notes": {
+    "accepted_differences": [
+      "Native Tk widget chrome is not copied; layout, density, state semantics, and command behavior are reviewed instead."
+    ],
+    "open_p0_p1_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Web uses CSS controls while preserving required state and command semantics."
+      }
+    ]
+  },
+  "command_contract": "save commands",
+  "record_path": "plan/NEWrust/full_project_reproduction/ui_baselines/save_manager_dialog/dirty_save.json"
+}

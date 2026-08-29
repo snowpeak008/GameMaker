@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "surface": "theme",
+  "state": "contrast_review",
+  "python_source": "core/ui/theme.py",
+  "baseline_surface": "Tk color/font/spacing tokens",
+  "web_tauri_target": "adm-new-web::theme",
+  "required_state": "contrast review",
+  "screenshot_required": true,
+  "python_screenshot": {
+    "path": "",
+    "manual_review_note": "Python Tk baseline requires an interactive desktop session; this record preserves the required source/state and is marked for manual Tk screenshot review."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "NEWrust/gates/ui-shell.png",
+      "width": 1366,
+      "height": 768,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "NEWrust/gates/ui-shell-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open theme",
+      "command_contract": "theme tokens",
+      "expected_result": "renders contrast review without overlap or layout shift"
+    }
+  ],
+  "parity_notes": {
+    "accepted_differences": [
+      "Native Tk widget chrome is not copied; layout, density, state semantics, and command behavior are reviewed instead."
+    ],
+    "open_p0_p1_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Web uses CSS controls while preserving required state and command semantics."
+      }
+    ]
+  },
+  "command_contract": "theme tokens",
+  "record_path": "plan/NEWrust/full_project_reproduction/ui_baselines/theme/contrast_review.json"
+}

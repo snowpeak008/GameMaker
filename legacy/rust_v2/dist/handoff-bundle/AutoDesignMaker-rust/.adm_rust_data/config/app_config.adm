@@ -1,0 +1,21 @@
+# AutoDesignMaker Rust App Config
+profile_version=1
+app_name=AutoDesignMaker Rust
+data_root=.
+archive_root=archives
+workspace_root=workspaces
+log_root=logs
+ai.default_budget_units=8
+ai.retry.max_attempts=2
+ai.intervention.min_quality_score_percent=75
+ai.intervention.on_quality_gap=true
+ai.intervention.on_missing_content=true
+ai.intervention.review_after_generation=true
+ai.provider.count=1
+ai.provider.0.id=mock
+ai.provider.0.enabled=true
+ai.provider.0.display_name=Built-in mock provider
+ai.provider.0.endpoint_hint=local
+ai.provider.0.secret_ref=
+ai.provider.0.requires_secret=false
+ai.provider.0.capabilities=text_generation

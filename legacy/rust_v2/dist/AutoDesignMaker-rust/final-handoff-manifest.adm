@@ -1,0 +1,164 @@
+# Final Handoff Package
+ready=true
+package_ready=true
+delivery_ready=false
+bundle_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\final-handoff-manifest.adm
+manifest_bundle_path=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle\final-handoff-manifest.adm
+handoff_bundle_manifest_present=true
+handoff_bundle_ready=true
+handoff_evidence_manifest_present=true
+handoff_evidence_ready=true
+handoff_ready=false
+external_acceptance_ready=false
+ai_acceptance_ready=false
+file_count=142
+total_bytes=28425410
+package_hash=fnv64:3307a1bdf45ec0b3
+excluded_file=final-handoff-manifest.adm
+required_dir=AutoDesignMaker-rust; present=true
+required_dir=source-bundle; present=true
+required_dir=evidence; present=true
+required_file=HANDOFF_README.txt; present=true
+- path=AutoDesignMaker-rust/.adm_rust_data/config/app_config.adm; bytes=630; hash=fnv64:ebd782a249b951e8
+- path=AutoDesignMaker-rust/.adm_rust_data/design_workbench/workbench_state.json; bytes=347746; hash=fnv64:fca4667bd4b871ec
+- path=AutoDesignMaker-rust/.adm_rust_data/logs/run_log.jsonl; bytes=114; hash=fnv64:c20e53a5d5782efa
+- path=AutoDesignMaker-rust/AutoDesignMaker-rust.exe; bytes=24715776; hash=fnv64:6e4290bdd417082b
+- path=AutoDesignMaker-rust/README.txt; bytes=157; hash=fnv64:6317800b9bc02d99
+- path=AutoDesignMaker-rust/ai-acceptance.adm; bytes=912; hash=fnv64:7b3f365184efba25
+- path=AutoDesignMaker-rust/final-acceptance-run.adm; bytes=5454; hash=fnv64:f4bfe3e8d152aea5
+- path=AutoDesignMaker-rust/release-acceptance.adm; bytes=7230; hash=fnv64:467690871e4d45c8
+- path=AutoDesignMaker-rust/release-manifest.adm; bytes=232; hash=fnv64:9d88fc443813400d
+- path=AutoDesignMaker-rust/source-manifest.adm; bytes=5882; hash=fnv64:86e9ef4b1f1954c7
+- path=AutoDesignMaker-rust/ui-visual-audit-design.png; bytes=215521; hash=fnv64:e4e7a22da37c7064
+- path=AutoDesignMaker-rust/ui-visual-audit-logs.png; bytes=328230; hash=fnv64:0240ff5f01b2c4ed
+- path=AutoDesignMaker-rust/ui-visual-audit-package.png; bytes=199024; hash=fnv64:64448794ff78b5b9
+- path=AutoDesignMaker-rust/ui-visual-audit-patch.png; bytes=237994; hash=fnv64:0ee245ba666d1052
+- path=AutoDesignMaker-rust/ui-visual-audit-pipeline.png; bytes=234740; hash=fnv64:a033e8b922118f5b
+- path=AutoDesignMaker-rust/ui-visual-audit-sdk.png; bytes=68893; hash=fnv64:0993336fb69d9547
+- path=AutoDesignMaker-rust/ui-visual-audit.adm; bytes=2101; hash=fnv64:b587fba17e0f50b7
+- path=HANDOFF_README.txt; bytes=18782; hash=fnv64:e5a8c78010fdaf2b
+- path=evidence/ai-acceptance.adm; bytes=912; hash=fnv64:7b3f365184efba25
+- path=evidence/external-acceptance.adm; bytes=1989; hash=fnv64:f24ed0ad733c9a69
+- path=evidence/handoff-bundle-manifest.adm; bytes=1453; hash=fnv64:2e336f81d002bbeb
+- path=evidence/handoff-evidence-manifest.adm; bytes=1651; hash=fnv64:584f08a03a2d274b
+- path=evidence/handoff-instructions.adm; bytes=17950; hash=fnv64:88b4d50eaebd9e02
+- path=evidence/handoff-status.adm; bytes=2384; hash=fnv64:ba6f8e037135ebd3
+- path=evidence/release-acceptance.adm; bytes=7230; hash=fnv64:467690871e4d45c8
+- path=evidence/source-handoff-policy.adm; bytes=1077; hash=fnv64:c76504a240593aaf
+- path=evidence/source-manifest.adm; bytes=5882; hash=fnv64:86e9ef4b1f1954c7
+- path=game-build/content/assets/plan.adm; bytes=3133; hash=fnv64:54a2396ea9a7f63d
+- path=game-build/content/design/project.adm; bytes=2543; hash=fnv64:ddb788969fec1151
+- path=game-build/content/development/plan.adm; bytes=2870; hash=fnv64:62bb75ec04738bc7
+- path=game-build/content/sdk/index.adm; bytes=3315; hash=fnv64:07589a4b31d2e43c
+- path=game-build/content/validation/acceptance_matrix.adm; bytes=1312; hash=fnv64:7d16244bee77ed1e
+- path=game-build/game-build-manifest.adm; bytes=602; hash=fnv64:b5ab0469c0a5a682
+- path=game-build/windows_desktop_playable/content/assets/plan.adm; bytes=3133; hash=fnv64:2152cdd90c820efb
+- path=game-build/windows_desktop_playable/content/design/project.adm; bytes=2533; hash=fnv64:b34ce2f33da4599b
+- path=game-build/windows_desktop_playable/content/development/plan.adm; bytes=2870; hash=fnv64:38195dbc5125c9ca
+- path=game-build/windows_desktop_playable/content/project/brief.adm; bytes=292; hash=fnv64:981d5e37af0cc62c
+- path=game-build/windows_desktop_playable/content/sdk/index.adm; bytes=3315; hash=fnv64:07589a4b31d2e43c
+- path=game-build/windows_desktop_playable/content/validation/acceptance_matrix.adm; bytes=1302; hash=fnv64:c1c78da6ce922232
+- path=game-build/windows_desktop_playable/content/validation/production_readiness.adm; bytes=2494; hash=fnv64:6aee642cfc6e726f
+- path=game-build/windows_desktop_playable/content/validation/runtime_execution_results.adm; bytes=1441; hash=fnv64:2a4a0691fc388562
+- path=game-build/windows_desktop_playable/content/validation/runtime_validation_report.adm; bytes=1947; hash=fnv64:affbc065c13ef818
+- path=game-build/windows_desktop_playable/content/validation/scenario_test_plan.adm; bytes=2128; hash=fnv64:31567302464ad117
+- path=game-build/windows_desktop_playable/game-build-manifest.adm; bytes=1051; hash=fnv64:cc3725113166f1d4
+- path=handoff-bundle-manifest.adm; bytes=1453; hash=fnv64:2e336f81d002bbeb
+- path=sdk-bundle/package/build_targets.adm; bytes=503; hash=fnv64:cb0d27939d8b490b
+- path=sdk-bundle/sdk/index.adm; bytes=3315; hash=fnv64:07589a4b31d2e43c
+- path=sdk-bundle/sdk-bundle-manifest.adm; bytes=541; hash=fnv64:24e901894be5dff2
+- path=sdk-bundle/validation/production_readiness.adm; bytes=2494; hash=fnv64:6aee642cfc6e726f
+- path=sdk-bundle/validation/runtime_execution_results.adm; bytes=1441; hash=fnv64:2a4a0691fc388562
+- path=sdk-bundle/validation/runtime_validation_report.adm; bytes=1947; hash=fnv64:affbc065c13ef818
+- path=sdk-bundle/validation/scenario_test_plan.adm; bytes=2128; hash=fnv64:31567302464ad117
+- path=source-bundle/.gitignore; bytes=10; hash=fnv64:c414d413e539c39c
+- path=source-bundle/Cargo.lock; bytes=165953; hash=fnv64:77cdfb86ca7f6e43
+- path=source-bundle/Cargo.toml; bytes=629; hash=fnv64:275e94454d7c3d49
+- path=source-bundle/README.md; bytes=34706; hash=fnv64:8228d0fc5be88f10
+- path=source-bundle/apps/adm-cli/Cargo.toml; bytes=492; hash=fnv64:aa9a449f95460419
+- path=source-bundle/apps/adm-cli/src/main.rs; bytes=319753; hash=fnv64:3d2cabd96f5beb91
+- path=source-bundle/apps/adm-desktop/Cargo.toml; bytes=805; hash=fnv64:8ca34ad3be652d14
+- path=source-bundle/apps/adm-desktop/build.rs; bytes=84; hash=fnv64:fe73e05d1810fb2c
+- path=source-bundle/apps/adm-desktop/src/main.rs; bytes=319436; hash=fnv64:041e59a6b8d36c82
+- path=source-bundle/apps/adm-desktop/ui/main.slint; bytes=59910; hash=fnv64:aca952618dc9724a
+- path=source-bundle/crates/adm-ai/Cargo.toml; bytes=340; hash=fnv64:778c0c1af1dcb355
+- path=source-bundle/crates/adm-ai/src/lib.rs; bytes=56937; hash=fnv64:afac3bc84a8605d1
+- path=source-bundle/crates/adm-application/Cargo.toml; bytes=705; hash=fnv64:191e6a444754394d
+- path=source-bundle/crates/adm-application/src/core_pipeline.rs; bytes=115451; hash=fnv64:85f8195c2e9240c1
+- path=source-bundle/crates/adm-application/src/lib.rs; bytes=77249; hash=fnv64:ed428854dbe001d0
+- path=source-bundle/crates/adm-application/src/pipeline_service.rs; bytes=10819; hash=fnv64:b1262e49fab53ff6
+- path=source-bundle/crates/adm-application/src/production_readiness.rs; bytes=17097; hash=fnv64:3d88ad6370cd105b
+- path=source-bundle/crates/adm-application/src/run_log_service.rs; bytes=7947; hash=fnv64:4b2eb40eef0c7d98
+- path=source-bundle/crates/adm-application/src/sdk_knowledge_service.rs; bytes=14085; hash=fnv64:225bf7381990b216
+- path=source-bundle/crates/adm-application/src/supplement_service.rs; bytes=5471; hash=fnv64:fefa68da9c674d41
+- path=source-bundle/crates/adm-application/src/workbench_service.rs; bytes=67999; hash=fnv64:19fc4d2a569d1343
+- path=source-bundle/crates/adm-archive/Cargo.toml; bytes=227; hash=fnv64:e1fce6c51b3acd0f
+- path=source-bundle/crates/adm-archive/src/lib.rs; bytes=54007; hash=fnv64:c24887875a26e66e
+- path=source-bundle/crates/adm-assets/Cargo.toml; bytes=226; hash=fnv64:ab93032a57d4231c
+- path=source-bundle/crates/adm-assets/src/lib.rs; bytes=7531; hash=fnv64:a555baa8cd3d47eb
+- path=source-bundle/crates/adm-config/Cargo.toml; bytes=257; hash=fnv64:bd504e4357a8805f
+- path=source-bundle/crates/adm-config/src/lib.rs; bytes=46309; hash=fnv64:9ed1583eab1a032b
+- path=source-bundle/crates/adm-design/Cargo.toml; bytes=291; hash=fnv64:58ee2d2e5f9f6082
+- path=source-bundle/crates/adm-design/src/data_repository.rs; bytes=25771; hash=fnv64:9e151f0294c5bac0
+- path=source-bundle/crates/adm-design/src/design_engine.rs; bytes=41594; hash=fnv64:1a8693f5df159d5e
+- path=source-bundle/crates/adm-design/src/lib.rs; bytes=12951; hash=fnv64:d3f8e539d11107b1
+- path=source-bundle/crates/adm-design/src/workbench_reference.rs; bytes=9529; hash=fnv64:f715c0fb830d1c5e
+- path=source-bundle/crates/adm-design/src/workbench_state.rs; bytes=5106; hash=fnv64:72daa7bd458e8623
+- path=source-bundle/crates/adm-development/Cargo.toml; bytes=231; hash=fnv64:b5c3b1dba0014db4
+- path=source-bundle/crates/adm-development/src/lib.rs; bytes=5907; hash=fnv64:e99cd340e72d993b
+- path=source-bundle/crates/adm-foundation/Cargo.toml; bytes=182; hash=fnv64:25351c94fc55de88
+- path=source-bundle/crates/adm-foundation/src/error.rs; bytes=1902; hash=fnv64:5b1544f58b9afe83
+- path=source-bundle/crates/adm-foundation/src/fs.rs; bytes=2677; hash=fnv64:f6f2b83a537b457a
+- path=source-bundle/crates/adm-foundation/src/hash.rs; bytes=841; hash=fnv64:564c1211d1203d37
+- path=source-bundle/crates/adm-foundation/src/ids.rs; bytes=2936; hash=fnv64:293bbba02154064a
+- path=source-bundle/crates/adm-foundation/src/lib.rs; bytes=415; hash=fnv64:d149a29967d1e527
+- path=source-bundle/crates/adm-foundation/src/path.rs; bytes=2950; hash=fnv64:4b0161211f1e155f
+- path=source-bundle/crates/adm-foundation/src/time.rs; bytes=686; hash=fnv64:902d6a4ce10cde2d
+- path=source-bundle/crates/adm-packaging/Cargo.toml; bytes=320; hash=fnv64:82112a90c5c7109c
+- path=source-bundle/crates/adm-packaging/src/lib.rs; bytes=218319; hash=fnv64:53d8dfcdbb197951
+- path=source-bundle/crates/adm-pipeline/Cargo.toml; bytes=228; hash=fnv64:34b973f339c3826f
+- path=source-bundle/crates/adm-pipeline/src/lib.rs; bytes=31330; hash=fnv64:de5987beffbc5f94
+- path=source-bundle/crates/adm-runtime/Cargo.toml; bytes=227; hash=fnv64:600aaced7c4aa901
+- path=source-bundle/crates/adm-runtime/src/lib.rs; bytes=21042; hash=fnv64:10979b0f9e2c4b50
+- path=source-bundle/crates/adm-sdk/Cargo.toml; bytes=222; hash=fnv64:b77c0c640e1ee1e9
+- path=source-bundle/crates/adm-sdk/src/lib.rs; bytes=16236; hash=fnv64:b4e334a4235f3b50
+- path=source-bundle/crates/adm-testkit/Cargo.toml; bytes=227; hash=fnv64:0c4a0b9de7c086dd
+- path=source-bundle/crates/adm-testkit/src/lib.rs; bytes=641; hash=fnv64:5aac484336a72e03
+- path=source-bundle/crates/adm-ui-model/Cargo.toml; bytes=228; hash=fnv64:bb577fa0a302fa5b
+- path=source-bundle/crates/adm-ui-model/src/lib.rs; bytes=8964; hash=fnv64:17920050b5990b2d
+- path=source-bundle/crates/adm-validation/Cargo.toml; bytes=182; hash=fnv64:1101d3251c66a47a
+- path=source-bundle/crates/adm-validation/src/lib.rs; bytes=1573; hash=fnv64:350ab83049037a33
+- path=source-bundle/docs/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=source-bundle/resources/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=source-bundle/scripts/ai_acceptance_gate.ps1; bytes=5677; hash=fnv64:d5d89d396a48824b
+- path=source-bundle/scripts/external_acceptance_doctor.ps1; bytes=4124; hash=fnv64:abd0f68127bb9634
+- path=source-bundle/scripts/final_handoff_acceptance.ps1; bytes=18580; hash=fnv64:9994e9729ea3a3d9
+- path=source-bundle/scripts/handoff_operator_preflight.ps1; bytes=11099; hash=fnv64:9c44b4d18091bd43
+- path=source-bundle/scripts/rehydrate_handoff_workspace.ps1; bytes=8958; hash=fnv64:af522a5479874b76
+- path=source-bundle/scripts/release_gate.ps1; bytes=18767; hash=fnv64:e59c5c5d738ac792
+- path=source-bundle/scripts/unity_acceptance_gate.ps1; bytes=8700; hash=fnv64:9ab242ce2dcf95e5
+- path=source-bundle/tests/.gitkeep; bytes=1; hash=fnv64:af63c74c8601c8dd
+- path=source-bundle/项目最新进度.html; bytes=11850; hash=fnv64:dc23fdfb8b6aecfe
+- path=unity-project/Assets/AutoDesignMaker/Editor/AutoDesignMakerBuild.cs; bytes=1266; hash=fnv64:8c4c248cbb9f92d0
+- path=unity-project/Assets/AutoDesignMaker/Editor/AutoDesignMakerRuntimeValidation.cs; bytes=7150; hash=fnv64:cf3f5f91e7799aa3
+- path=unity-project/Assets/AutoDesignMaker/Generated/AutoDesignMakerBootstrap.cs; bytes=689; hash=fnv64:208fe3de21b8fffd
+- path=unity-project/Assets/AutoDesignMaker/Generated/AutoDesignMakerGameplayModel.cs; bytes=6130; hash=fnv64:b3a0bd0e1688db2e
+- path=unity-project/Assets/AutoDesignMaker/Generated/AutoDesignMakerGeneratedContent.cs; bytes=1105; hash=fnv64:55e0d6a2a2854cd3
+- path=unity-project/Assets/AutoDesignMaker/Generated/acceptance_matrix.adm; bytes=1302; hash=fnv64:c1c78da6ce922232
+- path=unity-project/Assets/AutoDesignMaker/Generated/asset_plan.adm; bytes=3133; hash=fnv64:2152cdd90c820efb
+- path=unity-project/Assets/AutoDesignMaker/Generated/design_project.adm; bytes=2533; hash=fnv64:b34ce2f33da4599b
+- path=unity-project/Assets/AutoDesignMaker/Generated/development_plan.adm; bytes=2870; hash=fnv64:38195dbc5125c9ca
+- path=unity-project/Assets/AutoDesignMaker/Generated/production_readiness.adm; bytes=2494; hash=fnv64:6aee642cfc6e726f
+- path=unity-project/Assets/AutoDesignMaker/Generated/project_brief.adm; bytes=292; hash=fnv64:981d5e37af0cc62c
+- path=unity-project/Assets/AutoDesignMaker/Generated/runtime_execution_results.adm; bytes=1441; hash=fnv64:2a4a0691fc388562
+- path=unity-project/Assets/AutoDesignMaker/Generated/runtime_validation_report.adm; bytes=1947; hash=fnv64:affbc065c13ef818
+- path=unity-project/Assets/AutoDesignMaker/Generated/scenario_test_plan.adm; bytes=2128; hash=fnv64:31567302464ad117
+- path=unity-project/Assets/AutoDesignMaker/Generated/sdk_index.adm; bytes=3315; hash=fnv64:07589a4b31d2e43c
+- path=unity-project/Assets/AutoDesignMaker/Runtime/AutoDesignMakerGameplayController.cs; bytes=4588; hash=fnv64:57bb0a4b84b9c2ee
+- path=unity-project/Assets/AutoDesignMaker/Runtime/AutoDesignMakerInputRouter.cs; bytes=712; hash=fnv64:e5fcf90ebecbc768
+- path=unity-project/Assets/AutoDesignMaker/Runtime/AutoDesignMakerRuntimeController.cs; bytes=3477; hash=fnv64:03d4c4545867c86a
+- path=unity-project/Assets/AutoDesignMaker/Runtime/AutoDesignMakerSaveData.cs; bytes=432; hash=fnv64:e4d146eaa1e05faa
+- path=unity-project/Assets/AutoDesignMaker/Runtime/AutoDesignMakerSceneComposer.cs; bytes=9970; hash=fnv64:8f95bb8597cb527d
+- path=unity-project/ProjectSettings/ProjectVersion.txt; bytes=42; hash=fnv64:b4a45617cad36538
+- path=unity-project/adm-unity-scaffold-manifest.adm; bytes=2444; hash=fnv64:683d6588fd3e5b1d

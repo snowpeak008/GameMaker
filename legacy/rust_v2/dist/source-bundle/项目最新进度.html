@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoDesignMaker Rust 最新进度</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --text: #1f2328;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --blue: #0969da;
+      --green: #1a7f37;
+      --amber: #9a6700;
+      --red: #cf222e;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 24px 44px;
+    }
+    header {
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      line-height: 1.25;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    p {
+      margin: 0 0 10px;
+    }
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .value {
+      display: block;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .ok { color: var(--green); }
+    .todo { color: var(--amber); }
+    .risk { color: var(--red); }
+    ul {
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }
+    li {
+      margin: 4px 0;
+    }
+    code {
+      background: #eef2f6;
+      border: 1px solid #d8dee4;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.94em;
+    }
+    .links {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .linkbox {
+      display: block;
+      background: #f6f8fa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    @media (max-width: 760px) {
+      .grid, .links {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AutoDesignMaker Rust 最新进度</h1>
+      <p class="meta">更新时间：2026-07-07 23:54 ｜ 位置：<code>RUST/项目最新进度.html</code></p>
+      <p>双击本文件即可打开当前 Rust 重建进度。后续最权威的实时记录以“AI 记忆索引”和“最新会话记录”为准。</p>
+    </header>
+
+    <section class="grid">
+      <div class="card">
+        <span class="value ok">已完成</span>
+        <p>设计工作台数据闭环、Step00-14 Rust 执行器、Step00-14 结构化内容、阶段详情读取真实 Step 文档、区间运行日志关联、长文本滚动 polish、6 视图 PNG 截图审计和发行 staging。</p>
+      </div>
+      <div class="card">
+        <span class="value todo">进行中</span>
+        <p>真实 AI provider 验收、真实 Unity PlayMode 手动验收，以及可选真实窗口人工点击复核。</p>
+      </div>
+      <div class="card">
+        <span class="value risk">未完成</span>
+        <p>真实 AI provider 验收仍取决于用户凭证；真实 Unity PlayMode 自动验收按约束不执行，需要用户手动检查。</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>本轮最新完成内容</h2>
+      <ul>
+        <li>新增严格运行日志服务 <code>RunLogService</code>，以 JSONL 追加记录，支持筛选、清空、导出和 UI 刷新。</li>
+        <li>新增 SDK 知识库审核服务 <code>SdkKnowledgeService</code>，支持新增 pending、批准、退回 pending、拒绝，并生成 approved prompt context。</li>
+        <li>新增开发流水线服务 <code>PipelineService</code>，持久化记录区间运行请求、停止请求和 Step07 风格确认。</li>
+        <li>运行日志页已接入筛选、刷新、清空、导出按钮和真实日志文本显示。</li>
+        <li>SDK 知识库页已接入新增资源、审核 ID、批准、待定、拒绝和审核队列列表。</li>
+        <li>开发流水线页已接入 Step 区间输入、运行、停止、Step07 风格确认和服务状态显示。</li>
+        <li>Step00-14 已生成实体阶段文档 <code>pipeline/stepXX/stage.adm</code>，并进入正式归档内容。</li>
+        <li>新增 <code>pipeline/devflow_run_report.adm</code> 和 <code>pipeline/devflow_run_state.adm</code>，Step00-14 现在拥有独立运行报告和状态文件。</li>
+        <li>Step00-14 已从一次性文档投影升级为 <code>rust_devflow_executor_v1</code>，通过 Rust <code>PipelineRunner</code> 按 Step00 到 Step14 顺序执行。</li>
+        <li>新增 <code>WorkbenchService::pipeline_brief()</code>，可从设计工作台项目名、项目画像、设计说明、玩法系统和核心循环生成流水线 <code>GameDesignBrief</code>。</li>
+        <li>桌面端“导出到流水线”和无存档区间运行已优先使用当前设计工作台 brief；没有工作台状态时才回退顶部项目字段。</li>
+        <li>每个 Step 文档新增 <code>## Rust Native Contract Output</code>，按步骤输出 <code>contract_kind</code>，覆盖 Step00 到 Step14 的核心合同摘要。</li>
+        <li>桌面阶段视图已改为 devflow 文件存在即优先读取；只有旧归档缺失 devflow 状态/报告时才回退核心五阶段状态。</li>
+        <li>失败恢复 smoke fixture 已改为同时写入 Step10 devflow 失败状态，避免 UI 再显示旧的核心阶段失败文案。</li>
+        <li>package manifest 已把 <code>pipeline/devflow_run_report.adm</code> 和 <code>pipeline/devflow_run_state.adm</code> 纳入必需 support files，导出包不再丢失 Step00-14 运行状态。</li>
+        <li>开发流水线“从步骤 N 到 M”已接入区间运行投影：核心执行从起点映射核心阶段重算，完成后将归档 devflow 状态/报告限定到用户选择的 Step 区间。</li>
+        <li>归档注册表产物数从 11 个扩展到 26 个，包含 15 个 Step00-14 materialized stage artifact。</li>
+        <li>桌面阶段内容显示优先读取每个 Step 自己的产物条目，再回退到底层核心阶段产物。</li>
+        <li>Step00-06 文档新增 <code>## Structured Stage Content</code>、<code>## Acceptance Checklist</code> 和 <code>## Downstream Inputs</code>，覆盖创意收集、玩法框架、设计冻结、程序需求、美术需求、程序评审和美术评审。</li>
+        <li>Step07-14 已补齐专属结构化内容、验收清单和下游输入，覆盖风格确认、程序计划、美术计划、资源对齐、程序执行、美术生产、场景组装和集成验证。</li>
+        <li>Step07-14 文档内容已从通用摘要深化为读取真实合同、任务、SDK、包清单、运行验证和生产就绪证据的 Rust 原生摘要。</li>
+        <li>阶段详情已读取对应 <code>pipeline/stepXX/stage.adm</code>，并显示 <code>contract_kind</code>、结构化内容、验收清单和下游输入摘要。</li>
+        <li>桌面 smoke 覆盖 Step03、Step04、Step14 的真实阶段详情读取，避免只显示“Step 已完成”。</li>
+        <li>Step N-M 区间运行已关联严格运行日志，写入 <code>pipeline_range_started</code>、<code>pipeline_range_projected</code> 和 <code>pipeline_range_completed</code>。</li>
+        <li><code>PipelineService</code> 新增最近区间运行摘要，服务状态显示 archive、起止 Step、映射核心阶段、完成 Step 数和状态。</li>
+        <li>Slint 长文本区域已补滚动和换行：设计摘要、AI 访谈、流水线详情、运行日志、补充分析、打包验证和 SDK 审批/资源列表不再只能显示首屏内容。</li>
+        <li>新增桌面 UI 布局回归测试，校验关键长文本区域和长列表处在 <code>ScrollView</code> 中。</li>
+        <li>新增 release 可调用的 <code>--ui-audit</code>，用 software backend 验证六个主视图切换、长文本回写、ScrollView、word-wrap、截图尺寸和像素非空/变化采样。</li>
+        <li>正式发行目录已生成 <code>dist/AutoDesignMaker-rust/ui-visual-audit.adm</code> 和 6 张 <code>ui-visual-audit-*.png</code>，作为本地可重复 UI 截图审计证据。</li>
+        <li>双击入口 <code>dist/AutoDesignMaker-rust/AutoDesignMaker-rust.exe</code> 已更新到本轮构建，hash 为 <code>fnv64:29c5af171923f62d</code>。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>验证记录</h2>
+      <ul>
+        <li><code>cargo test -p adm-application</code>：通过，40 个测试。</li>
+        <li><code>cargo test -p adm-packaging</code>：通过，39 个测试。</li>
+        <li><code>cargo check -p adm-desktop</code>：通过。</li>
+        <li><code>cargo test -p adm-desktop</code>：通过，2 个 UI 布局测试。</li>
+        <li><code>cargo test --workspace</code>：通过。</li>
+        <li><code>cargo run -p adm-desktop -- --ui-audit .\dist\AutoDesignMaker-rust\ui-visual-audit.adm</code>：通过，生成 6 张 1280x860 PNG 截图并通过像素采样审计。</li>
+        <li><code>cargo run -p adm-desktop -- --smoke</code>：通过，输出包含 <code>mode=rust_devflow_executor_v1</code>、<code>completed=15</code>、<code>artifacts=26; files=34</code> 和 <code>support_files=13</code>。</li>
+        <li><code>cargo build -p adm-desktop --release</code>：通过。</li>
+        <li><code>cargo run -q -p adm-cli -- stage-desktop-release .\target\release\adm-desktop.exe</code>：通过。</li>
+        <li><code>dist/AutoDesignMaker-rust/AutoDesignMaker-rust.exe --ui-audit .\dist\AutoDesignMaker-rust\ui-visual-audit.adm</code>：通过，审计文件显示 <code>status=passed</code>、<code>screenshot_artifact_count=6</code>。</li>
+        <li><code>dist/AutoDesignMaker-rust/AutoDesignMaker-rust.exe --smoke</code>：通过。</li>
+        <li>当前双击 exe 更新时间：<code>2026/7/7 23:51:18</code>，大小：<code>24717312</code> bytes，hash：<code>fnv64:29c5af171923f62d</code>。</li>
+        <li>已执行 <code>cargo clean</code>，当前 <code>RUST/target=false</code>；已清理 dist 运行数据和 smoke 临时目录，剩余 <code>adm_desktop_smoke_*=0</code>。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>下一步开发重点</h2>
+      <ul>
+        <li>继续拆细真实 AI provider 在各阶段的调用边界、失败恢复策略和用户凭证验收流程。</li>
+        <li>真实窗口人工点击复核仍可继续做，重点看密度、对齐、按钮拥挤和真实用户操作路径。</li>
+        <li>进一步细化设计工作台视觉层级、冲突提示和真实用户编辑流程。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>相关文件</h2>
+      <div class="links">
+        <a class="linkbox" href="../knowledge/ai_memory/INDEX.md">最新 AI 记忆索引</a>
+        <a class="linkbox" href="../knowledge/ai_memory/session_history/2026-07-07-011.md">最新会话记录 011</a>
+        <a class="linkbox" href="../plan/RUSTUI/README.md">Rust UI 全量重建计划</a>
+        <a class="linkbox" href="dist/AutoDesignMaker-rust/AutoDesignMaker-rust.exe">当前 Rust 双击入口 exe</a>
+        <a class="linkbox" href="dist/AutoDesignMaker-rust/ui-visual-audit.adm">UI audit 证据</a>
+        <a class="linkbox" href="dist/AutoDesignMaker-rust/ui-visual-audit-design.png">设计工作台截图</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

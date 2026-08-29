@@ -1,0 +1,27 @@
+[package]
+name = "adm-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+adm-ai = { path = "../../crates/adm-ai" }
+adm-application = { path = "../../crates/adm-application" }
+adm-archive = { path = "../../crates/adm-archive" }
+adm-config = { path = "../../crates/adm-config" }
+adm-design = { path = "../../crates/adm-design" }
+adm-foundation = { path = "../../crates/adm-foundation" }
+adm-packaging = { path = "../../crates/adm-packaging" }
+adm-pipeline = { path = "../../crates/adm-pipeline" }
+adm-ui-model = { path = "../../crates/adm-ui-model" }
+adm-validation = { path = "../../crates/adm-validation" }
+png = "0.18"
+slint = "1"
+
+[build-dependencies]
+slint-build = "1"
+
+[lints.rust]
+unsafe_code = "deny"

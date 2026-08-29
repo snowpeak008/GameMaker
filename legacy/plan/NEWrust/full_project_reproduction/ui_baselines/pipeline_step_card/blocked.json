@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "surface": "pipeline_step_card",
+  "state": "blocked",
+  "python_source": "core/ui/pipeline_step_card.py",
+  "baseline_surface": "individual stage card",
+  "web_tauri_target": "adm-new-web::components::pipeline_step_card",
+  "required_state": "blocked",
+  "screenshot_required": true,
+  "python_screenshot": {
+    "path": "",
+    "manual_review_note": "Python Tk baseline requires an interactive desktop session; this record preserves the required source/state and is marked for manual Tk screenshot review."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "NEWrust/gates/ui-pipeline.png",
+      "width": 1366,
+      "height": 768,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "NEWrust/gates/ui-pipeline-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open pipeline_step_card",
+      "command_contract": "pipeline view state",
+      "expected_result": "renders blocked without overlap or layout shift"
+    }
+  ],
+  "parity_notes": {
+    "accepted_differences": [
+      "Native Tk widget chrome is not copied; layout, density, state semantics, and command behavior are reviewed instead."
+    ],
+    "open_p0_p1_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Web uses CSS controls while preserving required state and command semantics."
+      }
+    ]
+  },
+  "command_contract": "pipeline view state",
+  "record_path": "plan/NEWrust/full_project_reproduction/ui_baselines/pipeline_step_card/blocked.json"
+}

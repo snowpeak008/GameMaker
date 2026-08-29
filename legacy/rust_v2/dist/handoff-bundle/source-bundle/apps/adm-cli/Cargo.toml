@@ -1,0 +1,17 @@
+[package]
+name = "adm-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+adm-ai = { path = "../../crates/adm-ai" }
+adm-application = { path = "../../crates/adm-application" }
+adm-archive = { path = "../../crates/adm-archive" }
+adm-config = { path = "../../crates/adm-config" }
+adm-foundation = { path = "../../crates/adm-foundation" }
+adm-packaging = { path = "../../crates/adm-packaging" }
+
+[lints]
+workspace = true

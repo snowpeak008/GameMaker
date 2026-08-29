@@ -1,0 +1,8 @@
+{
+  "description": "AI memory freshness configuration. Edit key_files after the first project survey.",
+  "key_files": [
+    "AI_README.md",
+    "AGENTS.md"
+  ],
+  "ignore_missing": true
+}

@@ -1,0 +1,22 @@
+# Handoff Bundle
+ready=true
+dist_root=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist
+bundle_dir=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\handoff-bundle-manifest.adm
+manifest_bundle_path=\\?\E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\handoff-bundle\handoff-bundle-manifest.adm
+file_count=131
+total_bytes=28364647
+bundle_hash=fnv64:84e04f59168a7e4c
+stale_cleanup=removed_existing_bundle_dir
+excluded_file=AutoDesignMaker-rust/external-acceptance.adm
+excluded_file=AutoDesignMaker-rust/final-handoff-manifest.adm
+excluded_file=AutoDesignMaker-rust/handoff-bundle-manifest.adm
+excluded_file=AutoDesignMaker-rust/handoff-evidence-manifest.adm
+excluded_file=AutoDesignMaker-rust/handoff-instructions.adm
+excluded_file=AutoDesignMaker-rust/handoff-status.adm
+excluded_file=AutoDesignMaker-rust/source-handoff-policy.adm
+required_dir=AutoDesignMaker-rust; present=true; copied=true; files=17; bytes=26370636; hash=fnv64:96277d1a017c420c
+required_dir=source-bundle; present=true; copied=true; files=68; bytes=1885901; hash=fnv64:c4de2af7f5bd6c7f
+optional_dir=game-build; present=true; copied=true; files=17; bytes=36281; hash=fnv64:2566c792aeeaab40
+optional_dir=sdk-bundle; present=true; copied=true; files=7; bytes=12369; hash=fnv64:c16783ff2bf81570
+optional_dir=unity-project; present=true; copied=true; files=22; bytes=59460; hash=fnv64:e0c2b700f30ca833

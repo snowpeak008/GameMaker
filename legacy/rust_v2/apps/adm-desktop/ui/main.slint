@@ -1,0 +1,1136 @@
+import { Button, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
+
+export struct StageRow {
+    id: string,
+    label: string,
+    status: string,
+    artifacts: string,
+    message: string,
+}
+
+export struct StageArtifactRow {
+    path: string,
+}
+
+export struct ProjectRow {
+    archive_id: string,
+    display_name: string,
+    locked: string,
+}
+
+export struct CoreArtifactRow {
+    area: string,
+    count: string,
+    summary: string,
+}
+
+export struct AiProviderRow {
+    provider_id: string,
+    readiness: string,
+    capabilities: string,
+    notes: string,
+}
+
+export struct AiTaskRow {
+    capability: string,
+    status: string,
+    provider: string,
+    failure: string,
+    summary: string,
+}
+
+export struct PackageFileRow {
+    kind: string,
+    path: string,
+}
+
+export struct BuildTargetRow {
+    target_id: string,
+    engine: string,
+    platform: string,
+    profile: string,
+    output_file: string,
+    required_artifacts: string,
+}
+
+export struct EngineHistoryRow {
+    target_id: string,
+    mode: string,
+    status: string,
+    launched: string,
+    exit_code: string,
+    expected_output: string,
+    expected_output_path: string,
+    expected_output_present: string,
+    expected_output_bytes: string,
+    expected_output_hash: string,
+}
+
+export struct DeliveryCheckRow {
+    scope: string,
+    path: string,
+    present: string,
+}
+
+export struct SdkResourceRow {
+    sdk_name: string,
+    category: string,
+    target_engines: string,
+    target_platforms: string,
+    required_for_build: string,
+    purpose: string,
+    ai_explanation: string,
+    risks: string,
+    validation: string,
+}
+
+export struct SdkReviewRow {
+    id: string,
+    sdk_name: string,
+    url: string,
+    status: string,
+    category: string,
+    target_engines: string,
+    target_platforms: string,
+    purpose: string,
+    note: string,
+}
+
+export struct ValidationIssueRow {
+    status: string,
+    code: string,
+    message: string,
+}
+
+export struct AcceptanceTraceRow {
+    trace_id: string,
+    scenario_id: string,
+    source_mechanic: string,
+    development_task_id: string,
+    asset_task_id: string,
+    sdk_resources: string,
+    build_targets: string,
+    validation_probe: string,
+    status: string,
+}
+
+export struct DomainRow {
+    id: string,
+    name: string,
+    summary: string,
+    progress: string,
+    active: bool,
+}
+
+export struct DesignNodeRow {
+    id: string,
+    name: string,
+    role: string,
+    status: string,
+    detail: string,
+    active: bool,
+}
+
+export struct OptionGroupRow {
+    node: string,
+    label: string,
+    mode: string,
+    question: string,
+}
+
+export struct ChecklistRow {
+    node_id: string,
+    item_id: string,
+    label: string,
+    description: string,
+    checked: bool,
+    progress: string,
+}
+
+export struct L4OptionRow {
+    node_id: string,
+    item_id: string,
+    group_id: string,
+    option_id: string,
+    item_label: string,
+    group_label: string,
+    option_label: string,
+    description: string,
+    mode: string,
+    question: string,
+    required: bool,
+    allow_primary: bool,
+    selected: bool,
+    is_primary: bool,
+}
+
+export struct TemplateRow {
+    id: string,
+    name: string,
+    source: string,
+    target_scale: string,
+    quality: string,
+    summary: string,
+}
+
+export component MainWindow inherits Window {
+    title: "自动设计生成器（桌面版）";
+    width: 1280px;
+    height: 860px;
+
+    in-out property <string> active-view: "design";
+    in-out property <string> design-right-tab: "summary";
+    in-out property <string> design-export-format: "markdown";
+
+    in-out property <string> project-title: "新游戏";
+    in-out property <string> project-genre: "2D 动作冒险";
+    in-out property <string> project-promise: "快速探索、精准战斗、清晰反馈";
+    in-out property <string> project-core-loop: "探索空间 | 解决战斗或移动挑战 | 获得反馈和下一个目标";
+    in-out property <string> data-root: "";
+    in-out property <string> selected-archive-id: "";
+    in-out property <string> export-path: "";
+    in-out property <string> import-path: "";
+    in-out property <string> release-source-exe: "";
+    in-out property <string> release-target-dir: "";
+    in-out property <string> game-build-target-id: "windows_desktop_playable";
+    in-out property <string> game-build-target-dir: "";
+    in-out property <string> sdk-bundle-target-dir: "";
+    in-out property <string> unity-exe: "C:\\Program Files\\Unity\\Editor\\Unity.exe";
+    in-out property <string> unity-project-dir: "";
+    in-out property <string> runtime-results-file: "";
+    in-out property <string> unity-confirm-token: "";
+    in-out property <string> ai-provider-preset: "openai";
+    in-out property <string> ai-provider-id: "openai";
+    in-out property <string> ai-provider-endpoint: "https://api.openai.com/v1";
+    in-out property <string> ai-provider-secret-ref: "env:OPENAI_API_KEY";
+    in-out property <string> ai-provider-secret-value: "";
+    in-out property <string> ai-provider-capabilities: "text_generation";
+    in-out property <string> ai-provider-model: "gpt-test";
+    in-out property <string> ai-provider-prompt: "请从 AutoDesignMaker 返回问候。";
+    in-out property <string> status-text: "就绪";
+    in-out property <string> pipeline-text: "流水线空闲。";
+    in-out property <string> ai-text: "智能服务空闲。";
+    in-out property <string> ai-config-text: "智能服务诊断尚未加载。";
+    in-out property <string> ai-config-summary: "智能服务诊断尚未加载。";
+    in-out property <string> package-text: "尚未检查项目包。";
+    in-out property <string> build-target-text: "尚未检查构建目标。";
+    in-out property <string> engine-history-text: "尚未检查引擎历史。";
+    in-out property <string> sdk-text: "尚未检查开发套件。";
+    in-out property <string> release-text: "尚未暂存桌面发布包。";
+    in-out property <string> release-doctor-text: "尚未运行发布诊断。";
+    in-out property <string> delivery-doctor-text: "尚未运行交付诊断。";
+    in-out property <string> game-build-text: "尚未暂存游戏构建包。";
+    in-out property <string> sdk-bundle-text: "尚未暂存开发套件包。";
+    in-out property <string> unity-build-text: "尚未规划 Unity 构建命令。";
+    in-out property <string> runtime-validation-text: "尚未规划运行时验证。";
+    in-out property <string> core-artifact-text: "尚未检查核心产物。";
+    in-out property <string> validation-text: "尚未检查验证结果。";
+    in-out property <string> acceptance-trace-text: "尚未检查验收矩阵。";
+    in-out property <string> stage-progress-text: "阶段：尚未运行。";
+    in-out property <string> stage-detail-text: "尚未选择阶段详情。";
+    in-out property <string> stage-detail-label: "未选择阶段";
+    in-out property <string> stage-detail-id: "";
+    in-out property <string> stage-detail-status: "";
+    in-out property <string> stage-detail-message: "";
+    in-out property <string> pipeline-range-start: "0";
+    in-out property <string> pipeline-range-end: "14";
+    in-out property <string> pipeline-style-choice: "style_readable_2d";
+    in-out property <string> pipeline-style-prompt: "清晰轮廓、高对比反馈、适合快速验证的 2D 风格";
+    in-out property <string> pipeline-service-text: "流水线服务尚未记录请求。";
+    in-out property <string> run-log-filter: "";
+    in-out property <string> run-log-text: "严格运行日志尚未加载。";
+    in-out property <string> run-log-export-path: "";
+    in-out property <[StageRow]> stage-items;
+    in-out property <[StageArtifactRow]> stage-artifact-items;
+    in-out property <[ProjectRow]> project-items;
+    in-out property <[CoreArtifactRow]> core-artifact-items;
+    in-out property <[AiProviderRow]> ai-provider-items;
+    in-out property <[AiTaskRow]> ai-task-items;
+    in-out property <[PackageFileRow]> package-file-items;
+    in-out property <[BuildTargetRow]> build-target-items;
+    in-out property <[EngineHistoryRow]> engine-history-items;
+    in-out property <[DeliveryCheckRow]> delivery-check-items;
+    in-out property <[SdkResourceRow]> sdk-resource-items;
+    in-out property <[SdkReviewRow]> sdk-review-items;
+    in-out property <[ValidationIssueRow]> validation-issue-items;
+    in-out property <[AcceptanceTraceRow]> acceptance-trace-items;
+    in-out property <string> project-list: "尚未加载项目。";
+    in-out property <string> project-detail: "尚未选择项目。";
+    in-out property <string> package-doctor-text: "尚未检查项目包。";
+    in-out property <string> workspace-doctor-text: "尚未检查工作区。";
+    in-out property <string> supplement-request-text: "";
+    in-out property <string> supplement-analysis-text: "尚未分析补充开发需求。";
+    in-out property <string> sdk-new-name: "";
+    in-out property <string> sdk-new-url: "";
+    in-out property <string> sdk-review-selected-id: "";
+    in-out property <string> sdk-review-text: "SDK 审批队列尚未加载。";
+
+    in-out property <[DomainRow]> domain-items;
+    in-out property <[DesignNodeRow]> design-node-items;
+    in-out property <[OptionGroupRow]> option-group-items;
+    in-out property <[ChecklistRow]> checklist-items;
+    in-out property <[L4OptionRow]> l4-option-items;
+    in-out property <[TemplateRow]> template-items;
+    in-out property <string> selected-template-id: "";
+    in-out property <string> design-template-text: "模板尚未加载。";
+    in-out property <string> selected-design-node-id: "";
+    in-out property <string> selected-design-node-title: "未选择节点";
+    in-out property <string> selected-design-node-status: "";
+    in-out property <string> selected-design-node-detail: "请先选择一个设计节点。";
+    in-out property <string> design-node-design-note: "";
+    in-out property <string> design-node-risk-note: "";
+    in-out property <string> design-node-na-reason: "";
+    in-out property <string> design-l5-json: "[]";
+    in-out property <string> design-l5-errors-text: "未选择节点。";
+    in-out property <string> design-l5-enabled-text: "当前节点不需要 L5 实体。";
+    in-out property <string> design-profile-text: "项目画像尚未加载。";
+    in-out property <string> design-summary-text: "摘要尚未加载。";
+    in-out property <string> design-missing-text: "缺失项尚未加载。";
+    in-out property <string> design-risk-text: "风险尚未加载。";
+    in-out property <string> design-validation-text: "校验尚未加载。";
+    in-out property <string> design-ai-interview-text: "AI 访谈尚未加载。";
+    in-out property <string> design-interview-input: "";
+
+    callback create-and-run();
+    callback refresh-projects();
+    callback inspect-workspaces();
+    callback cleanup-workspaces();
+    callback refresh-ai-diagnostics();
+    callback refresh-design-reference();
+    callback select-design-domain(string);
+    callback select-design-node(string);
+    callback save-design-project-name(string);
+    callback export-design-workbench(string);
+    callback save-design-archive();
+    callback load-design-archive(string);
+    callback refresh-design-templates();
+    callback load-design-template(string);
+    callback save-design-template(string);
+    callback set-design-checklist(string, string, bool);
+    callback set-design-l4-option(string, string, string, string, bool);
+    callback set-design-primary-option(string, string, string, string);
+    callback save-design-node-text(string, string, string, string);
+    callback save-design-l5-json(string, string);
+    callback clear-design-l5-json(string);
+    callback start-design-ai-interview(string);
+    callback record-design-ai-response(string);
+    callback run-design-ai-interview(string, string, string);
+    callback reset-design-workbench();
+    callback analyze-supplement(string);
+    callback apply-ai-provider-preset();
+    callback save-ai-provider();
+    callback save-ai-secret();
+    callback check-ai-provider();
+    callback invoke-ai-provider();
+    callback disable-ai-provider();
+    callback export-project();
+    callback check-import-package();
+    callback import-project();
+    callback stage-desktop-release();
+    callback release-doctor();
+    callback delivery-doctor();
+    callback stage-game-build-bundle();
+    callback stage-sdk-bundle();
+    callback stage-unity-project();
+    callback plan-unity-build();
+    callback unity-build-preflight();
+    callback dry-run-unity-build();
+    callback run-unity-build();
+    callback plan-unity-runtime-validation();
+    callback dry-run-unity-runtime-validation();
+    callback run-unity-runtime-validation();
+    callback record-runtime-validation();
+    callback select-project();
+    callback resume-project();
+    callback inspect-stage(string);
+    callback rerun-stage(string);
+    callback resume-failed-project();
+    callback release-current-lock();
+    callback clear-external-lock();
+    callback run-pipeline-range(string, string);
+    callback stop-pipeline-run();
+    callback confirm-pipeline-style(string, string);
+    callback refresh-run-log(string);
+    callback clear-run-log();
+    callback export-run-log();
+    callback refresh-sdk-knowledge();
+    callback add-sdk-resource(string, string);
+    callback approve-sdk-resource(string);
+    callback mark-sdk-resource-pending(string);
+    callback reject-sdk-resource(string);
+
+    background: #f3f5f7;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: 58px;
+        background: #ffffff;
+        border-color: #d0d7de;
+        border-width: 1px;
+
+        Text {
+            x: 16px;
+            y: 12px;
+            width: 170px;
+            text: "AutoDesignMaker";
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2328;
+        }
+
+        Button { x: 196px; y: 10px; width: 96px; height: 36px; text: "设计工作台"; clicked => { root.active-view = "design"; } }
+        Button { x: 300px; y: 10px; width: 96px; height: 36px; text: "开发流水线"; clicked => { root.active-view = "pipeline"; } }
+        Button { x: 404px; y: 10px; width: 96px; height: 36px; text: "补充开发"; clicked => { root.active-view = "patch"; } }
+        Button { x: 508px; y: 10px; width: 96px; height: 36px; text: "打包阶段"; clicked => { root.active-view = "package"; } }
+        Button { x: 612px; y: 10px; width: 96px; height: 36px; text: "运行日志"; clicked => { root.active-view = "logs"; } }
+        Button { x: 716px; y: 10px; width: 104px; height: 36px; text: "SDK知识库"; clicked => { root.active-view = "sdk"; } }
+
+        Text {
+            x: root.width - 360px;
+            y: 12px;
+            width: 344px;
+            height: 34px;
+            text: root.status-text;
+            color: #0969da;
+            font-size: 12px;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 58px;
+        width: root.width;
+        height: root.height - 88px;
+        background: #f3f5f7;
+
+        // 设计工作台
+        Rectangle {
+            visible: root.active-view == "design";
+            width: parent.width;
+            height: parent.height;
+            background: #f3f5f7;
+
+            Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: 52px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Text { x: 12px; y: 10px; width: 68px; height: 28px; text: "项目名称"; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                LineEdit { x: 82px; y: 10px; width: 166px; height: 28px; text <=> root.project-title; }
+                Button { x: 254px; y: 10px; width: 54px; height: 28px; text: "应用"; clicked => { root.save-design-project-name(root.project-title); } }
+                Text { x: 318px; y: 10px; width: 68px; height: 28px; text: "导出格式"; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                LineEdit { x: 388px; y: 10px; width: 78px; height: 28px; text <=> root.design-export-format; }
+                Button { x: 474px; y: 10px; width: 58px; height: 28px; text: "导出"; clicked => { root.export-design-workbench(root.design-export-format); } }
+                Button { x: 540px; y: 10px; width: 70px; height: 28px; text: "存档管理"; clicked => { root.refresh-projects(); } }
+                Button { x: 618px; y: 10px; width: 70px; height: 28px; text: "保存存档"; clicked => { root.save-design-archive(); } }
+                Button { x: 696px; y: 10px; width: 70px; height: 28px; text: "载入存档"; clicked => { root.load-design-archive(root.selected-archive-id); } }
+                Button { x: 774px; y: 10px; width: 70px; height: 28px; text: "模板查看"; clicked => { root.refresh-design-templates(); } }
+                LineEdit { x: 852px; y: 10px; width: 126px; height: 28px; text <=> root.selected-template-id; placeholder-text: "模板 ID"; }
+                Button { x: 986px; y: 10px; width: 70px; height: 28px; text: "载入模板"; clicked => { root.load-design-template(root.selected-template-id); } }
+                Button { x: 1064px; y: 10px; width: 78px; height: 28px; text: "另存模板"; clicked => { root.save-design-template(root.project-title); } }
+                Button { x: 1150px; y: 10px; width: 54px; height: 28px; text: "重置"; clicked => { root.reset-design-workbench(); } }
+                Text { x: 1212px; y: 10px; width: parent.width - 1224px; height: 28px; text: root.selected-archive-id; color: #57606a; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; }
+            }
+
+            Rectangle {
+                x: 16px;
+                y: 76px;
+                width: 286px;
+                height: parent.height - 88px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Text { x: 12px; y: 10px; width: 120px; text: "领域总览"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Button { x: 188px; y: 8px; width: 84px; height: 26px; text: "刷新"; clicked => { root.refresh-design-reference(); } }
+
+                ScrollView {
+                    x: 10px;
+                    y: 42px;
+                    width: parent.width - 20px;
+                    height: 232px;
+                    viewport-width: parent.width - 20px;
+                    viewport-height: 520px;
+
+                    VerticalBox {
+                        width: parent.width - 20px;
+                        spacing: 6px;
+                        for domain in root.domain-items: Rectangle {
+                            height: 62px;
+                            background: domain.active ? #ddf4ff : #f6f8fa;
+                            border-color: domain.active ? #54aeff : #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: domain.name; font-size: 12px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 28px; width: parent.width - 20px; height: 16px; text: domain.progress; font-size: 11px; color: #57606a; }
+                            Text { x: 10px; y: 44px; width: parent.width - 20px; height: 14px; text: domain.summary; font-size: 10px; color: #6e7781; }
+                            TouchArea {
+                                width: parent.width;
+                                height: parent.height;
+                                clicked => { root.select-design-domain(domain.id); }
+                            }
+                        }
+                    }
+                }
+
+                Text { x: 12px; y: 288px; width: 120px; text: "项目画像"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Rectangle {
+                    x: 10px;
+                    y: 316px;
+                    width: parent.width - 20px;
+                    height: 122px;
+                    background: #ffffff;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: "类型：" + root.project-genre; font-size: 11px; color: #24292f; }
+                    Text { x: 10px; y: 30px; width: parent.width - 20px; height: 18px; text: "承诺：" + root.project-promise; font-size: 11px; color: #24292f; }
+                    Text { x: 10px; y: 52px; width: parent.width - 20px; height: 54px; text: root.design-profile-text; font-size: 11px; color: #57606a; wrap: word-wrap; }
+                }
+
+                Text { x: 12px; y: 454px; width: 140px; text: "L5 级别选项"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Rectangle {
+                    x: 10px;
+                    y: 482px;
+                    width: parent.width - 20px;
+                    height: parent.height - 494px;
+                    background: #f6f8fa;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: root.design-l5-enabled-text; font-size: 11px; color: #57606a; }
+                    LineEdit { x: 10px; y: 34px; width: parent.width - 20px; height: 28px; text <=> root.design-l5-json; }
+                    Button { x: 10px; y: 72px; width: 88px; height: 28px; text: "保存 L5"; clicked => { root.save-design-l5-json(root.selected-design-node-id, root.design-l5-json); } }
+                    Button { x: 106px; y: 72px; width: 88px; height: 28px; text: "清空 L5"; clicked => { root.clear-design-l5-json(root.selected-design-node-id); } }
+                    Text { x: 10px; y: 112px; width: parent.width - 20px; height: parent.height - 122px; text: root.design-l5-errors-text; font-size: 10px; color: #cf222e; }
+                }
+            }
+
+            Rectangle {
+                x: 314px;
+                y: 76px;
+                width: parent.width - 690px;
+                height: parent.height - 88px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Text { x: 12px; y: 10px; width: 180px; text: "选项内容与节点逻辑"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Text { x: parent.width - 260px; y: 10px; width: 248px; height: 22px; text: root.selected-design-node-status; font-size: 12px; color: #0969da; horizontal-alignment: right; vertical-alignment: center; }
+
+                ScrollView {
+                    x: 10px;
+                    y: 42px;
+                    width: parent.width - 20px;
+                    height: 138px;
+                    viewport-width: parent.width - 20px;
+                    viewport-height: 720px;
+
+                    VerticalBox {
+                        width: parent.width - 20px;
+                        spacing: 6px;
+                        for node in root.design-node-items: Rectangle {
+                            height: 64px;
+                            background: node.active ? #ddf4ff : #f6f8fa;
+                            border-color: node.active ? #54aeff : #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: node.name; font-size: 12px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 28px; width: 220px; height: 16px; text: node.role; font-size: 11px; color: #57606a; }
+                            Text { x: 236px; y: 28px; width: 140px; height: 16px; text: node.status; font-size: 11px; color: #0969da; }
+                            Text { x: 10px; y: 46px; width: parent.width - 20px; height: 14px; text: node.detail; font-size: 10px; color: #57606a; }
+                            TouchArea {
+                                width: parent.width;
+                                height: parent.height;
+                                clicked => { root.select-design-node(node.id); }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: 10px;
+                    y: 194px;
+                    width: parent.width - 20px;
+                    height: 106px;
+                    background: #ffffff;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: root.selected-design-node-title; font-size: 13px; font-weight: 700; color: #1f2328; }
+                    Text { x: 10px; y: 30px; width: parent.width - 20px; height: 18px; text: root.selected-design-node-detail; font-size: 11px; color: #57606a; }
+                    LineEdit { x: 10px; y: 58px; width: parent.width / 3 - 18px; height: 26px; text <=> root.design-node-design-note; placeholder-text: "设计说明"; }
+                    LineEdit { x: parent.width / 3 + 2px; y: 58px; width: parent.width / 3 - 18px; height: 26px; text <=> root.design-node-risk-note; placeholder-text: "风险说明"; }
+                    LineEdit { x: parent.width * 2 / 3 - 6px; y: 58px; width: parent.width / 3 - 92px; height: 26px; text <=> root.design-node-na-reason; placeholder-text: "不适用原因"; }
+                    Button { x: parent.width - 82px; y: 58px; width: 72px; height: 26px; text: "保存"; clicked => { root.save-design-node-text(root.selected-design-node-id, root.design-node-design-note, root.design-node-risk-note, root.design-node-na-reason); } }
+                }
+
+                Text { x: 12px; y: 314px; width: 170px; text: "三级决策项"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                ScrollView {
+                    x: 10px;
+                    y: 342px;
+                    width: parent.width - 20px;
+                    height: 116px;
+                    viewport-width: parent.width - 20px;
+                    viewport-height: 900px;
+
+                    VerticalBox {
+                        width: parent.width - 20px;
+                        spacing: 6px;
+                        for item in root.checklist-items: Rectangle {
+                            height: 54px;
+                            background: #ffffff;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 6px; width: parent.width - 112px; height: 18px; text: item.label; font-size: 12px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 26px; width: parent.width - 112px; height: 18px; text: item.description; font-size: 10px; color: #57606a; }
+                            Text { x: parent.width - 96px; y: 6px; width: 36px; height: 18px; text: item.progress; font-size: 10px; color: #0969da; horizontal-alignment: right; }
+                            Button { x: parent.width - 56px; y: 14px; width: 46px; height: 26px; text: item.checked ? "取消" : "勾选"; clicked => { root.set-design-checklist(item.node_id, item.item_id, !item.checked); } }
+                        }
+                    }
+                }
+
+                Text { x: 12px; y: 470px; width: 170px; text: "L4 选项组"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                ScrollView {
+                    x: 10px;
+                    y: 498px;
+                    width: parent.width - 20px;
+                    height: 116px;
+                    viewport-width: parent.width - 20px;
+                    viewport-height: 2400px;
+
+                    VerticalBox {
+                        width: parent.width - 20px;
+                        spacing: 6px;
+                        for option in root.l4-option-items: Rectangle {
+                            height: 58px;
+                            background: option.selected ? #ddf4ff : #ffffff;
+                            border-color: option.selected ? #54aeff : #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 6px; width: parent.width - 150px; height: 16px; text: option.group_label + " / " + option.option_label; font-size: 11px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 24px; width: parent.width - 150px; height: 14px; text: option.item_label + " | " + option.mode + (option.required ? " | 必填" : " | 可选"); font-size: 10px; color: #57606a; }
+                            Text { x: 10px; y: 40px; width: parent.width - 150px; height: 14px; text: option.question; font-size: 10px; color: #57606a; }
+                            Button { x: parent.width - 132px; y: 8px; width: 56px; height: 24px; text: option.selected ? "取消" : "选择"; clicked => { root.set-design-l4-option(option.node_id, option.item_id, option.group_id, option.option_id, !option.selected); } }
+                            Button { x: parent.width - 70px; y: 8px; width: 60px; height: 24px; text: option.is_primary ? "主选" : "设主"; clicked => { root.set-design-primary-option(option.node_id, option.item_id, option.group_id, option.option_id); } }
+                        }
+                    }
+                }
+
+                Text { x: 12px; y: 628px; width: 150px; text: "AI 访谈设计"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Rectangle {
+                    x: 10px;
+                    y: 650px;
+                    width: parent.width - 20px;
+                    height: parent.height - 662px;
+                    background: #f6f8fa;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    LineEdit { x: 12px; y: 10px; width: parent.width - 262px; height: 26px; text <=> root.design-interview-input; placeholder-text: "输入访谈关注点或用户回答"; }
+                    Button { x: parent.width - 242px; y: 10px; width: 70px; height: 26px; text: "生成问题"; clicked => { root.start-design-ai-interview(root.design-interview-input); } }
+                    Button { x: parent.width - 166px; y: 10px; width: 70px; height: 26px; text: "记录回答"; clicked => { root.record-design-ai-response(root.design-interview-input); } }
+                    Button { x: parent.width - 90px; y: 10px; width: 78px; height: 26px; text: "调用AI"; clicked => { root.run-design-ai-interview(root.ai-provider-id, root.ai-provider-model, root.design-interview-input); } }
+                    ScrollView {
+                        x: 12px;
+                        y: 46px;
+                        width: parent.width - 24px;
+                        height: parent.height - 56px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 1800px;
+                        Text {
+                            width: parent.width;
+                            height: 1800px;
+                            text: root.design-ai-interview-text + "\n\n模板列表：\n" + root.design-template-text;
+                            color: #24292f;
+                            font-size: 11px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: parent.width - 360px;
+                y: 76px;
+                width: 344px;
+                height: parent.height - 88px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Button { x: 10px; y: 10px; width: 76px; height: 28px; text: "摘要"; clicked => { root.design-right-tab = "summary"; } }
+                Button { x: 90px; y: 10px; width: 76px; height: 28px; text: "缺失项"; clicked => { root.design-right-tab = "missing"; } }
+                Button { x: 170px; y: 10px; width: 76px; height: 28px; text: "风险"; clicked => { root.design-right-tab = "risk"; } }
+                Button { x: 250px; y: 10px; width: 76px; height: 28px; text: "校验"; clicked => { root.design-right-tab = "validation"; } }
+
+                Rectangle {
+                    x: 10px;
+                    y: 50px;
+                    width: parent.width - 20px;
+                    height: parent.height - 62px;
+                    background: #f6f8fa;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    ScrollView {
+                        x: 12px;
+                        y: 12px;
+                        width: parent.width - 24px;
+                        height: parent.height - 24px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 2400px;
+                        Text {
+                            width: parent.width;
+                            height: 2400px;
+                            text: root.design-right-tab == "summary" ? root.design-summary-text : (root.design-right-tab == "missing" ? root.design-missing-text : (root.design-right-tab == "risk" ? root.design-risk-text : root.design-validation-text));
+                            font-size: 12px;
+                            color: #24292f;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 开发流水线
+        Rectangle {
+            visible: root.active-view == "pipeline";
+            width: parent.width;
+            height: parent.height;
+            background: #f3f5f7;
+
+            Rectangle {
+                x: 16px;
+                y: 12px;
+                width: 248px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Text { x: 12px; y: 10px; text: "开发流水线"; font-size: 15px; font-weight: 700; color: #1f2328; }
+                Text { x: 12px; y: 34px; text: root.stage-progress-text; font-size: 11px; color: #57606a; }
+
+                VerticalBox {
+                    x: 10px;
+                    y: 64px;
+                    width: parent.width - 20px;
+                    spacing: 5px;
+                    Button { height: 28px; text: "总览  阶段进度"; clicked => { root.inspect-stage(""); } }
+                    Button { height: 28px; text: "设计阶段  Step00 创意收集"; clicked => { root.inspect-stage("step00"); } }
+                    Button { height: 28px; text: "设计阶段  Step01 玩法框架"; clicked => { root.inspect-stage("step01"); } }
+                    Button { height: 28px; text: "设计阶段  Step02 设计冻结"; clicked => { root.inspect-stage("step02"); } }
+                    Button { height: 28px; text: "设计阶段  Step03 程序需求"; clicked => { root.inspect-stage("step03"); } }
+                    Button { height: 28px; text: "设计阶段  Step04 美术需求"; clicked => { root.inspect-stage("step04"); } }
+                    Button { height: 28px; text: "设计阶段  Step05 程序评审"; clicked => { root.inspect-stage("step05"); } }
+                    Button { height: 28px; text: "设计阶段  Step06 美术评审"; clicked => { root.inspect-stage("step06"); } }
+                    Button { height: 28px; text: "风格确认  Step07 美术风格"; clicked => { root.inspect-stage("step07"); } }
+                    Button { height: 28px; text: "计划阶段  Step08 程序计划"; clicked => { root.inspect-stage("step08"); } }
+                    Button { height: 28px; text: "计划阶段  Step09 美术计划"; clicked => { root.inspect-stage("step09"); } }
+                    Button { height: 28px; text: "计划阶段  Step10 资源对齐"; clicked => { root.inspect-stage("step10"); } }
+                    Button { height: 28px; text: "执行阶段  Step11 程序执行"; clicked => { root.inspect-stage("step11"); } }
+                    Button { height: 28px; text: "执行阶段  Step12 美术生产"; clicked => { root.inspect-stage("step12"); } }
+                    Button { height: 28px; text: "执行阶段  Step13 场景组装"; clicked => { root.inspect-stage("step13"); } }
+                    Button { height: 28px; text: "执行阶段  Step14 集成验证"; clicked => { root.inspect-stage("step14"); } }
+                }
+            }
+
+            Rectangle {
+                x: 276px;
+                y: 12px;
+                width: parent.width - 292px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #d0d7de;
+                border-width: 1px;
+                border-radius: 6px;
+
+                Rectangle {
+                    x: 12px;
+                    y: 10px;
+                    width: parent.width - 24px;
+                    height: 136px;
+                    background: #f6f8fa;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+
+                    Text { x: 10px; y: 8px; width: 84px; height: 24px; text: "项目配置"; font-size: 12px; font-weight: 700; color: #1f2328; }
+                    LineEdit { x: 96px; y: 8px; width: 180px; height: 26px; text <=> root.selected-archive-id; }
+                    Button { x: 284px; y: 8px; width: 66px; height: 26px; text: "选择"; clicked => { root.select-project(); } }
+                    Button { x: 358px; y: 8px; width: 66px; height: 26px; text: "恢复"; clicked => { root.resume-project(); } }
+                    Button { x: 432px; y: 8px; width: 96px; height: 26px; text: "导出到流水线"; clicked => { root.create-and-run(); } }
+
+                    Text { x: 10px; y: 44px; width: 84px; height: 24px; text: "AI配置"; font-size: 12px; font-weight: 700; color: #1f2328; }
+                    LineEdit { x: 96px; y: 44px; width: 120px; height: 26px; text <=> root.ai-provider-id; }
+                    LineEdit { x: 224px; y: 44px; width: 170px; height: 26px; text <=> root.ai-provider-model; }
+                    Button { x: 402px; y: 44px; width: 74px; height: 26px; text: "检查"; clicked => { root.check-ai-provider(); } }
+                    Button { x: 484px; y: 44px; width: 74px; height: 26px; text: "调用"; clicked => { root.invoke-ai-provider(); } }
+
+                    Text { x: 10px; y: 78px; width: 84px; height: 20px; text: "步骤范围"; font-size: 12px; color: #57606a; }
+                    LineEdit { x: 96px; y: 76px; width: 48px; height: 24px; text <=> root.pipeline-range-start; }
+                    Text { x: 152px; y: 78px; width: 22px; height: 20px; text: "到"; font-size: 12px; color: #57606a; horizontal-alignment: center; }
+                    LineEdit { x: 180px; y: 76px; width: 48px; height: 24px; text <=> root.pipeline-range-end; }
+                    Button { x: 244px; y: 74px; width: 76px; height: 26px; text: "运行"; clicked => { root.run-pipeline-range(root.pipeline-range-start, root.pipeline-range-end); } }
+                    Button { x: 328px; y: 74px; width: 76px; height: 26px; text: "停止"; clicked => { root.stop-pipeline-run(); } }
+                    Button { x: 412px; y: 74px; width: 96px; height: 26px; text: "恢复失败项"; clicked => { root.resume-failed-project(); } }
+
+                    Text { x: 10px; y: 110px; width: 84px; height: 20px; text: "Step07风格"; font-size: 12px; color: #57606a; }
+                    LineEdit { x: 96px; y: 108px; width: 140px; height: 24px; text <=> root.pipeline-style-choice; }
+                    LineEdit { x: 244px; y: 108px; width: parent.width - 376px; height: 24px; text <=> root.pipeline-style-prompt; }
+                    Button { x: parent.width - 122px; y: 106px; width: 110px; height: 26px; text: "确认风格"; clicked => { root.confirm-pipeline-style(root.pipeline-style-choice, root.pipeline-style-prompt); } }
+                }
+
+                Rectangle {
+                    x: 12px;
+                    y: 158px;
+                    width: parent.width - 24px;
+                    height: 226px;
+                    background: #ffffff;
+                    border-color: #d8dee4;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    Text { x: 12px; y: 10px; width: parent.width - 24px; height: 20px; text: root.stage-detail-label + "  " + root.stage-detail-id + "  " + root.stage-detail-status; font-size: 14px; font-weight: 700; color: #1f2328; }
+                    Text { x: 12px; y: 38px; width: parent.width - 24px; height: 52px; text: root.stage-detail-message; font-size: 12px; color: #57606a; wrap: word-wrap; }
+
+                    ScrollView {
+                        x: 12px;
+                        y: 96px;
+                        width: parent.width - 24px;
+                        height: parent.height - 108px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 560px;
+                        VerticalBox {
+                            width: parent.width;
+                            spacing: 4px;
+                            for stage in root.stage-items: HorizontalBox {
+                                height: 28px;
+                                spacing: 8px;
+                                Text { text: stage.label; width: 138px; font-size: 12px; color: #24292f; vertical-alignment: center; }
+                                Text { text: stage.status; width: 102px; font-size: 12px; color: #0969da; vertical-alignment: center; }
+                                Text { text: stage.artifacts; width: 120px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                                Text { text: stage.message; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                                Button { text: "查看"; width: 58px; clicked => { root.inspect-stage(stage.id); } }
+                                Button { text: "重跑"; width: 58px; clicked => { root.rerun-stage(stage.id); } }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: 12px;
+                    y: 396px;
+                    width: parent.width - 24px;
+                    height: parent.height - 408px;
+                    background: #0d1117;
+                    border-color: #30363d;
+                    border-width: 1px;
+                    border-radius: 6px;
+                    Text { x: 12px; y: 10px; width: parent.width - 24px; height: 18px; text: "运行日志"; font-size: 13px; font-weight: 700; color: #ffffff; }
+                    ScrollView {
+                        x: 12px;
+                        y: 36px;
+                        width: parent.width - 24px;
+                        height: parent.height - 48px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 3600px;
+                        Text {
+                            width: parent.width;
+                            height: 3600px;
+                            text: root.pipeline-service-text + "\n\n" + root.pipeline-text + "\n\n" + root.stage-detail-text;
+                            font-size: 11px;
+                            color: #c9d1d9;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 补充开发
+        Rectangle {
+            visible: root.active-view == "patch";
+            x: 16px;
+            y: 12px;
+            width: parent.width - 32px;
+            height: parent.height - 24px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+            border-radius: 6px;
+
+            Text { x: 16px; y: 14px; text: "补充开发"; font-size: 18px; font-weight: 700; color: #1f2328; }
+            Text { x: 16px; y: 46px; width: parent.width - 32px; height: 24px; text: "基于当前开发内容追加新需求、生成后续任务并追踪状态。"; font-size: 12px; color: #57606a; }
+            Rectangle { x: 16px; y: 84px; width: parent.width - 32px; height: 138px; background: #f6f8fa; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                Text { x: 12px; y: 10px; text: "追加需求"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                LineEdit { x: 12px; y: 42px; width: parent.width - 150px; height: 30px; text <=> root.supplement-request-text; placeholder-text: "输入基于当前项目的新开发需求"; }
+                Button { x: parent.width - 126px; y: 42px; width: 104px; height: 30px; text: "分析补充开发"; clicked => { root.analyze-supplement(root.supplement-request-text); } }
+                Text { x: 12px; y: 86px; width: parent.width - 24px; height: 36px; text: root.project-detail; font-size: 11px; color: #57606a; wrap: word-wrap; }
+            }
+            Rectangle { x: 16px; y: 238px; width: parent.width - 32px; height: parent.height - 254px; background: #ffffff; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                Text { x: 12px; y: 12px; text: "补充任务列表"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                ScrollView {
+                    x: 12px;
+                    y: 42px;
+                    width: parent.width - 24px;
+                    height: parent.height - 54px;
+                    viewport-width: parent.width - 24px;
+                    viewport-height: 3000px;
+                    Text {
+                        width: parent.width;
+                        height: 3000px;
+                        text: root.supplement-analysis-text;
+                        font-size: 12px;
+                        color: #24292f;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // 打包阶段
+        Rectangle {
+            visible: root.active-view == "package";
+            x: 16px;
+            y: 12px;
+            width: parent.width - 32px;
+            height: parent.height - 24px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+            border-radius: 6px;
+
+            Text { x: 16px; y: 14px; text: "打包阶段"; font-size: 18px; font-weight: 700; color: #1f2328; }
+            Button { x: 118px; y: 12px; width: 108px; height: 30px; text: "暂存发布"; clicked => { root.stage-desktop-release(); } }
+            Button { x: 234px; y: 12px; width: 108px; height: 30px; text: "发布诊断"; clicked => { root.release-doctor(); } }
+            Button { x: 350px; y: 12px; width: 108px; height: 30px; text: "交付诊断"; clicked => { root.delivery-doctor(); } }
+            Button { x: 466px; y: 12px; width: 116px; height: 30px; text: "暂存构建包"; clicked => { root.stage-game-build-bundle(); } }
+            Button { x: 590px; y: 12px; width: 120px; height: 30px; text: "暂存开发套件"; clicked => { root.stage-sdk-bundle(); } }
+
+            Rectangle { x: 16px; y: 58px; width: parent.width - 32px; height: 92px; background: #f6f8fa; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                ScrollView {
+                    x: 12px;
+                    y: 10px;
+                    width: parent.width - 24px;
+                    height: 72px;
+                    viewport-width: parent.width - 24px;
+                    viewport-height: 640px;
+                    Text {
+                        width: parent.width;
+                        height: 640px;
+                        text: root.package-text + "\n" + root.release-doctor-text + "\n" + root.delivery-doctor-text;
+                        font-size: 12px;
+                        color: #24292f;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            HorizontalBox {
+                x: 16px;
+                y: 166px;
+                width: parent.width - 32px;
+                height: parent.height - 182px;
+                spacing: 12px;
+                Rectangle { width: parent.width / 2 - 6px; height: parent.height; background: #ffffff; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                    Text { x: 12px; y: 10px; text: "包文件"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                    ScrollView {
+                        x: 12px;
+                        y: 40px;
+                        width: parent.width - 24px;
+                        height: parent.height - 52px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 1800px;
+                        VerticalBox { width: parent.width; spacing: 4px;
+                            for file in root.package-file-items: HorizontalBox { height: 20px; spacing: 8px; Text { text: file.kind; width: 92px; font-size: 11px; color: #57606a; } Text { text: file.path; font-size: 11px; color: #24292f; } }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width / 2 - 6px; height: parent.height; background: #ffffff; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                    Text { x: 12px; y: 10px; text: "验证与构建"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                    ScrollView {
+                        x: 12px;
+                        y: 40px;
+                        width: parent.width - 24px;
+                        height: parent.height - 52px;
+                        viewport-width: parent.width - 24px;
+                        viewport-height: 2800px;
+                        Text {
+                            width: parent.width;
+                            height: 2800px;
+                            text: root.game-build-text + "\n\n" + root.sdk-bundle-text + "\n\n" + root.unity-build-text + "\n\n" + root.runtime-validation-text;
+                            font-size: 11px;
+                            color: #24292f;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 运行日志
+        Rectangle {
+            visible: root.active-view == "logs";
+            x: 16px;
+            y: 12px;
+            width: parent.width - 32px;
+            height: parent.height - 24px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+            border-radius: 6px;
+
+            Text { x: 16px; y: 14px; text: "运行日志"; font-size: 18px; font-weight: 700; color: #1f2328; }
+            LineEdit { x: 104px; y: 12px; width: 170px; height: 30px; text <=> root.run-log-filter; placeholder-text: "级别/范围/关键字"; }
+            Button { x: 282px; y: 12px; width: 76px; height: 30px; text: "刷新"; clicked => { root.refresh-run-log(root.run-log-filter); } }
+            Button { x: 366px; y: 12px; width: 76px; height: 30px; text: "清空"; clicked => { root.clear-run-log(); } }
+            Button { x: 450px; y: 12px; width: 76px; height: 30px; text: "导出"; clicked => { root.export-run-log(); } }
+            Button { x: 534px; y: 12px; width: 96px; height: 30px; text: "AI诊断"; clicked => { root.refresh-ai-diagnostics(); } }
+
+            Rectangle {
+                x: 16px;
+                y: 58px;
+                width: parent.width - 32px;
+                height: parent.height - 74px;
+                background: #0d1117;
+                border-color: #30363d;
+                border-width: 1px;
+                border-radius: 6px;
+                ScrollView {
+                    x: 14px;
+                    y: 12px;
+                    width: parent.width - 28px;
+                    height: parent.height - 24px;
+                    viewport-width: parent.width - 28px;
+                    viewport-height: 5200px;
+                    Text {
+                        width: parent.width;
+                        height: 5200px;
+                        text: root.run-log-text + "\n\n当前状态\n" + root.status-text + "\n\n" + root.pipeline-text + "\n\n" + root.ai-text + "\n\n" + root.validation-text + "\n\n" + root.engine-history-text;
+                        font-size: 12px;
+                        color: #c9d1d9;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // SDK 知识库
+        Rectangle {
+            visible: root.active-view == "sdk";
+            x: 16px;
+            y: 12px;
+            width: parent.width - 32px;
+            height: parent.height - 24px;
+            background: #ffffff;
+            border-color: #d0d7de;
+            border-width: 1px;
+            border-radius: 6px;
+
+            Text { x: 16px; y: 14px; text: "SDK知识库"; font-size: 18px; font-weight: 700; color: #1f2328; }
+            Button { x: 120px; y: 12px; width: 76px; height: 30px; text: "刷新"; clicked => { root.refresh-sdk-knowledge(); } }
+            LineEdit { x: 204px; y: 12px; width: 150px; height: 30px; text <=> root.sdk-new-name; placeholder-text: "SDK 名称"; }
+            LineEdit { x: 362px; y: 12px; width: 230px; height: 30px; text <=> root.sdk-new-url; placeholder-text: "SDK URL"; }
+            Button { x: 600px; y: 12px; width: 84px; height: 30px; text: "新增 SDK"; clicked => { root.add-sdk-resource(root.sdk-new-name, root.sdk-new-url); } }
+            LineEdit { x: 692px; y: 12px; width: 170px; height: 30px; text <=> root.sdk-review-selected-id; placeholder-text: "审批 ID"; }
+            Button { x: 870px; y: 12px; width: 84px; height: 30px; text: "批准入库"; clicked => { root.approve-sdk-resource(root.sdk-review-selected-id); } }
+            Button { x: 962px; y: 12px; width: 96px; height: 30px; text: "标记待审"; clicked => { root.mark-sdk-resource-pending(root.sdk-review-selected-id); } }
+            Button { x: 1066px; y: 12px; width: 70px; height: 30px; text: "拒绝"; clicked => { root.reject-sdk-resource(root.sdk-review-selected-id); } }
+            Button { x: 1144px; y: 12px; width: 90px; height: 30px; text: "暂存套件"; clicked => { root.stage-sdk-bundle(); } }
+
+            Rectangle { x: 16px; y: 58px; width: parent.width - 32px; height: 84px; background: #f6f8fa; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                ScrollView {
+                    x: 12px;
+                    y: 10px;
+                    width: parent.width - 24px;
+                    height: 64px;
+                    viewport-width: parent.width - 24px;
+                    viewport-height: 800px;
+                    Text {
+                        width: parent.width;
+                        height: 800px;
+                        text: root.sdk-review-text + "\n" + root.sdk-text;
+                        font-size: 12px;
+                        color: #24292f;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            Rectangle { x: 16px; y: 154px; width: parent.width / 2 - 24px; height: parent.height - 170px; background: #ffffff; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                Text { x: 12px; y: 10px; text: "审批队列"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                ScrollView {
+                    x: 12px;
+                    y: 38px;
+                    width: parent.width - 24px;
+                    height: parent.height - 50px;
+                    viewport-width: parent.width - 24px;
+                    viewport-height: 2200px;
+                    VerticalBox { width: parent.width; spacing: 6px;
+                        for review in root.sdk-review-items: Rectangle {
+                            height: 86px;
+                            background: #f6f8fa;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: review.sdk_name + "  " + review.status; font-size: 12px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 30px; width: parent.width - 20px; height: 16px; text: review.id + " | " + review.url; font-size: 11px; color: #57606a; }
+                            Text { x: 10px; y: 50px; width: parent.width - 20px; height: 16px; text: review.target_engines + " | " + review.target_platforms + " | " + review.category; font-size: 11px; color: #57606a; }
+                            Text { x: 10px; y: 68px; width: parent.width - 20px; height: 14px; text: review.note; font-size: 11px; color: #24292f; }
+                        }
+                    }
+                }
+            }
+            Rectangle { x: parent.width / 2 + 8px; y: 154px; width: parent.width / 2 - 24px; height: parent.height - 170px; background: #ffffff; border-color: #d8dee4; border-width: 1px; border-radius: 6px;
+                Text { x: 12px; y: 10px; text: "已索引资源"; font-size: 13px; font-weight: 700; color: #1f2328; }
+                ScrollView {
+                    x: 12px;
+                    y: 38px;
+                    width: parent.width - 24px;
+                    height: parent.height - 50px;
+                    viewport-width: parent.width - 24px;
+                    viewport-height: 2200px;
+                    VerticalBox { width: parent.width; spacing: 6px;
+                        for resource in root.sdk-resource-items: Rectangle {
+                            height: 78px;
+                            background: #f6f8fa;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            Text { x: 10px; y: 8px; width: parent.width - 20px; height: 18px; text: resource.sdk_name + "  " + resource.category; font-size: 12px; font-weight: 700; color: #1f2328; }
+                            Text { x: 10px; y: 30px; width: parent.width - 20px; height: 16px; text: resource.target_engines + " | " + resource.target_platforms + " | " + resource.required_for_build; font-size: 11px; color: #57606a; }
+                            Text { x: 10px; y: 50px; width: parent.width - 20px; height: 18px; text: resource.purpose; font-size: 11px; color: #24292f; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: 0px;
+        y: root.height - 30px;
+        width: root.width;
+        height: 30px;
+        background: #ffffff;
+        border-color: #d0d7de;
+        border-width: 1px;
+        Text { x: 16px; y: 6px; width: root.width / 3; height: 18px; text: root.ai-config-summary; font-size: 11px; color: #57606a; }
+        Text { x: root.width / 3; y: 6px; width: root.width / 3; height: 18px; text: root.stage-progress-text; font-size: 11px; color: #57606a; horizontal-alignment: center; }
+        Text { x: root.width * 2 / 3; y: 6px; width: root.width / 3 - 16px; height: 18px; text: root.workspace-doctor-text; font-size: 11px; color: #57606a; horizontal-alignment: right; }
+    }
+}

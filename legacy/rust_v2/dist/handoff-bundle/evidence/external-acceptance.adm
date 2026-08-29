@@ -1,0 +1,51 @@
+# External Acceptance Doctor
+ready=false
+report_path=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\external-acceptance.adm
+data_root=E:\workwork\CrewAi\AutoDesignMaker\RUST\.adm_rust_data
+release_acceptance_report=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\release-acceptance.adm
+release_acceptance_present=true
+release_acceptance_accepted=true
+release_smoke_ready=true
+release_hash=fnv64:6e4290bdd417082b
+unity_ready=false
+unity_selected=none
+unity_candidates=2
+unity_runtime_report=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\unity-project\Assets\AutoDesignMaker\Generated\runtime_execution_results.adm
+unity_runtime_present=true
+unity_runtime_ready=true
+unity_runtime_runner=cli_smoke_runner
+unity_runtime_target_id=windows_desktop_playable
+ai_acceptance_report=E:\workwork\CrewAi\AutoDesignMaker\RUST\dist\AutoDesignMaker-rust\ai-acceptance.adm
+ai_acceptance_present=true
+ai_acceptance_ready=false
+ai_acceptance_provider_id=openai_main
+ai_acceptance_provider_matches_real_provider=false
+ai_acceptance_configured_ready=false
+ai_acceptance_invoke_attempted=false
+ai_acceptance_invoke_succeeded=false
+real_ai_provider_ready=false
+real_ai_provider_count=0
+real_ai_providers=
+ready_provider_count=1
+require_ready=false
+require_ai_invoke=false
+blocker_count=5
+blocker=unity_not_ready
+blocker=unity_runtime_runner_not_unity_playmode
+blocker=real_ai_provider_not_ready
+blocker=ai_acceptance_not_ready
+blocker=ai_acceptance_provider_not_configured
+
+## Unity Doctor Output
+# Unity Editor Discovery
+selected=none
+candidates=2
+- source=default; path=C:\Program Files\Unity\Editor\Unity.exe; present=false; looks_like_unity_editor=true; ready=false
+- source=default; path=C:\Program Files\Unity Hub\Editor\Unity.exe; present=false; looks_like_unity_editor=true; ready=false
+
+## AI Doctor Output
+# AI Diagnostics
+default_budget_units=8
+retry_max_attempts=2
+ready_provider_count=1
+mock	Ready	capabilities=text_generation	provider does not require a secret

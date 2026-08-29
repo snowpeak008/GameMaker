@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "surface": "ai_config_unified_dialog",
+  "state": "missing_key",
+  "python_source": "core/ui/ai_config_unified_dialog.py",
+  "baseline_surface": "unified AI config/profile editing",
+  "web_tauri_target": "adm-new-web::modals::ai_config",
+  "required_state": "missing key",
+  "screenshot_required": true,
+  "python_screenshot": {
+    "path": "",
+    "manual_review_note": "Python Tk baseline requires an interactive desktop session; this record preserves the required source/state and is marked for manual Tk screenshot review."
+  },
+  "web_screenshot": {
+    "desktop": {
+      "path": "NEWrust/gates/ui-config.png",
+      "width": 1366,
+      "height": 768,
+      "browser": "playwright:chromium"
+    },
+    "narrow": {
+      "path": "NEWrust/gates/ui-config-narrow.png",
+      "width": 390,
+      "height": 844,
+      "browser": "playwright:chromium"
+    }
+  },
+  "interaction_trace": [
+    {
+      "action": "open ai_config_unified_dialog",
+      "command_contract": "AI config commands",
+      "expected_result": "renders missing key without overlap or layout shift"
+    }
+  ],
+  "parity_notes": {
+    "accepted_differences": [
+      "Native Tk widget chrome is not copied; layout, density, state semantics, and command behavior are reviewed instead."
+    ],
+    "open_p0_p1_deltas": [],
+    "difference_table": [
+      {
+        "severity": "P2",
+        "area": "rendering",
+        "status": "accepted",
+        "note": "Web uses CSS controls while preserving required state and command semantics."
+      }
+    ]
+  },
+  "command_contract": "AI config commands",
+  "record_path": "plan/NEWrust/full_project_reproduction/ui_baselines/ai_config_unified_dialog/missing_key.json"
+}
