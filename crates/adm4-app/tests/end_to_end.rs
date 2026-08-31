@@ -3578,3 +3578,172 @@ impl adm4_ai::AiProvider for RunStateSpy<'_> {
         self.inner.invoke(request)
     }
 }
+
+// ---------------------------------------------------------------------------
+// G1 场景：Phase 2 构建产线门面（build_*）全链
+//
+// 本波 P0-P5 全是诚实空执行器，因此这条链验的是**骨架**而不是产线：
+// 真源前置、版图自洽、区间/续跑/重跑/人工门语义、与 Phase 1 运行状态互不干扰，
+// 以及最要紧的一条——每段如实 Blocked 并说清在等谁，绝不出现假成功（R7）。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn build_facade_runs_the_honest_empty_plan_without_faking_success() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_g1_build_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+
+    // --- 版图：注册表 + 制品声明自洽，且每段都说得清自己在等谁 ---
+    let plan = services.build_plan().expect("Phase 2 版图必须自洽");
+    let ids: Vec<&str> = plan.iter().map(|stage| stage.stage_id.as_str()).collect();
+    assert_eq!(ids, vec!["P0", "P1", "P2", "P3", "P4", "P5"]);
+    assert!(plan[0].depends_on.is_empty(), "P0 是版图起点");
+    assert_eq!(plan[3].depends_on, vec!["P1", "P2"], "P3 合流两条线");
+    assert!(
+        plan[0].produces.iter().any(|item| item == "对齐报告"),
+        "对齐报告由 P0 产出：{:?}",
+        plan[0].produces
+    );
+    assert!(
+        plan[2].consumes.iter().any(|item| item == "风格锚点集"),
+        "资产生产消费设计阶段锁定的风格锚点：{:?}",
+        plan[2].consumes
+    );
+    for stage in &plan {
+        let note = stage
+            .pending_note
+            .as_deref()
+            .expect("本波每段都还没有执行器，必须有诚实说明");
+        assert!(note.starts_with("待 G"), "{note}");
+    }
+
+    // --- 真源前置：C0 没跑过就不许开跑（不就地重编一份规格 = 不造第二真源）---
+    let error = services
+        .build_run(&archive_id, "P0", "P5")
+        .expect_err("缺 C0 产物必须显式失败");
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::Blocked);
+    assert!(error.message.contains("C0"), "{}", error.message);
+
+    // --- 跑 Phase 1 的 C0，Phase 2 才有真源可派生 ---
+    let phase1 = services
+        .pipeline_run_with(&archive_id, "C0", "C0", &ai)
+        .unwrap();
+    assert!(phase1.is_succeeded("C0"));
+
+    // --- 诚实空版图：第一段 Blocked 并说清待哪一波，后续段一律未运行 ---
+    let state = services.build_run(&archive_id, "P0", "P5").unwrap();
+    match state.stage_status("P0") {
+        StageStatus::Blocked { reasons } => {
+            assert_eq!(reasons.len(), 1);
+            assert!(reasons[0].contains("待 G3/G4 实现"), "{}", reasons[0]);
+        }
+        other => panic!("P0 应如实 Blocked，实际 {other:?}"),
+    }
+    assert_stage_statuses(
+        &state,
+        &[
+            ("P1", "pending"),
+            ("P2", "pending"),
+            ("P3", "pending"),
+            ("P4", "pending"),
+            ("P5", "pending"),
+        ],
+    );
+    assert!(
+        !state.frozen_hash.is_empty(),
+        "构建运行状态必须绑定冻结版本"
+    );
+
+    // --- status 只读回放同一份结论 ---
+    let status = services.build_status(&archive_id).unwrap();
+    assert_eq!(status, state);
+
+    // --- 未知阶段与非法区间：显式报错，不伪装成「那段没跑」---
+    assert_eq!(
+        services
+            .build_run(&archive_id, "P0", "P9")
+            .expect_err("未知阶段必须被拒")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::NotFound
+    );
+    assert_eq!(
+        services
+            .build_run(&archive_id, "C0", "P5")
+            .expect_err("C 段不在构建版图内")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::NotFound
+    );
+    assert_eq!(
+        services
+            .build_run(&archive_id, "P3", "P1")
+            .expect_err("倒序区间必须被拒")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::InvalidInput
+    );
+
+    // --- 人工门：没停在等待态就不接受确认；空署名一律拒（R3）---
+    assert_eq!(
+        services
+            .build_confirm(&archive_id, "P0", "评审员甲", "想直接放行")
+            .expect_err("阻塞的段不是人工门")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::Conflict
+    );
+    assert_eq!(
+        services
+            .build_confirm(&archive_id, "P0", "   ", "匿名放行")
+            .expect_err("匿名确认等于没有评审")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::InvalidInput
+    );
+
+    // --- 协作式取消：停在段边界，被取消的段记为未运行而非失败 ---
+    let cancel = CancelSignal::new();
+    cancel.cancel();
+    let outcome = services
+        .build_run_with_cancel(&archive_id, "P0", "P5", &cancel)
+        .expect("取消是正常结束");
+    assert_eq!(outcome.cancelled_at.as_deref(), Some("P0"));
+    assert_eq!(outcome.state.stage_status("P0"), StageStatus::Pending);
+
+    // --- 强制重跑：重置目标段及全部下游（此处无产物可清，如实报空）---
+    let rerun = services.build_rerun(&archive_id, "P0", "P5").unwrap();
+    assert_eq!(
+        rerun.reset.reset_stages,
+        vec!["P0", "P1", "P2", "P3", "P4", "P5"]
+    );
+    assert!(
+        rerun.reset.cleared_artifacts.is_empty(),
+        "诚实空执行器一份产物都没写过，不许虚报清空"
+    );
+    assert!(rerun.reset.revoked_confirmations.is_empty());
+    assert!(matches!(
+        rerun.state.stage_status("P0"),
+        StageStatus::Blocked { .. }
+    ));
+
+    // --- 两段流水线互不干扰：Phase 2 跑了这么多轮，C0 的成功与产物原样还在 ---
+    let phase1 = services.pipeline_status(&archive_id).unwrap();
+    assert!(
+        phase1.is_succeeded("C0"),
+        "构建段的运行状态不得覆盖文档编译段"
+    );
+    let c0 = services.pipeline_artifact(&archive_id, 1, "C0").unwrap();
+    assert!(c0.complete, "C0 产物应仍然齐备");
+
+    // --- 审计：构建动作进运行日志（分类 build，与 pipeline 分开）---
+    let logs = services.log.tail(200).unwrap();
+    assert!(
+        logs.iter()
+            .any(|entry| entry.category == "build" && entry.message.contains("构建运行")),
+        "构建运行必须留痕"
+    );
+    assert!(
+        logs.iter()
+            .any(|entry| entry.category == "build" && entry.message.contains("被用户取消")),
+        "取消不是失败，但必须可追查"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}

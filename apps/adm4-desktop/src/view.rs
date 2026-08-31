@@ -16,6 +16,7 @@ use adm4_app::{
     SdkSnapshot, StageArtifactView, TemplateExportReport, WorkbenchOverview,
 };
 use adm4_authoring::WorkbenchResetReport;
+use adm4_build::pending_stage;
 use adm4_decision::{
     DesignDomain, OrganizationProgress, SelectionMode, UNASSIGNED_DOMAIN_ID, UNASSIGNED_NODE_ID,
 };
@@ -619,18 +620,26 @@ pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
             }
         })
         .collect();
-    rows.extend(phase2_registry().into_iter().map(|stage| StageItem {
-        id: stage.id.into(),
-        name: stage.name.into(),
-        status: "Phase 2 占位（数据模型已立，执行器另行立项）".into(),
-        summary: stage.summary.into(),
-        segment: "P 段".into(),
-        duration: "耗时 —".into(),
-        waiting: false,
-        running: false,
-        can_rerun: false,
-        can_inspect: false,
-        placeholder: true,
+    rows.extend(phase2_registry().into_iter().map(|stage| {
+        // P 段的状态文案由 Phase 2 注册表给出（这一段待哪一波实现、要补什么），
+        // 不在 UI 里写死一句「另行立项」——后续波次把某段实现掉，这里跟着变。
+        let status = match pending_stage(&stage.id) {
+            Some(pending) => pending.blocked_reason(),
+            None => "待运行".to_string(),
+        };
+        StageItem {
+            id: stage.id.into(),
+            name: stage.name.into(),
+            status: status.into(),
+            summary: stage.summary.into(),
+            segment: "P 段".into(),
+            duration: "耗时 —".into(),
+            waiting: false,
+            running: false,
+            can_rerun: false,
+            can_inspect: false,
+            placeholder: true,
+        }
     }));
     rows
 }

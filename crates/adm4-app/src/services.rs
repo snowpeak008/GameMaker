@@ -13,6 +13,10 @@ use adm4_authoring::{
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
     WorkbenchResetReport, evaluate_freeze_gates, execute_freeze, run_red_team,
 };
+use adm4_build::{
+    ArtifactKind, BuildContext, PendingStage, Phase2Runner, pending_stage, phase2_artifacts,
+    phase2_execution_order,
+};
 use adm4_contracts::{SkinScanner, normalize_skin_word};
 use adm4_decision::{
     DecisionPoint, DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress,
@@ -25,9 +29,10 @@ use adm4_foundation::{
 };
 use adm4_pipeline::{
     ArtifactStore, CancelSignal, PipelineRerunOutcome, PipelineRunOutcome, PipelineRunState,
-    PipelineRunner, RunnerContext,
+    PipelineRunner, RunnerContext, phase2_registry,
 };
 use adm4_space::{DesignSpace, DesignSpaceRoot, load_design_space};
+use adm4_spec::GameSpec;
 use adm4_template::{
     Certification, CrossCheckReport, CrossCheckService, EvidenceCandidate, EvidenceQuery,
     EvidenceSearchChannel, FileCorpusChannel, MappingService, Template, TemplateAnswer,
@@ -1049,6 +1054,20 @@ impl AppServices {
     // ------------------------------------------------------------------
 
     fn artifact_store(&self, archive_id: &str, version: u32) -> Adm4Result<ArtifactStore> {
+        self.versioned_store(archive_id, version, PIPELINE_SECTION)
+    }
+
+    /// 某个冻结版本下的产物仓（`section` 区分 Phase 1 文档编译与 Phase 2 构建产线）。
+    ///
+    /// 两段各占一个子目录（`pipeline/v{N}` 与 `build/v{N}`），因此各有一份自己的
+    /// `run_state.json`——否则 Phase 2 一开跑就会把 Phase 1 的运行状态覆盖掉。
+    /// 换皮扫描器与冻结版本的解析逻辑两段共用，不复制第二份。
+    fn versioned_store(
+        &self,
+        archive_id: &str,
+        version: u32,
+        section: &str,
+    ) -> Adm4Result<ArtifactStore> {
         let state = self.load_authoring_state(archive_id)?;
         let space = self.load_space_shared(&state.genre_pack)?;
         // C0 文档标题就是项目名：产物落盘钩子必须豁免本项目自身名，否则「另存模板 →
@@ -1063,7 +1082,7 @@ impl AppServices {
         let root = self
             .archives
             .content_dir(archive_id)
-            .join("pipeline")
+            .join(section)
             .join(format!("v{version}"));
         ensure_dir(&root)?;
         Ok(ArtifactStore::new(root, scanner))
@@ -1252,6 +1271,190 @@ impl AppServices {
             &format!("项目 {archive_id} 阶段 {stage_id} 人工确认（{actor}）"),
         )?;
         Ok(state)
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 2 构建产线（P0-P5；本波执行器全是诚实空实现，如实 Blocked）
+    // ------------------------------------------------------------------
+
+    /// Phase 2 版图（只读）：阶段 id / 名称 / 依赖 / 产出与消费的制品 / 待哪一波实现。
+    ///
+    /// 呈现层（CLI 与桌面流水线视图的 P 段）拿它画状态行，**不在 UI 里写死任何阶段文案**——
+    /// 后续波次把某段实现掉，界面上的说明会跟着注册表一起变。
+    pub fn build_plan(&self) -> Adm4Result<Vec<BuildStageView>> {
+        let order = phase2_execution_order()?;
+        let artifacts = phase2_artifacts();
+        let mut views = Vec::with_capacity(order.len());
+        for stage in phase2_registry() {
+            let declared = artifacts
+                .iter()
+                .find(|item| item.stage_id == stage.id)
+                .ok_or_else(|| Adm4Error::internal(format!("阶段 {} 缺制品声明", stage.id)))?;
+            let label = |kinds: &[ArtifactKind]| -> Vec<String> {
+                kinds
+                    .iter()
+                    .map(|kind| kind.label_zh().to_string())
+                    .collect()
+            };
+            views.push(BuildStageView {
+                stage_id: stage.id.clone(),
+                name: stage.name.clone(),
+                summary: stage.summary.clone(),
+                depends_on: stage.depends_on.clone(),
+                produces: label(&declared.produces),
+                consumes: label(&declared.consumes),
+                pending_note: pending_stage(&stage.id).map(PendingStage::blocked_reason),
+            });
+        }
+        Ok(views)
+    }
+
+    /// Phase 2 的产物仓（`content/build/v{N}`）。
+    fn build_store(&self, archive_id: &str, version: u32) -> Adm4Result<ArtifactStore> {
+        self.versioned_store(archive_id, version, BUILD_SECTION)
+    }
+
+    /// Phase 2 的唯一真源：Phase 1 C0 落盘的 `GameSpec`。
+    ///
+    /// C0 没跑过就**直接报错**而不是就地重编一份：重编等于在 Phase 2 里造第二个真源（D22），
+    /// 而且会绕开 C1-C6 的验证与人工门。缺就说缺，让人回去把 C0 跑掉。
+    fn build_source_spec(&self, archive_id: &str, version: u32) -> Adm4Result<GameSpec> {
+        let store = self.artifact_store(archive_id, version)?;
+        store.read_contract::<GameSpec>("C0").map_err(|error| {
+            Adm4Error::blocked(format!(
+                "读不到冻结版本 v{version} 的 C0 规格编译产物（{}）：\
+                 Phase 2 一切派生自 GameSpec，请先跑 pipeline run <项目> --from C0",
+                error.message
+            ))
+        })
+    }
+
+    /// 运行 P0-P5（区间）。本波每段都会如实 Blocked 并说清在等哪一波。
+    pub fn build_run(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+    ) -> Adm4Result<PipelineRunState> {
+        Ok(self
+            .build_run_with_cancel(archive_id, from, to, &CancelSignal::never())?
+            .state)
+    }
+
+    /// `build_run` 的可取消变体（语义同 [`AppServices::pipeline_run_with_cancel`]：
+    /// 段边界粒度的协作式取消，被取消的段记为未运行而非失败）。
+    pub fn build_run_with_cancel(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+    ) -> Adm4Result<PipelineRunOutcome> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let spec = self.build_source_spec(archive_id, version)?;
+        let store = self.build_store(archive_id, version)?;
+        let ctx = BuildContext {
+            spec: &spec,
+            store: &store,
+        };
+        let outcome = Phase2Runner::new().run_range_with_cancel(&ctx, from, to, cancel)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "build",
+            &format!("项目 {archive_id} v{version} 构建运行 {from}..{to}"),
+        )?;
+        self.log_build_cancellation(archive_id, version, outcome.cancelled_at.as_deref())?;
+        Ok(outcome)
+    }
+
+    /// 强制重跑 P 段：重置 `from` 及其全部下游（状态 + 产物 + 人工门署名）后再跑。
+    pub fn build_rerun(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+    ) -> Adm4Result<PipelineRerunOutcome> {
+        self.build_rerun_with_cancel(archive_id, from, to, &CancelSignal::never())
+    }
+
+    /// `build_rerun` 的可取消变体。作废明细（含被作废的人工门署名）逐条进运行日志（R3）。
+    pub fn build_rerun_with_cancel(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+    ) -> Adm4Result<PipelineRerunOutcome> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let spec = self.build_source_spec(archive_id, version)?;
+        let store = self.build_store(archive_id, version)?;
+        let ctx = BuildContext {
+            spec: &spec,
+            store: &store,
+        };
+        let outcome = Phase2Runner::new().rerun_from(&ctx, from, to, cancel)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "build",
+            &format!(
+                "项目 {archive_id} v{version} 构建强制重跑 {from}..{to}：{}",
+                outcome.reset.summary()
+            ),
+        )?;
+        for revoked in &outcome.reset.revoked_confirmations {
+            self.log.append(
+                "build",
+                &format!(
+                    "项目 {archive_id} v{version} 构建阶段 {} 的人工确认（{} 于 {}）随重跑作废，需重新确认（R3）",
+                    revoked.stage_id, revoked.actor, revoked.at
+                ),
+            )?;
+        }
+        self.log_build_cancellation(archive_id, version, outcome.cancelled_at.as_deref())?;
+        Ok(outcome)
+    }
+
+    /// 构建运行状态（只读）。
+    pub fn build_status(&self, archive_id: &str) -> Adm4Result<PipelineRunState> {
+        let version = self.latest_frozen_version(archive_id)?;
+        self.build_store(archive_id, version)?.load_run_state()
+    }
+
+    /// 构建段的人工门确认（署名 + 结论必填，R3）。
+    pub fn build_confirm(
+        &self,
+        archive_id: &str,
+        stage_id: &str,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<PipelineRunState> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let store = self.build_store(archive_id, version)?;
+        let state = Phase2Runner::new().confirm_human_gate(&store, stage_id, actor, note)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "build",
+            &format!("项目 {archive_id} 构建阶段 {stage_id} 人工确认（{actor}）"),
+        )?;
+        Ok(state)
+    }
+
+    /// 构建段的取消落日志（与 [`AppServices::log_cancellation`] 同一口径，只是分类不同）。
+    fn log_build_cancellation(
+        &self,
+        archive_id: &str,
+        version: u32,
+        cancelled_at: Option<&str>,
+    ) -> Adm4Result<()> {
+        let Some(stage_id) = cancelled_at else {
+            return Ok(());
+        };
+        self.log.append(
+            "build",
+            &format!(
+                "项目 {archive_id} v{version} 构建被用户取消：停在阶段 {stage_id} 之前，该段记为未运行（非失败），已完成段的产物保留"
+            ),
+        )
     }
 
     // ------------------------------------------------------------------
@@ -2120,6 +2323,27 @@ impl AppServices {
 
 /// C0-C6 设计文档段数（交付清单完整度分母）。
 const DESIGN_STAGE_COUNT: usize = 7;
+
+/// Phase 1 文档编译产物在存档内容树里的子目录名（存档兼容：不得更名）。
+const PIPELINE_SECTION: &str = "pipeline";
+
+/// Phase 2 构建产物的子目录名（与 Phase 1 分开，各持一份 run_state）。
+const BUILD_SECTION: &str = "build";
+
+/// Phase 2 版图的一行（只读投影：注册表 + 制品声明 + 待实现登记）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuildStageView {
+    pub stage_id: String,
+    pub name: String,
+    pub summary: String,
+    pub depends_on: Vec<String>,
+    /// 本段产出的制品（中文展示名）。
+    pub produces: Vec<String>,
+    /// 本段消费的制品（中文展示名）。
+    pub consumes: Vec<String>,
+    /// 执行器尚未实现时的诚实说明（已实现的段为 None）。
+    pub pending_note: Option<String>,
+}
 
 /// 访谈回合 DTO：`InterviewTurn` 未派生 serde，门面层包装为可序列化结构，
 /// 供 CLI/GUI 在「提案 → 用户确认」两次调用之间无损转发提案载荷。

@@ -15,6 +15,8 @@ adm4-decision = { workspace = true }
 adm4-authoring = { workspace = true }
 adm4-template = { workspace = true }
 adm4-pipeline = { workspace = true }
+# 流水线视图的 P 段状态行由 Phase 2 注册表驱动（pending_stage），不在 UI 里写死阶段文案。
+adm4-build = { workspace = true }
 adm4-app = { workspace = true }
 serde_json = { workspace = true }
 slint = "1"

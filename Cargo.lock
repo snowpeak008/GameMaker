@@ -149,6 +149,7 @@ dependencies = [
  "adm4-ai",
  "adm4-archive",
  "adm4-authoring",
+ "adm4-build",
  "adm4-contracts",
  "adm4-decision",
  "adm4-foundation",
@@ -179,6 +180,18 @@ dependencies = [
  "adm4-foundation",
  "adm4-space",
  "adm4-template",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "adm4-build"
+version = "0.1.0"
+dependencies = [
+ "adm4-contracts",
+ "adm4-foundation",
+ "adm4-pipeline",
+ "adm4-spec",
  "serde",
  "serde_json",
 ]
@@ -223,6 +236,7 @@ dependencies = [
  "adm4-ai",
  "adm4-app",
  "adm4-authoring",
+ "adm4-build",
  "adm4-contracts",
  "adm4-decision",
  "adm4-foundation",

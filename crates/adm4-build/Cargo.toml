@@ -1,5 +1,5 @@
-﻿[package]
-name = "adm4-app"
+[package]
+name = "adm4-build"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,8 @@ license.workspace = true
 [dependencies]
 adm4-foundation = { workspace = true }
 adm4-contracts = { workspace = true }
-adm4-decision = { workspace = true }
-adm4-space = { workspace = true }
-adm4-template = { workspace = true }
 adm4-spec = { workspace = true }
-adm4-authoring = { workspace = true }
 adm4-pipeline = { workspace = true }
-adm4-build = { workspace = true }
-adm4-archive = { workspace = true }
-adm4-ai = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

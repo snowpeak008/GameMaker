@@ -90,26 +90,42 @@ pub fn design_compile_registry() -> Vec<StageSpec> {
     ]
 }
 
-/// Phase 2：P0-P5 边界占位（另行立项，不实现执行器）。
+/// Phase 2：P0-P5 版图（执行器实现在 `adm4-build`，本处只保留阶段定义）。
+///
+/// 阶段 id 与摘要**只增不改**（D4：存档与 e2e 锚定在上面）；G1 补上的是 `depends_on`——
+/// 没有依赖声明的版图推不出执行顺序，也就谈不上「谁该在谁之后跑」。
+/// 每段产出/消费哪些制品，由 `adm4_build::phase2_artifacts()` 声明，两者的自洽性由
+/// `adm4_build::validate_artifact_graph` 机器校验。
 pub fn phase2_registry() -> Vec<StageSpec> {
-    let stage = |id: &str, name: &str, summary: &str| StageSpec {
+    let stage = |id: &str, name: &str, depends: &[&str], summary: &str| StageSpec {
         id: id.into(),
         name: name.into(),
         kind: StageKind::Deterministic,
-        depends_on: Vec::new(),
+        depends_on: depends.iter().map(|item| item.to_string()).collect(),
         summary: summary.into(),
     };
     vec![
-        stage("P0", "引擎工程骨架", "按 engine_architecture 生成工程种子"),
+        stage(
+            "P0",
+            "引擎工程骨架",
+            &[],
+            "按 engine_architecture 生成工程种子",
+        ),
         stage(
             "P1",
             "程序任务执行",
+            &["P0"],
             "并行生成、串行合入；变更内核 + 受信测试",
         ),
-        stage("P2", "资产批量生产", "生产前清单人工门 + 内容哈希缓存"),
-        stage("P3", "装配与集成", "按 spec 执行装配"),
-        stage("P4", "验收场景执行", "C4 的 GWT 真机运行判定"),
-        stage("P5", "打包交付", "EXE + manifest + 确定性报告"),
+        stage(
+            "P2",
+            "资产批量生产",
+            &["P0"],
+            "生产前清单人工门 + 内容哈希缓存",
+        ),
+        stage("P3", "装配与集成", &["P1", "P2"], "按 spec 执行装配"),
+        stage("P4", "验收场景执行", &["P3"], "C4 的 GWT 真机运行判定"),
+        stage("P5", "打包交付", &["P4"], "EXE + manifest + 确定性报告"),
     ]
 }
 

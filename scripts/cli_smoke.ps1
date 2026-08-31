@@ -467,6 +467,47 @@ foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
 }
 
 # ---------------------------------------------------------------------------
+# 8g. G1 Phase 2 构建产线：诚实空版图（P0-P5 执行器尚未实现）
+#
+# 本波只建成治理骨架与插件框架，因此这一段验的是「骨架跑得动 + 结论如实」：
+# run 后第一段 Blocked 并说清在等哪一波、status 只读可回放、未知阶段显式报错。
+# 复用上面已冻结并跑完 C0-C6 的 $ArchiveId，不新建场景，对冒烟总时长影响可忽略；
+# 既有断言一条未改。
+# ---------------------------------------------------------------------------
+$out = Invoke-Adm4 'G1：Phase 2 版图（注册表 + 制品依赖图自洽）' @('build', 'plan')
+Assert-Contains $out 'P0  引擎工程骨架' '版图首段'
+Assert-Contains $out 'P3  装配与集成  依赖 P1/P2' '装配段合流两条线'
+Assert-Contains $out '产出：程序线契约、美术线契约、资产表、对齐报告、引擎工程种子' 'P0 产出制品清单'
+Assert-Contains $out '消费：美术线契约、资产表、对齐报告、风格锚点集' 'P2 消费制品清单'
+Assert-Contains $out '执行器：待 G' '每段如实标注待哪一波实现'
+
+$out = Invoke-Adm4 'G1：构建运行（诚实空版图应停在 P0 并说明原因）' @('build', 'run', $ArchiveId)
+Assert-Contains $out 'P0: 阻塞：待 G3/G4 实现' 'P0 如实阻塞'
+Assert-Contains $out 'P1: 待运行' '阻塞后不推进下游'
+Assert-Contains $out 'P5: 待运行' '末段保持未运行'
+Assert-NotContains $out 'P0: 成功' '诚实空执行器绝不返回假成功（R7）'
+
+$out = Invoke-Adm4 'G1：构建状态只读回放同一份结论' @('build', 'status', $ArchiveId)
+Assert-Contains $out 'P0: 阻塞' '状态查询可读'
+Assert-NotContains $out '失败' '阻塞不是失败'
+
+$out = Invoke-Adm4 'G1：构建重跑（重置目标段及全部下游）' @('build', 'rerun', $ArchiveId, 'P0')
+Assert-Contains $out '重跑起点 P0，重置 6 段：P0 / P1 / P2 / P3 / P4 / P5' '重跑连带全部下游'
+Assert-Contains $out '清空产物：无（重置范围内原本没有已落盘产物）' '没产物就不虚报清空'
+
+Invoke-Adm4 'G1 负例：未知构建阶段必须非零退出' @('build', 'run', $ArchiveId, '--from', 'P9') -ExpectFailure | Out-Null
+Invoke-Adm4 'G1 负例：C 段不在构建版图内' @('build', 'run', $ArchiveId, '--from', 'C0') -ExpectFailure | Out-Null
+Invoke-Adm4 'G1 负例：倒序区间必须被拒' @('build', 'run', $ArchiveId, '--from', 'P3', '--to', 'P1') -ExpectFailure | Out-Null
+Invoke-Adm4 'G1 负例：阻塞的段不是人工门，确认必须被拒' @('build', 'confirm', $ArchiveId, 'P0', '冒烟评审员', '想直接放行') -ExpectFailure | Out-Null
+Invoke-Adm4 'G1 负例：未知 build 子命令必须非零退出' @('build', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# 构建段与文档编译段互不干扰：跑完 build 后 C0-C6 仍全绿、产物仍齐备。
+$out = Invoke-Adm4 'G1：构建段不得污染 C0-C6 的运行状态' @('pipeline', 'status', $ArchiveId)
+foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
+    Assert-Contains $out "${stage}: 成功" "构建后流水线状态 $stage"
+}
+
+# ---------------------------------------------------------------------------
 # 8b. F3 模型缺口：通用层模板跨包可见/可预填、非必做点不进分母、项目重命名
 #
 # 用独立的一次性项目做，不触碰上面已冻结并跑完 C0-C6 的 $ArchiveId。
@@ -818,5 +859,5 @@ Assert-NotContains $out '待填 0 项' '不给 --decision 时不打印单点小�
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> Phase 2 诚实空版图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
 exit 0

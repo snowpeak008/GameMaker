@@ -8,6 +8,7 @@ members = [
     "crates/adm4-spec",
     "crates/adm4-authoring",
     "crates/adm4-pipeline",
+    "crates/adm4-build",
     "crates/adm4-archive",
     "crates/adm4-ai",
     "crates/adm4-app",
@@ -36,6 +37,7 @@ adm4-template = { path = "crates/adm4-template" }
 adm4-spec = { path = "crates/adm4-spec" }
 adm4-authoring = { path = "crates/adm4-authoring" }
 adm4-pipeline = { path = "crates/adm4-pipeline" }
+adm4-build = { path = "crates/adm4-build" }
 adm4-archive = { path = "crates/adm4-archive" }
 adm4-ai = { path = "crates/adm4-ai" }
 adm4-app = { path = "crates/adm4-app" }

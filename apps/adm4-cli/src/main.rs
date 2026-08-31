@@ -426,6 +426,10 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             print_pipeline(&state);
             Ok(())
         }
+        (Some("build"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            build_command(&services, sub, &remaining)
+        }
         (Some("sdk"), sub) => {
             let remaining: Vec<&str> = rest.collect();
             sdk_command(&services, sub, &remaining)
@@ -456,6 +460,105 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
                 "未知命令（上方为可用命令，子命令加 --help 查看中文详情）",
             ))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// build 子命令组：Phase 2 构建产线（P0-P5）
+//
+// 与 pipeline 组同构（run / status / confirm / rerun），因此两组的参数位置与回执形态
+// 一致；差别只在版图（P0-P5）与「本波执行器尚未实现」这条如实结论上。
+// ---------------------------------------------------------------------------
+
+fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("plan") => {
+            for stage in services.build_plan()? {
+                println!(
+                    "{}  {}  依赖 {}",
+                    stage.stage_id,
+                    stage.name,
+                    if stage.depends_on.is_empty() {
+                        "（无）".to_string()
+                    } else {
+                        stage.depends_on.join("/")
+                    }
+                );
+                println!("    摘要：{}", stage.summary);
+                println!("    产出：{}", join_or_none(&stage.produces));
+                println!("    消费：{}", join_or_none(&stage.consumes));
+                if let Some(note) = &stage.pending_note {
+                    println!("    执行器：{note}");
+                }
+            }
+            Ok(())
+        }
+        Some("run") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let from = flag_value(args, "--from").unwrap_or("P0");
+            let to = flag_value(args, "--to").unwrap_or("P5");
+            let outcome = services.build_run_with_cancel(
+                archive_id,
+                from,
+                to,
+                &adm4_pipeline::CancelSignal::never(),
+            )?;
+            if let Some(cancelled_at) = &outcome.cancelled_at {
+                println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
+            }
+            print_build(&outcome.state);
+            Ok(())
+        }
+        Some("status") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            print_build(&services.build_status(archive_id)?);
+            Ok(())
+        }
+        Some("rerun") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let stage = required(args.get(1).copied(), "重跑起点阶段")?;
+            let to = flag_value(args, "--to").unwrap_or("P5");
+            let outcome = services.build_rerun(archive_id, stage, to)?;
+            print_reset(&outcome.reset);
+            if let Some(cancelled_at) = &outcome.cancelled_at {
+                println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
+            }
+            print_build(&outcome.state);
+            Ok(())
+        }
+        Some("confirm") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let stage = required(args.get(1).copied(), "阶段")?;
+            let actor = required(args.get(2).copied(), "确认人")?;
+            let note = args.get(3).copied().unwrap_or("");
+            print_build(&services.build_confirm(archive_id, stage, actor, note)?);
+            Ok(())
+        }
+        _ => {
+            println!("{BUILD_HELP}");
+            Err(Adm4Error::invalid_input(
+                "未知 build 子命令（可用：plan / run / status / rerun / confirm）",
+            ))
+        }
+    }
+}
+
+/// 逐段打印 Phase 2 状态；段清单来自注册表，CLI 不写死 P0-P5。
+fn print_build(state: &adm4_pipeline::PipelineRunState) {
+    for stage in adm4_pipeline::phase2_registry() {
+        println!(
+            "{}: {}",
+            stage.id,
+            render_status(&state.stage_status(&stage.id))
+        );
+    }
+}
+
+fn join_or_none(items: &[String]) -> String {
+    if items.is_empty() {
+        "（无）".to_string()
+    } else {
+        items.join("、")
     }
 }
 
@@ -1386,6 +1489,7 @@ fn print_help(args: &[String]) {
         Some("authoring") => println!("{AUTHORING_HELP}"),
         Some("freeze") => println!("{FREEZE_HELP}"),
         Some("pipeline") => println!("{PIPELINE_HELP}"),
+        Some("build") => println!("{BUILD_HELP}"),
         Some("sdk") => println!("{SDK_HELP}"),
         Some("change") => println!("{CHANGE_HELP}"),
         Some("deliver") => println!("{DELIVER_HELP}"),
@@ -1398,7 +1502,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注]（Phase 2 构建产线）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -1551,6 +1655,42 @@ const PIPELINE_HELP: &str = r#"流水线（pipeline）——C0-C6 分阶段推�
 说明：
   - 「停止运行」是段边界粒度的协作式取消，面向长时运行的图形界面
     （AppServices::pipeline_run_with_cancel）。CLI 是单次前台运行，不提供取消入口。"#;
+
+const BUILD_HELP: &str = r#"构建产线（build）——Phase 2 的 P0-P5，语义与 pipeline 组同构
+
+前置：项目已冻结，且该冻结版本的 C0 规格编译产物在案（Phase 2 一切派生自 GameSpec）。
+      C0 未跑时本组命令一律非零退出并说明原因，不会就地重编一份规格（那是第二真源）。
+
+当前实现进度：**P0-P5 的执行器尚未实现**（本波只建成治理骨架与插件框架）。
+      因此 build run 会在第一段如实停下，打印「阻塞：待 G? 实现：…」——
+      这是如实结论，不是命令出错；要看每段在等什么用 build plan。
+
+用法：
+  adm4 build plan
+      打印 Phase 2 版图（只读）：每段的依赖、产出与消费的制品、执行器待哪一波实现。
+      制品依赖图与阶段依赖声明的自洽性在这里顺带校验（成环/悬空消费会非零退出）。
+
+  adm4 build run <项目存档id> [--from P0] [--to P5]
+      基于最近冻结版本运行构建产线（默认 P0→P5），遇阻塞/失败/人工门停下。
+      已成功的阶段直接跳过（断点续跑）；要重做已成功的阶段请用 build rerun。
+      结束后打印 P0-P5 各阶段状态：待运行/运行中/成功/失败/阻塞/等待人工确认。
+
+  adm4 build rerun <项目存档id> <重跑起点阶段> [--to P5]
+      强制重跑：先把起点段**及其全部下游段**的运行状态与已落盘产物一并作废，再向后跑。
+      重置范围内已通过的人工门确认一并作废、必须重新署名确认（R3）；
+      作废明细逐条打印并进运行日志。区间/阶段名不合法时一份产物都不会被动。
+
+  adm4 build status <项目存档id>
+      查询各阶段状态（只读）。
+
+  adm4 build confirm <项目存档id> <阶段> <确认人> [备注]
+      人工确认指定构建阶段的人工门（如资产预算门、proof 裁决门）。
+      确认人必须署名（R3），且该段必须确实停在等待人工确认状态。
+
+说明：
+  - 构建产物落在存档的 build/v{N} 下，与 Phase 1 的 pipeline/v{N} 互不干扰，各有各的运行状态。
+  - 「停止运行」是段边界粒度的协作式取消，面向图形界面（AppServices::build_run_with_cancel）；
+    CLI 是单次前台运行，不提供取消入口（与 pipeline 组同）。"#;
 
 const SDK_HELP: &str = r#"SDK 知识库（sdk）——资源登记 + 三态审批流
 
