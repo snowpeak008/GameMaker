@@ -61,6 +61,7 @@ fn engine() -> AuthoringEngine {
             pack_version: "0.1.0".into(),
             display_name: "豁免测试包".into(),
             reference_games: vec!["虚构甲".into(), "虚构乙".into(), "虚构丙".into()],
+            profile_points: Vec::new(),
             cardinality_expectations: Default::default(),
             consistency_rules: Vec::new(),
             nodes: Vec::new(),
@@ -302,4 +303,79 @@ fn node_notes_are_keyed_by_declared_nodes_only() {
     // 空串 = 清除该条（不留空字符串垃圾）。
     engine.set_node_risk_note("vision", "  ").unwrap();
     assert!(engine.state().node_risk_notes.is_empty());
+}
+
+/// 工作台重置（F4b-B）：清空创作态并逐项计数；署名与理由双必填（R3）；
+/// 已冻结版本计数与项目身份原样保留。
+#[test]
+fn workbench_reset_clears_authoring_state_and_counts_what_it_cleared() {
+    let mut engine = engine();
+    engine
+        .select_option("u.vision", "a", Provenance::UserManual)
+        .unwrap();
+    engine
+        .set_parameters("u.vision", adm4_decision::ParameterValues::None)
+        .unwrap();
+    engine.confirm_selection("u.vision").unwrap();
+    engine
+        .set_not_applicable("u.scope", "out_of_scope", "本期不做", "张三")
+        .unwrap();
+    engine
+        .set_node_design_note("vision", "愿景以守护叙事为主")
+        .unwrap();
+    engine
+        .set_node_risk_note("vision", "叙事资源投入尚未评估")
+        .unwrap();
+    engine.mark_frozen();
+    let revision_before = engine.state().revision;
+
+    // R3：署名或理由缺一，重置一律不执行（数据一字不动）。
+    for (actor, note) in [("   ", "返工"), ("张三", "\t ")] {
+        let error = engine
+            .reset_workbench(actor, note)
+            .expect_err("缺署名或缺理由必须被拒");
+        assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::InvalidInput);
+    }
+    assert_eq!(engine.state().selections.len(), 1, "被拒的重置不许动数据");
+    assert_eq!(engine.state().not_applicable.len(), 1);
+
+    let report = engine
+        .reset_workbench(" 张三 ", " 方向推翻，创作重来 ")
+        .expect("署名与理由齐备应通过");
+    assert_eq!(report.actor, "张三");
+    assert!(!report.at.is_empty());
+    assert_eq!(report.cleared_selections, 1);
+    assert_eq!(report.cleared_exemptions, 1);
+    assert_eq!(report.cleared_node_design_notes, 1);
+    assert_eq!(report.cleared_node_risk_notes, 1);
+    assert!(!report.is_noop());
+    assert!(
+        report.summary().contains("1 个决策点选择"),
+        "{}",
+        report.summary()
+    );
+
+    let state = engine.state();
+    assert!(state.selections.is_empty());
+    assert!(state.not_applicable.is_empty());
+    assert!(state.node_design_notes.is_empty());
+    assert!(state.node_risk_notes.is_empty());
+    assert_eq!(state.project_name, "豁免项目", "项目身份不变");
+    assert_eq!(
+        state.frozen_versions, 1,
+        "已冻结版本是只增不改的历史，重置不得抹掉（D4）"
+    );
+    assert!(state.revision > revision_before, "重置也是一次变更");
+    let completeness = engine.completeness();
+    assert_eq!(completeness.done, 0, "回到一个都没答");
+    assert_eq!(
+        completeness.total, 2,
+        "分母仍是两个适用点：豁免被清除后 u.scope 重回分母，重置不改变分母口径"
+    );
+
+    // 幂等：再重置一次什么都没有可清。
+    let again = engine
+        .reset_workbench("张三", "确认已清空")
+        .expect("重复重置合法");
+    assert!(again.is_noop());
 }

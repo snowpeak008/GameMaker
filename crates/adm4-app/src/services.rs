@@ -1,41 +1,65 @@
-use crate::config::{AppConfig, load_config, load_named_secrets};
+use crate::change::{ChangeLog, ChangeRequest, ChangeStatus};
+use crate::config::{AppConfig, load_config, load_named_secrets, save_config, save_named_secret};
+use crate::deliverable::DeliverableManifest;
+use crate::pipeline_artifact::StageArtifactView;
 use crate::runlog::RunLog;
-use adm4_ai::{AiProvider, OpenAiCompatibleProvider, SecretRef};
+use crate::sdk::{SdkKnowledgeBase, SdkSnapshot};
+use adm4_ai::{AiProvider, AiRequest, HttpProviderConfig, OpenAiCompatibleProvider, SecretRef};
 use adm4_archive::{
     ArchiveLock, ArchiveManifest, ArchiveStore, DataRoot, export_package, import_package,
 };
 use adm4_authoring::{
     AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, GateFinding,
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
-    evaluate_freeze_gates, execute_freeze, run_red_team,
+    WorkbenchResetReport, evaluate_freeze_gates, execute_freeze, run_red_team,
 };
-use adm4_contracts::SkinScanner;
+use adm4_contracts::{SkinScanner, normalize_skin_word};
 use adm4_decision::{
-    DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress, ParameterValues,
-    PointApplicability, PointRequirement, ProgressCounts, SelectionMode, check_row_references,
-    counts_toward_completeness,
+    DecisionPoint, DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress,
+    ParameterValues, PointApplicability, PointRequirement, ProgressCounts, SelectionMode,
+    check_row_references, counts_toward_completeness,
 };
 use adm4_foundation::{
-    Adm4Error, Adm4Result, ensure_dir, ensure_within_root, new_id, read_json_file, write_json_file,
+    Adm4Error, Adm4Result, UtcTimestamp, ensure_dir, ensure_within_root, new_id, read_json_file,
+    write_json_file,
 };
-use adm4_pipeline::{ArtifactStore, PipelineRunState, PipelineRunner, RunnerContext};
+use adm4_pipeline::{
+    ArtifactStore, CancelSignal, PipelineRerunOutcome, PipelineRunOutcome, PipelineRunState,
+    PipelineRunner, RunnerContext,
+};
 use adm4_space::{DesignSpace, DesignSpaceRoot, load_design_space};
 use adm4_template::{
     Certification, CrossCheckReport, CrossCheckService, EvidenceCandidate, EvidenceQuery,
-    EvidenceSearchChannel, FileCorpusChannel, MappingService, Template, TemplateLibrary,
-    load_skin_wordlist,
+    EvidenceSearchChannel, FileCorpusChannel, MappingService, Template, TemplateAnswer,
+    TemplateLibrary, TemplateOrigin, TemplateSelectedOption, load_skin_wordlist,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// 应用服务门面：GUI/CLI 的唯一入口。
 pub struct AppServices {
     pub data_root: DataRoot,
     pub archives: ArchiveStore,
-    pub config: AppConfig,
     pub log: RunLog,
+    /// 运行期可热更新的配置（内部 `RwLock`）。
+    ///
+    /// 为什么要热更新：桌面端允许运行期改 AI 配置，而 `open` 时的快照改不了，
+    /// 用户会看到「已保存」却仍旧 blocked——那正是 R7 禁止的「显示成功而实际没生效」。
+    /// F4c 的绕过办法是每次 AI 动作重开一份门面（顺带丢掉设计空间缓存），
+    /// 这里给出正规通道：[`AppServices::reload_config`] / [`AppServices::set_ai_provider`]。
+    ///
+    /// 为什么选 `RwLock` 而不是「每次从磁盘现读」：现读会让每次 AI 动作都多一次文件 IO
+    /// 与一次 JSON 解析，且「当前生效配置」变成没有单一真相（两次现读之间可能不同，
+    /// 一次运行里前后不一致却查不出来）。锁内一份快照 + 显式 reload，语义清楚可测。
+    config: RwLock<AppConfig>,
+    /// 设计空间根：**进程期不变量**，不参与热更新。
+    ///
+    /// 它是 `space_root` / `templates` / `space_cache` 三者的锚，运行期换掉等于把
+    /// 已打开的项目悄悄指到另一份清单上（缓存里还留着旧空间）。因此 `reload_config`
+    /// 遇到它被改动会显式报错要求重启，而不是装作生效。
+    design_space_root: String,
     space_root: DesignSpaceRoot,
     templates: TemplateLibrary,
     /// 已装配设计空间的进程内缓存，键 = `pack_id`。
@@ -58,18 +82,86 @@ impl AppServices {
             None => DataRoot::default_at_cwd()?,
         };
         let config = load_config(&data_root)?;
-        let space_root = DesignSpaceRoot::new(&config.design_space_root);
-        let templates = TemplateLibrary::new(&config.design_space_root);
+        let design_space_root = config.design_space_root.clone();
+        let space_root = DesignSpaceRoot::new(&design_space_root);
+        let templates = TemplateLibrary::new(&design_space_root);
         let log = RunLog::new(&data_root);
         Ok(Self {
             archives: ArchiveStore::new(data_root.clone()),
             data_root,
-            config,
+            config: RwLock::new(config),
             log,
+            design_space_root,
             space_root,
             templates,
             space_cache: Mutex::new(BTreeMap::new()),
         })
+    }
+
+    // ------------------------------------------------------------------
+    // 配置（运行期热更新）
+    // ------------------------------------------------------------------
+
+    /// 当前生效配置的快照（克隆，调用方随便持有多久都不会看到半改状态）。
+    pub fn config(&self) -> Adm4Result<AppConfig> {
+        Ok(self.read_config()?.clone())
+    }
+
+    /// 设计空间根（进程期不变量，无需加锁）。
+    pub fn design_space_root(&self) -> &str {
+        &self.design_space_root
+    }
+
+    /// 从磁盘重读 `config/app.json` 并替换当前生效配置。
+    ///
+    /// 用于「用户在别处（手改文件 / 另一个进程）改了配置，界面点刷新」。
+    /// `design_space_root` 被改动时**显式报错**而不静默沿用旧值：那是进程期不变量，
+    /// 装作生效会让人以为切换成功（而缓存里还是旧空间），需要重启才能生效。
+    pub fn reload_config(&self) -> Adm4Result<AppConfig> {
+        let fresh = load_config(&self.data_root)?;
+        if fresh.design_space_root != self.design_space_root {
+            return Err(Adm4Error::blocked(format!(
+                "config/app.json 的 design_space_root 已从 {} 改为 {}：\
+                 设计空间根是进程期不变量（决策图与模板库缓存都锚在它上面），请重启应用后生效",
+                self.design_space_root, fresh.design_space_root
+            )));
+        }
+        let mut guard = self.write_config()?;
+        *guard = fresh.clone();
+        Ok(fresh)
+    }
+
+    /// 设置（或以 `None` 清空）激活的 AI Provider：落盘 `config/app.json` **并**更新内存配置。
+    ///
+    /// 桌面端与 CLI 一律走这里，不再各自 `load_config` → 改 → `save_config`：
+    /// 那样磁盘变了而门面里的快照没变，紧接着的 AI 动作仍按旧配置跑。
+    pub fn set_ai_provider(&self, provider: Option<HttpProviderConfig>) -> Adm4Result<()> {
+        let mut guard = self.write_config()?;
+        let mut updated = guard.clone();
+        updated.ai_provider = provider;
+        save_config(&self.data_root, &updated)?;
+        let message = match &updated.ai_provider {
+            Some(config) => format!(
+                "AI Provider 配置更新：{}（模型 {}，密钥引用 {}）",
+                config.provider_id, config.model, config.api_key_ref
+            ),
+            None => "AI Provider 配置已清空：AI 相关功能将显式 blocked（无兜底）".to_string(),
+        };
+        *guard = updated;
+        drop(guard);
+        self.log.append("ai", &message)
+    }
+
+    fn read_config(&self) -> Adm4Result<RwLockReadGuard<'_, AppConfig>> {
+        self.config
+            .read()
+            .map_err(|error| Adm4Error::internal(format!("配置锁被污染：{error}")))
+    }
+
+    fn write_config(&self) -> Adm4Result<RwLockWriteGuard<'_, AppConfig>> {
+        self.config
+            .write()
+            .map_err(|error| Adm4Error::internal(format!("配置锁被污染：{error}")))
     }
 
     // ------------------------------------------------------------------
@@ -111,16 +203,96 @@ impl AppServices {
         &self.templates
     }
 
-    /// 换皮扫描词表：全局词表文件 + 品类包参考游戏名。
-    pub fn skin_scanner(&self, space: &DesignSpace) -> Adm4Result<SkinScanner> {
-        let wordlist_path = self.skin_wordlist_path();
-        let mut words = load_skin_wordlist(&wordlist_path)?.words;
+    /// 换皮扫描词表 + **当前项目自身名的豁免**（R5）。
+    ///
+    /// 词表是全局的：任何模板认证入库都会登记它的 `game_name`/`aliases`，其中包括
+    /// 「本项目导出」的模板——那登记的是某个项目自己的名字。对别的项目而言必须拦
+    /// （B 的产物出现 A 的名字 = 抄 A），对 A 自己必须放行（C0 文档标题就是项目名）。
+    ///
+    /// # 豁免作用域（F4e 收窄后的完整口径）
+    ///
+    /// 一个词被豁免，必须**同时**满足：
+    /// 1. 归一化（trim + 小写）后与 `project_name` **整词相等**；
+    /// 2. 它在全库模板中的登记来源**有且只有** `TemplateOrigin::ProjectExport`
+    ///    且 `source_archive_id == archive_id`——也就是「本存档自己导出的模板」。
+    ///
+    /// 因此下列情形一律**不豁免**：词条另有逆向（`Reverse`）或批量迁移（`BulkMigration`）
+    /// 来源登记（即使字面与项目名逐字相同）；词条来自品类包 `reference_games`；词条只由
+    /// **别的**存档导出的模板登记；词条压根不在词表里（无可豁免）。
+    ///
+    /// F4d 的旧口径是「按词面无条件剔除当前项目名」，留下一条缝：项目取名恰好等于某个
+    /// 逆向外部游戏名（如项目就叫「Kingdom Rush」）时，那个外部名对该项目整体失效。
+    /// 收窄后这条缝关闭，代价是同名项目会被自己的名字拦下——那是可见、可改名的
+    /// fail-closed 方向，而误豁免是静默放过换皮。
+    ///
+    /// 别名同样不豁免（别名是作者另起的词，出现在自己产物里说明词表登记过宽，应当被看见），
+    /// 也不做前缀/子串豁免。
+    pub fn skin_scanner_for_project(
+        &self,
+        space: &DesignSpace,
+        archive_id: &str,
+        project_name: &str,
+    ) -> Adm4Result<SkinScanner> {
+        let words = self.skin_words(space)?;
+        let exemptions =
+            self.skin_exemptions_for_project(space, archive_id, project_name, &words)?;
+        Ok(SkinScanner::with_exemptions(words, exemptions))
+    }
+
+    /// 豁免集合的唯一判定点（口径见 [`Self::skin_scanner_for_project`]）。
+    ///
+    /// 先做「项目名压根不在生效词表里」的快路径：这是绝大多数项目的常态（没导出过模板），
+    /// 此时无词可豁免，也就不必去翻模板库——溯源要读全部模板文件，内置库有十几 MB。
+    fn skin_exemptions_for_project(
+        &self,
+        space: &DesignSpace,
+        archive_id: &str,
+        project_name: &str,
+        words: &[String],
+    ) -> Adm4Result<Vec<String>> {
+        let normalized = normalize_skin_word(project_name);
+        if normalized.is_empty() {
+            return Ok(Vec::new());
+        }
+        if !words
+            .iter()
+            .any(|word| normalize_skin_word(word) == normalized)
+        {
+            return Ok(Vec::new());
+        }
+        // 品类包 reference_games 登记的词是外部游戏名，项目叫什么都不豁免
+        // （它们不来自模板库，溯源查不到登记，必须在这里单独拦住）。
+        if space
+            .skin_words()
+            .iter()
+            .any(|word| normalize_skin_word(word) == normalized)
+        {
+            return Ok(Vec::new());
+        }
+        let registrations = self.templates.skin_word_registrations(&normalized)?;
+        // 空登记 = 词在表里但查不到出处（登记它的模板已被删）→ 不豁免（fail-closed）。
+        if !registrations.is_empty()
+            && registrations
+                .iter()
+                .all(|registration| registration.is_export_of(archive_id))
+        {
+            return Ok(vec![project_name.to_string()]);
+        }
+        Ok(Vec::new())
+    }
+
+    /// 生效换皮词表（全局词表文件 + 品类包参考游戏名），未做任何豁免。
+    ///
+    /// 只用于**查看**词表（体检/调试）。没有对应的「无豁免扫描器」构造入口是故意的：
+    /// 每个扫描点都必须说清自己在扫谁的产物，否则项目会被自己的名字拦住（F4d 之前的坑）。
+    pub fn skin_words(&self, space: &DesignSpace) -> Adm4Result<Vec<String>> {
+        let mut words = load_skin_wordlist(&self.skin_wordlist_path())?.words;
         words.extend(space.skin_words());
-        Ok(SkinScanner::new(words))
+        Ok(words)
     }
 
     pub fn skin_wordlist_path(&self) -> PathBuf {
-        Path::new(&self.config.design_space_root).join("skin_wordlist.json")
+        Path::new(&self.design_space_root).join("skin_wordlist.json")
     }
 
     // ------------------------------------------------------------------
@@ -182,6 +354,21 @@ impl AppServices {
 
     pub fn project_list(&self) -> Adm4Result<Vec<ArchiveManifest>> {
         self.archives.list_archives()
+    }
+
+    /// 存档体检（只诊断不修复）：manifest 可读、内容指纹与实际内容一致。
+    ///
+    /// 逻辑本来只长在 CLI 里，桌面端因此没有体检入口。上提到门面后两端共用同一份判定，
+    /// 呈现层只负责把 `problems` 逐条画出来、按 `healthy` 决定退出码/提示色。
+    /// 存档不存在时 manifest 不可读 → 也是一条 problem（而不是抛错），
+    /// 与「体检要报告问题、不要自己失败」的语义一致。
+    pub fn project_doctor(&self, archive_id: &str) -> Adm4Result<ProjectDoctorReport> {
+        let problems = self.archives.doctor(archive_id)?;
+        Ok(ProjectDoctorReport {
+            archive_id: archive_id.to_string(),
+            healthy: problems.is_empty(),
+            problems,
+        })
     }
 
     pub fn load_authoring_state(&self, archive_id: &str) -> Adm4Result<AuthoringState> {
@@ -295,22 +482,52 @@ impl AppServices {
         Ok(report)
     }
 
+    /// 工作台重置：清空创作选择，保留项目与已冻结历史（二版 `reset-design-workbench`）。
+    ///
+    /// 清空/保留的确切范围见 [`AuthoringEngine::reset_workbench`]。走既有 `with_project`
+    /// 事务（持锁 → 草稿 → 变更 → 原子提交），因此中途失败不会留下半清空的项目。
+    /// `actor` 与 `note` 双必填（R3）；清空计数与署名逐条进运行日志。
+    pub fn project_reset_workbench(
+        &self,
+        archive_id: &str,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<WorkbenchResetReport> {
+        let report = self.with_project(archive_id, |engine| engine.reset_workbench(actor, note))?;
+        self.log.append(
+            "project",
+            &format!(
+                "项目 {archive_id} 工作台重置（署名 {}）：{}；已冻结版本与流水线产物保留",
+                report.actor,
+                report.summary()
+            ),
+        )?;
+        self.log.append(
+            "project",
+            &format!("项目 {archive_id} 工作台重置理由：{}", note.trim()),
+        )?;
+        Ok(report)
+    }
+
     pub fn export_project(&self, archive_id: &str, output: &Path) -> Adm4Result<usize> {
         export_package(&self.archives.content_dir(archive_id), output)
     }
 
     pub fn import_project(&self, package: &Path, project_name: &str) -> Adm4Result<String> {
+        // 归一化名先于建档：空白名在导入前就被拒，manifest 与创作态用同一份规范名。
+        let normalized = AuthoringEngine::normalize_project_name(project_name)?;
         let session_id = new_id("session");
         self.archives.create_draft(&session_id, None)?;
         let content = self.archives.draft_content_dir(&session_id);
         import_package(package, &content)?;
-        let archive_id = self
-            .archives
-            .commit_draft(&session_id, project_name, None)?;
-        self.log.append(
-            "project",
-            &format!("导入项目 {project_name} → {archive_id}"),
-        )?;
+        let archive_id = self.archives.commit_draft(&session_id, &normalized, None)?;
+        // 包内 authoring_state.json 带的是导出方项目名；这里把创作态项目名归一回写，
+        // 消除「manifest 名 vs 创作态名」双真相（否则 workbench 摘要与 project list 会各说各话）。
+        self.with_project_named(&archive_id, Some(&normalized), |engine| {
+            engine.set_project_name(&normalized)
+        })?;
+        self.log
+            .append("project", &format!("导入项目 {normalized} → {archive_id}"))?;
         Ok(archive_id)
     }
 
@@ -520,19 +737,40 @@ impl AppServices {
         Ok(views)
     }
 
-    /// 项目画像卡片：L0/L1 已确认决策点 → 「决策点提问 + 已选选项名」条目。
+    /// 项目画像卡片：取点清单里的已确认决策点 → 「决策点提问 + 已选选项名」条目。
     ///
     /// 二版的画像六字段在四版不再单独存一份数据（那会与决策点重复存储、双向同步），
-    /// 而是从 L0/L1 决策点聚合出来：字段集合由清单决定，代码里没有任何硬编码字段名。
+    /// 而是从决策点聚合出来：字段集合由清单决定，代码里没有任何硬编码字段名。
+    ///
+    /// 取点口径：品类包声明了 `profile_points` 就按它取（顺序即展示顺序），否则回退
+    /// 「L0/L1 全取」。为什么需要显式清单——二版画像六字段里的「美术风格」「目标用户」
+    /// 落在 L3/L4 的检查单点上，按层级过滤永远上不了卡；而改那些点的层级会连带动完成度
+    /// 分母。清单是**纯展示层**的取点，不参与 `requirement`/适用性/完备度的任何判定。
+    ///
+    /// 未确认的提案/预填一律不上卡（与完成度口径一致）；清单里尚未作答的点自然缺席。
     pub fn project_profile(&self, archive_id: &str) -> Adm4Result<ProjectProfile> {
         let engine = self.open_engine(archive_id)?;
         let state = engine.state();
         let space = engine.space();
+        let declared = &space.pack.profile_points;
+        // 清单非空 → 按清单顺序；为空 → 回退决策图顺序上的 L0/L1 点（旧数据零影响）。
+        let selected_points: Vec<&DecisionPoint> = if declared.is_empty() {
+            space
+                .graph
+                .points()
+                .iter()
+                .filter(|point| matches!(point.level, DesignLevel::L0 | DesignLevel::L1))
+                .collect()
+        } else {
+            // 清单 id 的存在性由 `space validate` 保证（写错的 id 装载即 fail-closed），
+            // 这里对残余的未知 id 只是跳过：它到不了运行期。
+            declared
+                .iter()
+                .filter_map(|decision_id| space.graph.point(decision_id))
+                .collect()
+        };
         let mut fields = Vec::new();
-        for point in space.graph.points() {
-            if !matches!(point.level, DesignLevel::L0 | DesignLevel::L1) {
-                continue;
-            }
+        for point in selected_points {
             let Some(selection) = state.selections.get(&point.id) else {
                 continue;
             };
@@ -690,7 +928,7 @@ impl AppServices {
         };
 
         // --- 校验：外键违规 + 冻结门预检 ---
-        let scanner = self.skin_scanner(space)?;
+        let scanner = self.skin_scanner_for_project(space, archive_id, &state.project_name)?;
         let gate_report = evaluate_freeze_gates(&engine, &scanner);
         let validation = WorkbenchValidation {
             row_reference_violations: check_row_references(
@@ -732,7 +970,11 @@ impl AppServices {
 
     pub fn freeze_check(&self, archive_id: &str) -> Adm4Result<FreezeGateReport> {
         let engine = self.open_engine(archive_id)?;
-        let scanner = self.skin_scanner(engine.space())?;
+        let scanner = self.skin_scanner_for_project(
+            engine.space(),
+            archive_id,
+            &engine.state().project_name,
+        )?;
         Ok(evaluate_freeze_gates(&engine, &scanner))
     }
 
@@ -756,12 +998,11 @@ impl AppServices {
     /// 执行冻结（全门通过才成功）；冻结产物写入 frozen/v{N}/。
     pub fn freeze_run(&self, archive_id: &str) -> Adm4Result<FrozenDesign> {
         let frozen = self.with_project(archive_id, |engine| {
-            let scanner_words = {
-                let mut words = load_skin_wordlist(&self.skin_wordlist_path())?.words;
-                words.extend(engine.space().skin_words());
-                words
-            };
-            let scanner = SkinScanner::new(scanner_words);
+            let scanner = self.skin_scanner_for_project(
+                engine.space(),
+                archive_id,
+                &engine.state().project_name,
+            )?;
             execute_freeze(engine, &scanner)
         })?;
         // 写冻结产物（在事务外补写：冻结文件本身只读追加，不影响 authoring_state 一致性）。
@@ -810,7 +1051,15 @@ impl AppServices {
     fn artifact_store(&self, archive_id: &str, version: u32) -> Adm4Result<ArtifactStore> {
         let state = self.load_authoring_state(archive_id)?;
         let space = self.load_space_shared(&state.genre_pack)?;
-        let scanner = self.skin_scanner(&space)?;
+        // C0 文档标题就是项目名：产物落盘钩子必须豁免本项目自身名，否则「另存模板 →
+        // 认证」把项目名登记进词表后，该项目自己的流水线立刻走不通（R5 豁免作用域见
+        // `skin_scanner_for_project`）。
+        //
+        // 豁免的是**冻结当时**的项目名（`frozen.project_name`）而不是创作态的当前名：
+        // 产物由冻结版本渲染，冻结后改名不影响已冻结版本，文档里写的仍是旧名。
+        // 拿当前名去豁免，改过名的项目重跑流水线就会被自己的旧名拦住。
+        let frozen_name = self.load_frozen(archive_id, version)?.project_name;
+        let scanner = self.skin_scanner_for_project(&space, archive_id, &frozen_name)?;
         let root = self
             .archives
             .content_dir(archive_id)
@@ -838,6 +1087,24 @@ impl AppServices {
         to: &str,
         provider: &dyn AiProvider,
     ) -> Adm4Result<PipelineRunState> {
+        Ok(self
+            .pipeline_run_with_cancel(archive_id, from, to, provider, &CancelSignal::never())?
+            .state)
+    }
+
+    /// `pipeline_run_with` 的可取消变体：调用方（GUI 主线程）持 `CancelSignal` 的克隆，
+    /// 工作线程把它传进来；运行器在**每个阶段开始前**检查，命中即停止推进。
+    ///
+    /// 协作式取消不打断段内正在进行的 AI 调用——被取消的那一段记为「未运行」而非失败，
+    /// 已完成段的产物与成功状态原样保留，下次照常断点续跑。
+    pub fn pipeline_run_with_cancel(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        provider: &dyn AiProvider,
+        cancel: &CancelSignal,
+    ) -> Adm4Result<PipelineRunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let frozen = self.load_frozen(archive_id, version)?;
         let space = self.load_space_shared(&frozen.genre_pack)?;
@@ -849,13 +1116,117 @@ impl AppServices {
             ai: provider,
             store: &store,
         };
-        let state = runner.run_range(&ctx, from, to)?;
+        let outcome = runner.run_range_with_cancel(&ctx, from, to, cancel)?;
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
             "pipeline",
             &format!("项目 {archive_id} v{version} 运行 {from}..{to}"),
         )?;
-        Ok(state)
+        self.log_cancellation(archive_id, version, outcome.cancelled_at.as_deref())?;
+        Ok(outcome)
+    }
+
+    /// 强制重跑（激活 Provider 版）：重置 `from` 及其全部下游后从 `from` 跑到 `to`。
+    pub fn pipeline_rerun(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+    ) -> Adm4Result<PipelineRerunOutcome> {
+        let provider = self.build_provider()?;
+        self.pipeline_rerun_with(archive_id, from, to, provider.as_ref())
+    }
+
+    pub fn pipeline_rerun_with(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        provider: &dyn AiProvider,
+    ) -> Adm4Result<PipelineRerunOutcome> {
+        self.pipeline_rerun_with_cancel(archive_id, from, to, provider, &CancelSignal::never())
+    }
+
+    /// 强制重跑指定阶段（可取消）：**连带重置该段及其全部下游**的运行状态与已落盘产物，
+    /// 然后从该段正常向后跑到 `to`。
+    ///
+    /// 为什么不能只重跑单段：下游产物是按旧契约渲染的，保留它们的「已成功」会产出
+    /// 「C2 新版 + C4 旧版」的错版文档集。重置范围内已通过的人工门（C5/C6）一并作废，
+    /// 需重新署名确认（R3：旧署名不为新产物背书）。作废明细逐条进运行日志。
+    pub fn pipeline_rerun_with_cancel(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        provider: &dyn AiProvider,
+        cancel: &CancelSignal,
+    ) -> Adm4Result<PipelineRerunOutcome> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let frozen = self.load_frozen(archive_id, version)?;
+        let space = self.load_space_shared(&frozen.genre_pack)?;
+        let store = self.artifact_store(archive_id, version)?;
+        let runner = PipelineRunner::new();
+        let ctx = RunnerContext {
+            frozen: &frozen,
+            space: &space,
+            ai: provider,
+            store: &store,
+        };
+        let outcome = runner.rerun_from(&ctx, from, to, cancel)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "pipeline",
+            &format!(
+                "项目 {archive_id} v{version} 强制重跑 {from}..{to}：{}",
+                outcome.reset.summary()
+            ),
+        )?;
+        for revoked in &outcome.reset.revoked_confirmations {
+            self.log.append(
+                "pipeline",
+                &format!(
+                    "项目 {archive_id} v{version} 阶段 {} 的人工确认（{} 于 {}）随重跑作废，需重新确认（R3）",
+                    revoked.stage_id, revoked.actor, revoked.at
+                ),
+            )?;
+        }
+        self.log_cancellation(archive_id, version, outcome.cancelled_at.as_deref())?;
+        Ok(outcome)
+    }
+
+    /// 用户取消落日志：取消不是失败，但必须在审计流里留痕，否则「为什么停在 C3」无从追查。
+    fn log_cancellation(
+        &self,
+        archive_id: &str,
+        version: u32,
+        cancelled_at: Option<&str>,
+    ) -> Adm4Result<()> {
+        let Some(stage_id) = cancelled_at else {
+            return Ok(());
+        };
+        self.log.append(
+            "pipeline",
+            &format!(
+                "项目 {archive_id} v{version} 被用户取消：停在阶段 {stage_id} 之前，该段记为未运行（非失败），已完成段的产物保留"
+            ),
+        )
+    }
+
+    /// 阶段产物查询（只读，流水线视图的「产物入口」）：给定冻结版本与阶段 id，
+    /// 返回双格式产物的存在性/路径/sha256/字节数与 `document.md` 预览文本。
+    ///
+    /// 缺文件如实标缺失（`complete=false` + `missing` 列名），不用空串兜底（R2）；
+    /// 超大文档只回传前 `DOCUMENT_PREVIEW_LIMIT_BYTES` 字节并置 `document_truncated=true`，
+    /// 而 sha256/字节数恒为整份文件的真值。
+    pub fn pipeline_artifact(
+        &self,
+        archive_id: &str,
+        version: u32,
+        stage_id: &str,
+    ) -> Adm4Result<StageArtifactView> {
+        let content = self.require_content_dir(archive_id)?;
+        let version_dir = content.join("pipeline").join(format!("v{version}"));
+        StageArtifactView::build(&version_dir, archive_id, version, stage_id)
     }
 
     pub fn pipeline_status(&self, archive_id: &str) -> Adm4Result<PipelineRunState> {
@@ -923,6 +1294,7 @@ impl AppServices {
             depth_reached: depth,
             answers: Vec::new(),
             certification: Certification::default(),
+            origin: TemplateOrigin::Reverse,
             mapping_hash: String::new(),
             crosscheck_proof: None,
         };
@@ -932,6 +1304,187 @@ impl AppServices {
             &format!("新建模板草稿 {pack_id}/{template_id}（逆向目标：{game_name}）"),
         )?;
         Ok(template)
+    }
+
+    /// 另存模板（项目 → 模板）：把当前项目**已确认**的决策点选择导出为一份模板。
+    ///
+    /// 与逆向产线的关系：本方法**不走** S1 检索 / S2 映射 / S3 交叉核验。那三步的产出是
+    /// 「外部语料 → 证据链 → 独立二次核验」，而本项目导出根本没有外部语料，跑一遍只能
+    /// 产出编造的证据。它的可信依据是「答卷里每一条都在源项目里被用户确认过」，
+    /// 因此直接落 S4 人工审核态（`reviewer` + `note` 双必填，R3），
+    /// 之后仍须由 [`AppServices::template_certify`] 认证（S5）才能预填。
+    ///
+    /// 只导出已确认的点：未确认的选择是提案/预填的半成品，把没定的东西当定论传播给
+    /// 别的项目，比这份模板缺几条更糟。多选点的全部已选选项、主选标记与参数值一并导出；
+    /// 决策点的选择理由落在答卷 `notes` 上。
+    ///
+    /// 证据字段一律留空：本项目导出没有外部来源可引，`origin` 已如实记录它来自哪个存档，
+    /// 硬塞一条 `adm4://…` 的假 URL 只会让证据链失去意义（宁缺勿造）。
+    ///
+    /// 落盘前整份模板过换皮扫描（R5）：项目里残留的参考游戏名（典型是预填未改写的
+    /// 「模板预填自 X」理由）会在这里被拦下，而不是随模板扩散到下一个项目。
+    pub fn template_export_from_project(
+        &self,
+        archive_id: &str,
+        template_id: &str,
+        game_name: &str,
+        aliases: &[String],
+        reviewer: &str,
+        note: &str,
+    ) -> Adm4Result<TemplateExportReport> {
+        let state = self.load_authoring_state(archive_id)?;
+        check_template_ref(&state.genre_pack, template_id)?;
+        let template_id = template_id.trim();
+        if template_id.is_empty() {
+            return Err(Adm4Error::invalid_input("模板 id 不能为空"));
+        }
+        // 模板展示名默认取项目名：另存出来的模板在列表里得能认出是哪个项目的定稿。
+        let game_name = match game_name.trim() {
+            "" => state.project_name.trim(),
+            explicit => explicit,
+        };
+        if game_name.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "模板展示名不能为空（项目名也为空时请显式给出）",
+            ));
+        }
+        if self.templates.get(&state.genre_pack, template_id).is_ok() {
+            return Err(Adm4Error::conflict(format!(
+                "模板 {}/{template_id} 已存在，不能覆盖（另存请换一个模板 id）",
+                state.genre_pack
+            )));
+        }
+        let space = self.load_space_shared(&state.genre_pack)?;
+
+        let mut answers = Vec::new();
+        let mut skipped_unconfirmed = 0usize;
+        let mut skipped_unknown = Vec::new();
+        let mut additional_option_count = 0usize;
+        let mut primary_marks = 0usize;
+        // 按决策图顺序导出，使同一项目两次另存出来的答卷逐字节一致（可对比、可复核）。
+        for point in space.graph.points() {
+            let Some(selection) = state.selections.get(&point.id) else {
+                continue;
+            };
+            if !selection.confirmed_by_user {
+                skipped_unconfirmed += 1;
+                continue;
+            }
+            if point.option(&selection.option_id).is_none() {
+                // 清单改过而项目里还留着旧选项：如实记账，不静默塞进模板（R2）。
+                skipped_unknown.push(format!("{}/{}", point.id, selection.option_id));
+                continue;
+            }
+            let mut additional_options = Vec::new();
+            for extra in &selection.additional_options {
+                if point.option(&extra.option_id).is_none() {
+                    skipped_unknown.push(format!("{}/{}", point.id, extra.option_id));
+                    continue;
+                }
+                additional_options.push(TemplateSelectedOption {
+                    option_id: extra.option_id.clone(),
+                    parameters: extra.parameters.clone(),
+                });
+            }
+            additional_option_count += additional_options.len();
+            let primary_option = selection.primary_option.clone();
+            if primary_option.is_some() {
+                primary_marks += 1;
+            }
+            answers.push(TemplateAnswer {
+                decision_id: point.id.clone(),
+                option_id: selection.option_id.clone(),
+                parameters: selection.parameters.clone(),
+                evidence: Vec::new(),
+                notes: selection.rationale.clone(),
+                crosscheck_agreed: None,
+                additional_options,
+                primary_option,
+            });
+        }
+        if answers.is_empty() {
+            return Err(Adm4Error::blocked(format!(
+                "项目 {archive_id} 没有任何已确认的决策点，另存模板会产出一份空答卷（跳过 {skipped_unconfirmed} 个未确认点）"
+            )));
+        }
+
+        let mut template = Template {
+            template_id: template_id.to_string(),
+            game_name: game_name.to_string(),
+            aliases: aliases.to_vec(),
+            genre_pack: state.genre_pack.clone(),
+            pack_version: space.pack.pack_version.clone(),
+            depth_reached: state.depth_profile.target,
+            answers,
+            certification: Certification::default(),
+            origin: TemplateOrigin::ProjectExport {
+                source_archive_id: archive_id.to_string(),
+                source_project_name: state.project_name.clone(),
+                exported_at: UtcTimestamp::now().to_iso8601(),
+            },
+            mapping_hash: String::new(),
+            crosscheck_proof: None,
+        };
+        template.record_project_export_review(reviewer, note)?;
+
+        // R5：落盘钩子。整份模板（含理由文本与参数）过换皮扫描，命中即拒绝落盘。
+        // 豁免本项目自身名：模板的 game_name 与 origin.source_project_name 就是项目名，
+        // 而它可能已被上一次「另存 + 认证」登记进词表——那不该拦住源项目再导一份。
+        // 豁免的成立条件见 `skin_scanner_for_project`：该词的登记来源只能是本存档的导出。
+        let scanner = self.skin_scanner_for_project(&space, archive_id, &state.project_name)?;
+        let serialized = serde_json::to_string(&template)
+            .map_err(|error| Adm4Error::internal(format!("序列化另存模板失败：{error}")))?;
+        let hits = scanner.scan(
+            &format!("{}/references/{template_id}.json", state.genre_pack),
+            &serialized,
+        );
+        if !hits.is_empty() {
+            let detail: Vec<String> = hits
+                .iter()
+                .map(|hit| format!("{} 命中 {}", hit.location, hit.matched_word))
+                .collect();
+            return Err(Adm4Error::red_line(format!(
+                "R5: 另存模板命中参考名（{} 处）：{}——请先改写项目里的相关表述再另存",
+                hits.len(),
+                detail.join("; ")
+            )));
+        }
+        self.templates.save_draft(&template)?;
+
+        let report = TemplateExportReport {
+            template_id: template.template_id.clone(),
+            genre_pack: template.genre_pack.clone(),
+            game_name: template.game_name.clone(),
+            source_archive_id: archive_id.to_string(),
+            source_project_name: state.project_name.clone(),
+            depth_reached: template.depth_reached,
+            status: format!("{:?}", template.certification.status),
+            reviewed_by: template.certification.reviewed_by.clone(),
+            exported_points: template.answers.len(),
+            exported_additional_options: additional_option_count,
+            exported_primary_marks: primary_marks,
+            skipped_unconfirmed,
+            skipped_unknown,
+        };
+        self.log.append(
+            "template",
+            &format!(
+                "项目 {archive_id} 另存模板 {}/{}：{}",
+                report.genre_pack,
+                report.template_id,
+                report.summary()
+            ),
+        )?;
+        for skipped in &report.skipped_unknown {
+            self.log.append(
+                "template",
+                &format!(
+                    "另存模板 {}/{} 跳过 {skipped}：选项已不在当前装配空间内",
+                    report.genre_pack, report.template_id
+                ),
+            )?;
+        }
+        Ok(report)
     }
 
     /// S1 语料检索：本地语料通道（D5，零网络）检索证据候选并累积进模板候选池。
@@ -1136,7 +1689,7 @@ impl AppServices {
     /// 模板候选证据池的持久化位置：`<design_space_root>/<pack>/references/.candidates/<id>.json`。
     /// 用 `.candidates` 点前缀目录避开 TemplateLibrary::list 对 references/*.json 的扫描。
     fn template_candidates_path(&self, pack_id: &str, template_id: &str) -> PathBuf {
-        Path::new(&self.config.design_space_root)
+        Path::new(&self.design_space_root)
             .join(pack_id)
             .join("references")
             .join(".candidates")
@@ -1232,9 +1785,35 @@ impl AppServices {
     // AI
     // ------------------------------------------------------------------
 
+    /// AI 体检（只诊断不修复）：能否构建出激活的 Provider、密钥能否解析。
+    ///
+    /// 本方法**不返回 Err**：「AI 不可用」是它要报告的结论，不是它自己的失败。
+    /// 判定完全复用 [`AppServices::build_provider`]（不另写一套探测逻辑，否则体检说
+    /// 可用而真调用报错，比不体检更糟）。
+    ///
+    /// **零网络**：只校验配置与密钥可解析性。因此 base_url 写错、密钥失效、模型名不存在
+    /// 时它照旧报「可用」——要判定这些必须真打一次，见 [`AppServices::ai_invoke_check`]。
+    pub fn ai_doctor(&self) -> AiDoctorReport {
+        match self.build_provider() {
+            Ok(provider) => AiDoctorReport {
+                available: true,
+                provider_id: provider.id().to_string(),
+                detail: "已配置且密钥可解析".to_string(),
+            },
+            Err(error) => AiDoctorReport {
+                available: false,
+                provider_id: String::new(),
+                detail: error.message,
+            },
+        }
+    }
+
     /// 构建激活的 AI Provider；未配置 = AiUnavailable（R7：显式失败）。
+    ///
+    /// 读的是**当前生效配置**（含运行期 `reload_config` / `set_ai_provider` 的结果），
+    /// 因此桌面端不必为了「刚改的配置能生效」重开门面。
     pub fn build_provider(&self) -> Adm4Result<Box<dyn AiProvider>> {
-        let Some(config) = &self.config.ai_provider else {
+        let Some(config) = self.read_config()?.ai_provider.clone() else {
             return Err(Adm4Error::ai_unavailable(
                 "未配置 AI Provider（config/app.json 的 ai_provider）",
             ));
@@ -1242,12 +1821,305 @@ impl AppServices {
         let secret_ref = SecretRef::parse(&config.api_key_ref)?;
         let named = load_named_secrets(&self.data_root)?;
         let api_key = secret_ref.resolve(&named)?;
-        Ok(Box::new(OpenAiCompatibleProvider::new(
-            config.clone(),
-            api_key,
-        )?))
+        Ok(Box::new(OpenAiCompatibleProvider::new(config, api_key)?))
+    }
+
+    /// 写入一条 named secret（`config/secrets.json`），供配置里的 `named:<名字>` 引用。
+    ///
+    /// **返回值与运行日志都不含密钥值**：回执只说名字与字符数，日志只记名字。
+    /// 密钥落点是数据根的 `config/`，不进存档内容树，因此不进导出包、不进内容指纹、
+    /// 不进任何报告。
+    pub fn ai_save_secret(&self, name: &str, value: &str) -> Adm4Result<String> {
+        save_named_secret(&self.data_root, name, value)?;
+        let name = name.trim();
+        self.log.append(
+            "ai",
+            &format!("写入 named secret「{name}」（值已脱敏，不入日志）"),
+        )?;
+        Ok(format!(
+            "已写入 named secret「{name}」（{} 字符，值不落日志/不进存档/不进报告）；\
+             配置里用 named:{name} 引用它",
+            value.chars().count()
+        ))
+    }
+
+    /// 已登记的 named secret 名字（不含值）。
+    pub fn ai_secret_names(&self) -> Adm4Result<Vec<String>> {
+        crate::config::list_named_secret_names(&self.data_root)
+    }
+
+    /// AI **实调用**连通性检查：真发一次最小请求，如实报告成功/失败与原因。
+    ///
+    /// 与 [`AppServices::ai_doctor`] 的分工必须说清（两端的 `--help`/UI 文案同样要写）：
+    /// - `ai_doctor` 只查「配置在不在、密钥解析得出来」，零网络。base_url 写错、
+    ///   密钥失效、模型名不存在，它一律报「可用」——这正是 R7 关心的误报；
+    /// - 本方法真打一次，因此上面那些错都会现形。
+    ///
+    /// 不返回 `Err`：「打不通」是它要报告的结论。但**绝不美化**——失败时 `succeeded=false`
+    /// 且 `detail` 是原始错误消息（不改写、不吞、不重试成功）。空应答也算失败：
+    /// 一个返回空文本的 provider 对下游没有任何用处，报「可用」等于误报。
+    pub fn ai_invoke_check(&self) -> AiInvokeCheckReport {
+        match self.build_provider() {
+            Ok(provider) => self.ai_invoke_check_with(provider.as_ref()),
+            Err(error) => AiInvokeCheckReport {
+                succeeded: false,
+                provider_id: String::new(),
+                model: String::new(),
+                response_chars: 0,
+                elapsed_ms: 0,
+                detail: error.message,
+                at: UtcTimestamp::now().to_iso8601(),
+            },
+        }
+    }
+
+    /// [`AppServices::ai_invoke_check`] 的注入版：测试传 `ScriptedProvider`（零网络）。
+    pub fn ai_invoke_check_with(&self, provider: &dyn AiProvider) -> AiInvokeCheckReport {
+        let request = AiRequest {
+            purpose: AI_INVOKE_CHECK_PURPOSE.to_string(),
+            system_prompt: "你是连通性探针。只回复两个字符：OK".to_string(),
+            user_prompt: "OK".to_string(),
+            expect_json: false,
+        };
+        let started = std::time::Instant::now();
+        let outcome = provider.invoke(&request);
+        let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        let at = UtcTimestamp::now().to_iso8601();
+        let report = match outcome {
+            Ok(response) if response.text.trim().is_empty() => AiInvokeCheckReport {
+                succeeded: false,
+                provider_id: response.provider_id,
+                model: response.model,
+                response_chars: 0,
+                elapsed_ms,
+                detail: "Provider 返回了空文本：调用链通但产出不可用，按失败报告（不美化）"
+                    .to_string(),
+                at,
+            },
+            Ok(response) => AiInvokeCheckReport {
+                succeeded: true,
+                provider_id: response.provider_id,
+                model: response.model,
+                response_chars: response.text.chars().count(),
+                elapsed_ms,
+                detail: truncate_chars(response.text.trim(), 120),
+                at,
+            },
+            Err(error) => AiInvokeCheckReport {
+                succeeded: false,
+                provider_id: provider.id().to_string(),
+                model: String::new(),
+                response_chars: 0,
+                elapsed_ms,
+                detail: error.message,
+                at,
+            },
+        };
+        // 失败也落日志：连通性检查的历史是排查「什么时候开始打不通」的唯一线索。
+        let mut report = report;
+        if let Err(error) = self.log.append(
+            "ai",
+            &format!(
+                "AI 实调用检查（{}）：{}",
+                if report.succeeded { "成功" } else { "失败" },
+                report.summary()
+            ),
+        ) {
+            // 结论已经拿到，写日志失败不该把它变成错误；但也不许静默——附在回执里说出来。
+            report
+                .detail
+                .push_str(&format!("；（注：运行日志写入失败：{}）", error.message));
+        }
+        report
+    }
+
+    // ------------------------------------------------------------------
+    // SDK 知识库（全局审批队列；构建集成留 Phase 2）
+    // ------------------------------------------------------------------
+
+    /// 审批队列快照（记录清单 + 三态计数）。
+    pub fn sdk_list(&self) -> Adm4Result<SdkSnapshot> {
+        Ok(SdkKnowledgeBase::load(&self.data_root)?.snapshot())
+    }
+
+    /// 登记一条待审 SDK 资源，返回新记录 id。
+    pub fn sdk_add(
+        &self,
+        sdk_name: &str,
+        url: &str,
+        category: &str,
+        purpose: &str,
+    ) -> Adm4Result<String> {
+        let mut base = SdkKnowledgeBase::load(&self.data_root)?;
+        let id = base.add_pending(sdk_name, url, category, purpose)?;
+        base.save(&self.data_root)?;
+        self.log
+            .append("sdk", &format!("登记 SDK 资源 {sdk_name} → {id}（待审）"))?;
+        Ok(id)
+    }
+
+    /// 批准一条待审 SDK 资源（署名 + 结论必填）。
+    pub fn sdk_approve(&self, id: &str, reviewer: &str, note: &str) -> Adm4Result<()> {
+        let mut base = SdkKnowledgeBase::load(&self.data_root)?;
+        base.approve(id, reviewer, note)?;
+        base.save(&self.data_root)?;
+        self.log
+            .append("sdk", &format!("SDK 资源 {id} 批准（署名 {reviewer}）"))
+    }
+
+    /// 拒绝一条待审 SDK 资源（署名 + 理由必填）。
+    pub fn sdk_reject(&self, id: &str, reviewer: &str, note: &str) -> Adm4Result<()> {
+        let mut base = SdkKnowledgeBase::load(&self.data_root)?;
+        base.reject(id, reviewer, note)?;
+        base.save(&self.data_root)?;
+        self.log
+            .append("sdk", &format!("SDK 资源 {id} 拒绝（署名 {reviewer}）"))
+    }
+
+    // ------------------------------------------------------------------
+    // 补充开发变更流（项目内 content/change_requests.json）
+    // ------------------------------------------------------------------
+
+    /// 解析并校验项目内容目录（不存在即 not_found，给可读错误）。
+    fn require_content_dir(&self, archive_id: &str) -> Adm4Result<PathBuf> {
+        let content = self.archives.content_dir(archive_id);
+        if !content.is_dir() {
+            return Err(Adm4Error::not_found(format!(
+                "存档 {archive_id} 不存在（可用 project list 查看现有项目）"
+            )));
+        }
+        Ok(content)
+    }
+
+    /// 变更请求清单（按登记顺序）。
+    pub fn change_list(&self, archive_id: &str) -> Adm4Result<Vec<ChangeRequest>> {
+        let content = self.require_content_dir(archive_id)?;
+        Ok(ChangeLog::load(&content)?.requests)
+    }
+
+    /// 登记一条补充开发变更请求（起草态），返回新 id。
+    pub fn change_add(
+        &self,
+        archive_id: &str,
+        title: &str,
+        description: &str,
+        requested_by: &str,
+        target_frozen_version: u32,
+    ) -> Adm4Result<String> {
+        let content = self.require_content_dir(archive_id)?;
+        let mut log = ChangeLog::load(&content)?;
+        let id = log.add(title, description, requested_by, target_frozen_version)?;
+        log.save(&content)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "change",
+            &format!("项目 {archive_id} 登记变更请求 {id}：{}", title.trim()),
+        )?;
+        Ok(id)
+    }
+
+    /// 记录影响分析：填受影响段（C0..C6）并推到「已影响分析」。
+    pub fn change_set_impact(
+        &self,
+        archive_id: &str,
+        id: &str,
+        affected_segments: &[String],
+    ) -> Adm4Result<()> {
+        let content = self.require_content_dir(archive_id)?;
+        let mut log = ChangeLog::load(&content)?;
+        log.set_impact(id, affected_segments)?;
+        log.save(&content)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "change",
+            &format!(
+                "项目 {archive_id} 变更 {id} 影响分析：{}",
+                affected_segments.join("/")
+            ),
+        )
+    }
+
+    /// 推进变更请求状态（署名 + 结论必填，线性下一步或拒绝）。
+    pub fn change_advance(
+        &self,
+        archive_id: &str,
+        id: &str,
+        target: ChangeStatus,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<()> {
+        let content = self.require_content_dir(archive_id)?;
+        let mut log = ChangeLog::load(&content)?;
+        log.advance(id, target, actor, note)?;
+        log.save(&content)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "change",
+            &format!(
+                "项目 {archive_id} 变更 {id} 推进至 {}（署名 {}）",
+                target.label_zh(),
+                actor.trim()
+            ),
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // 文档集交付打包（读 C0-C6 产物 → content/deliverable/v{N}/manifest.json）
+    // ------------------------------------------------------------------
+
+    /// 打包指定冻结版本的设计文档集：清点 C0-C6 产物、算 sha256、写交付清单。
+    /// 缺段不报错——清单标 `complete=false` 并列出缺失段。
+    pub fn deliverable_package(
+        &self,
+        archive_id: &str,
+        version: u32,
+    ) -> Adm4Result<DeliverableManifest> {
+        let content = self.require_content_dir(archive_id)?;
+        let version_dir = content.join("pipeline").join(format!("v{version}"));
+        let manifest = DeliverableManifest::build(
+            &version_dir,
+            archive_id,
+            version,
+            &UtcTimestamp::now().to_iso8601(),
+        )?;
+        let out_dir = content.join("deliverable").join(format!("v{version}"));
+        ensure_dir(&out_dir)?;
+        write_json_file(&out_dir.join("manifest.json"), &manifest)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "deliverable",
+            &format!(
+                "项目 {archive_id} v{version} 文档集打包：{}（{}/7 段齐备）",
+                if manifest.complete {
+                    "完整"
+                } else {
+                    "缺段"
+                },
+                DESIGN_STAGE_COUNT - manifest.missing_segments.len()
+            ),
+        )?;
+        Ok(manifest)
+    }
+
+    /// 只读清点：按当前流水线产物重算交付清单，不落盘（视图刷新用）。
+    pub fn deliverable_status(
+        &self,
+        archive_id: &str,
+        version: u32,
+    ) -> Adm4Result<DeliverableManifest> {
+        let content = self.require_content_dir(archive_id)?;
+        let version_dir = content.join("pipeline").join(format!("v{version}"));
+        DeliverableManifest::build(
+            &version_dir,
+            archive_id,
+            version,
+            &UtcTimestamp::now().to_iso8601(),
+        )
     }
 }
+
+/// C0-C6 设计文档段数（交付清单完整度分母）。
+const DESIGN_STAGE_COUNT: usize = 7;
 
 /// 访谈回合 DTO：`InterviewTurn` 未派生 serde，门面层包装为可序列化结构，
 /// 供 CLI/GUI 在「提案 → 用户确认」两次调用之间无损转发提案载荷。
@@ -1492,6 +2364,122 @@ pub struct TemplateCompareEntry {
     pub project_confirmed: bool,
     /// 项目选项与模板一致（项目未选时为 false）。
     pub same_option: bool,
+}
+
+/// 存档体检报告（`project doctor` 的结构化形态，CLI 与桌面端共用）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectDoctorReport {
+    pub archive_id: String,
+    /// 无任何问题（呈现层据此决定 `[OK]` 与退出码）。
+    pub healthy: bool,
+    /// 逐条问题描述（中文，可直接展示）。
+    pub problems: Vec<String>,
+}
+
+/// AI 实调用连通性检查的调用意图（进 journal / ScriptedProvider 的脚本键）。
+pub const AI_INVOKE_CHECK_PURPOSE: &str = "ai_invoke_check";
+
+/// 截断到 `limit` 个字符（按字符而非字节，避免切坏多字节字符）。
+fn truncate_chars(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
+    }
+    let head: String = text.chars().take(limit).collect();
+    format!("{head}…（已截断）")
+}
+
+/// AI 体检报告（`ai doctor` 的结构化形态）。
+///
+/// `provider_id` 在不可用时为空串而不是 `Option`：呈现层直接插值即可，
+/// 不必为了打印一行字去解包（也就不会有人在那里写 `unwrap_or`）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AiDoctorReport {
+    pub available: bool,
+    pub provider_id: String,
+    /// 可用时说明结论，不可用时是原始错误消息（不改写、不吞掉）。
+    pub detail: String,
+}
+
+/// AI 实调用连通性检查报告（`ai invoke-check` 的结构化形态）。
+///
+/// 与 [`AiDoctorReport`] 是两件事：`doctor` 查配置（零网络），本报告是「真打了一次」的结果。
+/// 失败时 `detail` 是原始错误消息，`succeeded=false`——不存在「重试到成功」或「降级为可用」
+/// 的路径（R7）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AiInvokeCheckReport {
+    pub succeeded: bool,
+    /// 失败在「Provider 都没构建出来」这一步时为空串。
+    pub provider_id: String,
+    /// 成功时为实际应答的模型名；失败时可能为空（还没走到应答）。
+    pub model: String,
+    /// 应答字符数（成功时 > 0；空应答按失败报告）。
+    pub response_chars: usize,
+    /// 本次调用耗时（毫秒，含网络往返）——超时与「慢但通」靠它区分。
+    pub elapsed_ms: u64,
+    /// 成功：应答文本摘要（截断）；失败：原始错误消息。
+    pub detail: String,
+    pub at: String,
+}
+
+impl AiInvokeCheckReport {
+    /// 一行摘要（CLI/GUI/日志共用）。
+    pub fn summary(&self) -> String {
+        if self.succeeded {
+            format!(
+                "Provider {} 模型 {} 实调用成功，{} 字符应答，耗时 {} ms：{}",
+                self.provider_id, self.model, self.response_chars, self.elapsed_ms, self.detail
+            )
+        } else if self.provider_id.is_empty() {
+            format!("未能构建 Provider，未发出请求：{}", self.detail)
+        } else {
+            format!(
+                "Provider {} 实调用失败（耗时 {} ms）：{}",
+                self.provider_id, self.elapsed_ms, self.detail
+            )
+        }
+    }
+}
+
+/// 另存模板的落地回执：导出了什么、跳过了什么、落成了什么状态。
+///
+/// 「跳过了什么」必须与「导出了什么」一样显眼：一份模板缺了 30 个未确认的点，
+/// 而使用者以为它是整卷定稿，是最容易出错的地方。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TemplateExportReport {
+    pub template_id: String,
+    pub genre_pack: String,
+    pub game_name: String,
+    pub source_archive_id: String,
+    pub source_project_name: String,
+    pub depth_reached: DesignLevel,
+    /// 落地后的认证状态（本项目导出恒为 `HumanReviewed`，还需 S5 认证才能预填）。
+    pub status: String,
+    pub reviewed_by: String,
+    /// 导出的决策点数（= 答卷条数）。
+    pub exported_points: usize,
+    /// 导出的附加已选选项数（多选点，不含首选项）。
+    pub exported_additional_options: usize,
+    /// 带主选标记的决策点数。
+    pub exported_primary_marks: usize,
+    /// 因未确认而不进模板的决策点数。
+    pub skipped_unconfirmed: usize,
+    /// 因选项已不在当前装配空间而跳过的 `决策点/选项`（R2：不静默丢弃）。
+    pub skipped_unknown: Vec<String>,
+}
+
+impl TemplateExportReport {
+    /// 一行摘要（CLI/GUI/日志共用）。
+    pub fn summary(&self) -> String {
+        format!(
+            "导出 {} 个已确认决策点（含 {} 个附加多选选项、{} 处主选），跳过未确认 {} 个、失效选项 {} 条，状态 {}",
+            self.exported_points,
+            self.exported_additional_options,
+            self.exported_primary_marks,
+            self.skipped_unconfirmed,
+            self.skipped_unknown.len(),
+            self.status
+        )
+    }
 }
 
 /// 模板对照报告（对照模式，D 侧栏数据）：模板不进项目，仅供展示参考。

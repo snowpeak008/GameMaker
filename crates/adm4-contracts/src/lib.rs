@@ -15,6 +15,6 @@ mod values;
 pub use red_lines::{
     AnchoredNarrative, CardinalityDeclaration, CardinalityRange, CategoryEvidence, Derive,
     DroppedItem, EvidencePointer, MeasuredMetric, ReviewProof, SkinHit, SkinScanner,
-    UnclassifiedItem, verify_review_batch,
+    UnclassifiedItem, normalize_skin_word, verify_review_batch,
 };
 pub use values::{MatrixCell, SpecRef, TypedValue, ValueConstraint, ValueKind};

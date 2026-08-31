@@ -10,20 +10,24 @@ slint::include_modules!();
 mod convert;
 mod view;
 
+use adm4_ai::{AiProvider, HttpProviderConfig};
 use adm4_app::{
-    AppServices, DecisionPointView, InterviewTurnDto, ProjectProfile, WorkbenchOverview,
+    AiDoctorReport, AiInvokeCheckReport, AppServices, ChangeStatus, DecisionPointView,
+    InterviewTurnDto, ProjectProfile, WorkbenchOverview,
 };
 use adm4_authoring::{AuthoringEngine, AuthoringState, InterviewProposal};
 use adm4_decision::{
     AxisRef, DesignDomain, DesignLevel, OrganizationProgress, ParameterSchema, ParameterValues,
     ParameterValues as Params, Provenance,
 };
-use adm4_foundation::{Adm4Error, Adm4Result, atomic_write};
+use adm4_foundation::{Adm4Error, Adm4ErrorKind, Adm4Result, atomic_write};
+use adm4_pipeline::{CancelSignal, PipelineRunner};
 use adm4_template::{CertificationStatus, Template};
 use slint::{Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// 结构化编辑器当前形态（按当前聚焦选项的 parameter_schema 派生，None = 走 JSON 编辑）。
 #[derive(Default, Clone, Copy, PartialEq)]
@@ -72,23 +76,33 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = MainWindow::new()?;
     let services = match AppServices::open(std::env::var("ADM4_DATA_ROOT").ok().map(PathBuf::from))
     {
-        Ok(services) => Rc::new(services),
+        Ok(services) => Arc::new(services),
         Err(error) => {
             eprintln!("启动失败：{error}");
             return Ok(());
         }
     };
     let state = Rc::new(RefCell::new(UiState::default()));
+    // 「停止运行」用的取消信号：主线程持有，工作线程持克隆（共享同一标志位）。
+    let cancel = CancelSignal::new();
 
     refresh_projects(&window, &services, &state);
     refresh_packs(&window, &services);
     refresh_logs(&window, &services, "");
+    refresh_sdk(&window, &services);
+    refresh_change(&window, &services, &state);
+    refresh_deliverable(&window, &services, &state);
     window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(None))));
+    window.set_stage_ids(ModelRc::new(VecModel::from(view::stage_ids())));
     window.set_pipeline_note(SharedString::from(view::pipeline_note()));
+    window.set_pipeline_run_hint(SharedString::from(view::pipeline_run_hint(
+        false, "C0", "C6",
+    )));
     window.set_level_brief(SharedString::from(view::level_brief(None, "")));
     window.set_autosave_text(SharedString::from(
         "事务自动保存：每次变更原子提交（无手动保存按钮）",
     ));
+    refresh_ai_panel(&window, &services);
     report(&window, Ok("就绪：请在「存档管理」新建或载入项目"));
 
     hook_project_callbacks(&window, &services, &state);
@@ -96,9 +110,280 @@ fn main() -> Result<(), slint::PlatformError> {
     hook_authoring_callbacks(&window, &services, &state);
     hook_editor_callbacks(&window, &services, &state);
     hook_interview_callbacks(&window, &services, &state);
-    hook_freeze_pipeline_callbacks(&window, &services, &state);
+    hook_freeze_pipeline_callbacks(&window, &services, &state, &cancel);
     hook_reverse_callbacks(&window, &services, &state);
+    hook_lifecycle_callbacks(&window, &services, &state);
+    hook_ai_callbacks(&window, &services);
+
+    // 运行期轮询：后端把 `StageStatus::Running` 与各段起止时刻写进 run_state.json，
+    // 不定期回读的话，「运行中」与逐段耗时要等整轮跑完才看得见（等于没有进度）。
+    // 定时器回调跑在 UI 线程上，不与工作线程共享任何 UI 句柄。
+    let progress_poll = slint::Timer::default();
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = window.as_weak();
+        progress_poll.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_secs(2),
+            move || {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                if !window.get_pipeline_running() {
+                    return;
+                }
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    return;
+                };
+                apply_pipeline_rows(&window, &services, &archive);
+            },
+        );
+    }
     window.run()
+}
+
+// ---------------------------------------------------------------------------
+// AI Provider：配置（config/app.json）+ 体检 + 按当前配置构建 Provider
+// ---------------------------------------------------------------------------
+
+/// 取一个按**当前生效配置**构建的 Provider；未配置/密钥解析不了 = Err（不兜底，R7）。
+///
+/// F4c 曾为此每次 AI 动作重开一份门面（因为 `AppServices` 的配置是 `open` 时的快照，
+/// 桌面端却允许运行期改 AI 配置，沿用旧快照会让用户看到「已保存」却仍旧 blocked——
+/// 正是 R7 禁止的「显示成功而实际没生效」）。F4d 起门面自带热更新通道
+/// （`set_ai_provider` / `reload_config`），因此这里直接调门面，不再重开
+/// （重开顺带丢掉设计空间缓存，一次交互要重新解析 4.7MB 清单）。
+fn provider_now(services: &AppServices) -> Adm4Result<Box<dyn AiProvider>> {
+    services.build_provider()
+}
+
+fn hook_ai_callbacks(window: &MainWindow, services: &Arc<AppServices>) {
+    let weak = window.as_weak();
+
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_ai_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                // 正规热更新通道：从磁盘重读并替换运行期生效配置（用户可能在别处手改了文件）。
+                let reloaded = services
+                    .reload_config()
+                    .map(|_| "已从 config/app.json 重载配置（运行期即时生效）".to_string());
+                refresh_ai_panel(&window, &services);
+                report(&window, reloaded);
+            }
+        });
+    }
+    {
+        let weak = weak.clone();
+        window.on_ai_apply_preset(move |preset_id| {
+            if let Some(window) = weak.upgrade() {
+                match adm4_ai::provider_presets()
+                    .into_iter()
+                    .find(|preset| preset.provider_id == preset_id.as_str())
+                {
+                    Some(preset) => {
+                        apply_provider_form(&window, view::provider_form(Some(&preset)));
+                        report(
+                            &window,
+                            Ok(format!(
+                                "已套用 preset {preset_id} 到表单（尚未保存；密钥引用请按实际改）"
+                            )),
+                        );
+                    }
+                    None => report::<String>(
+                        &window,
+                        Err(Adm4Error::not_found(format!("未知 preset {preset_id}"))),
+                    ),
+                }
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_ai_save(move |provider_id, base_url, model, key_ref, timeout| {
+            if let Some(window) = weak.upgrade() {
+                let result = save_ai_provider(
+                    &services,
+                    provider_id.as_str(),
+                    base_url.as_str(),
+                    model.as_str(),
+                    key_ref.as_str(),
+                    timeout.as_str(),
+                );
+                // 失败时不刷新面板：刷新会把表单回读成磁盘上的旧值，
+                // 用户刚敲的几行就没了（缺字段是最常见的失败，正需要接着改）。
+                if result.is_ok() {
+                    refresh_ai_panel(&window, &services);
+                }
+                report(&window, result);
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_ai_doctor(move || {
+            if let Some(window) = weak.upgrade() {
+                let doctor = services.ai_doctor();
+                apply_ai_doctor(&window, &doctor);
+                // 不可用不是本次操作的失败，但必须如实呈现（R7）：状态栏也写不可用。
+                report(&window, Ok(view::ai_status_text(&doctor)));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        // 实调用检查会走网络（阻塞式 HTTP，超时可达配置的 timeout_secs），
+        // 必须在工作线程里跑；回程一律 `upgrade_in_event_loop`（闭包只带 Send 数据）。
+        window.on_ai_invoke_check(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if window.get_ai_invoke_running() {
+                report::<String>(
+                    &window,
+                    Err(Adm4Error::conflict("实调用检查正在进行：请等它结束")),
+                );
+                return;
+            }
+            window.set_ai_invoke_running(true);
+            report(
+                &window,
+                Ok("已发起 AI 实调用检查（后台进行，界面保持可用）".to_string()),
+            );
+            let services = services.clone();
+            let weak_inner = window.as_weak();
+            std::thread::spawn(move || {
+                let report_data = services.ai_invoke_check();
+                let _ = weak_inner.upgrade_in_event_loop(move |window| {
+                    window.set_ai_invoke_running(false);
+                    apply_ai_invoke_check(&window, &report_data);
+                    // 打不通不是本次操作的失败，但必须如实写进状态栏（R7：不美化）。
+                    report(&window, Ok(view::ai_invoke_status_text(&report_data)));
+                });
+            });
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_ai_save_secret(move |name, value| {
+            if let Some(window) = weak.upgrade() {
+                let result = services.ai_save_secret(name.as_str(), value.as_str());
+                if result.is_ok() {
+                    // 密钥值不在界面上留驻：保存成功即清空输入框（名字留着方便对照）。
+                    window.set_ai_secret_value(SharedString::default());
+                    refresh_secret_names(&window, &services);
+                }
+                report(&window, result);
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_ai_disable(move || {
+            if let Some(window) = weak.upgrade() {
+                let result = services.set_ai_provider(None).map(|()| {
+                    "已清空 config/app.json 的 ai_provider：AI 相关功能将显式 blocked".to_string()
+                });
+                refresh_ai_panel(&window, &services);
+                report(&window, result);
+            }
+        });
+    }
+}
+
+/// 保存 AI Provider 配置：走门面的 `set_ai_provider`（同时落盘 + 更新运行期生效配置）。
+///
+/// UI 只做「必填项有没有填」的输入完整性检查（与既有「请先填写导出路径」同类）；
+/// 值是否有效（密钥引用格式、能否解析出密钥）由后端 `build_provider` 判定并原样回显。
+fn save_ai_provider(
+    services: &AppServices,
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+    api_key_ref: &str,
+    timeout_secs: &str,
+) -> Adm4Result<String> {
+    let missing =
+        view::missing_provider_fields(provider_id, base_url, model, api_key_ref, timeout_secs);
+    if !missing.is_empty() {
+        return Err(Adm4Error::invalid_input(format!(
+            "以下必填项未填写：{}",
+            missing.join("、")
+        )));
+    }
+    let timeout_secs: u64 = timeout_secs.trim().parse().map_err(|_| {
+        Adm4Error::invalid_input(format!("超时秒数「{}」不是正整数", timeout_secs.trim()))
+    })?;
+    services.set_ai_provider(Some(HttpProviderConfig {
+        provider_id: provider_id.trim().to_string(),
+        base_url: base_url.trim().to_string(),
+        model: model.trim().to_string(),
+        api_key_ref: api_key_ref.trim().to_string(),
+        timeout_secs,
+    }))?;
+    Ok(format!(
+        "已写入 config/app.json 并即时生效（Provider {}）；配置诊断见下方，\
+         要确认真能打通请点「实调用检查」",
+        provider_id.trim()
+    ))
+}
+
+/// 面板刷新：表单值与摘要读**当前生效配置**，状态条读体检结论。
+fn refresh_ai_panel(window: &MainWindow, services: &AppServices) {
+    let config = match services.config() {
+        Ok(config) => config,
+        Err(error) => {
+            report::<String>(window, Err(error));
+            return;
+        }
+    };
+    window.set_ai_presets(ModelRc::new(VecModel::from(
+        adm4_ai::provider_presets()
+            .into_iter()
+            .map(|preset| SharedString::from(preset.provider_id))
+            .collect::<Vec<_>>(),
+    )));
+    window.set_ai_config_summary(SharedString::from(view::provider_summary(
+        config.ai_provider.as_ref(),
+    )));
+    apply_provider_form(window, view::provider_form(config.ai_provider.as_ref()));
+    apply_ai_doctor(window, &services.ai_doctor());
+    refresh_secret_names(window, services);
+}
+
+/// 已登记 named secret 的名字行（只列名字，不列值）。
+fn refresh_secret_names(window: &MainWindow, services: &AppServices) {
+    match services.ai_secret_names() {
+        Ok(names) => {
+            window.set_ai_secret_names(SharedString::from(view::secret_names_text(&names)));
+        }
+        Err(error) => report::<String>(window, Err(error)),
+    }
+}
+
+fn apply_provider_form(window: &MainWindow, form: view::ProviderForm) {
+    window.set_ai_provider_id(SharedString::from(form.provider_id));
+    window.set_ai_base_url(SharedString::from(form.base_url));
+    window.set_ai_model(SharedString::from(form.model));
+    window.set_ai_key_ref(SharedString::from(form.api_key_ref));
+    window.set_ai_timeout(SharedString::from(form.timeout_secs));
+}
+
+fn apply_ai_doctor(window: &MainWindow, doctor: &AiDoctorReport) {
+    window.set_ai_available(doctor.available);
+    window.set_ai_status(SharedString::from(view::ai_status_text(doctor)));
+    window.set_ai_doctor_rows(ModelRc::new(VecModel::from(view::ai_doctor_rows(doctor))));
+}
+
+fn apply_ai_invoke_check(window: &MainWindow, report: &AiInvokeCheckReport) {
+    window.set_ai_invoke_rows(ModelRc::new(VecModel::from(view::ai_invoke_rows(report))));
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +392,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
 fn hook_project_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -169,11 +454,26 @@ fn hook_project_callbacks(
                 window.set_compare_rows(ModelRc::new(VecModel::from(Vec::<CompareRow>::new())));
                 window.set_compare_title(SharedString::default());
                 window.set_archive_panel_open(false);
+                // 上一个项目的流水线/重置/另存回执不能跟着跨项目显示。
+                window.set_artifact_stage(SharedString::default());
+                window.set_artifact_title(SharedString::default());
+                window.set_artifact_rows(ModelRc::new(VecModel::from(Vec::<TextRow>::new())));
+                window.set_artifact_doc(SharedString::default());
+                window.set_artifact_hint(SharedString::default());
+                window.set_reset_rows(ModelRc::new(VecModel::from(Vec::<TextRow>::new())));
+                window.set_rerun_armed_stage(SharedString::default());
+                window.set_reset_armed(false);
+                window.set_reset_result(SharedString::default());
+                window.set_template_export_text(SharedString::default());
+                window.set_doctor_rows(ModelRc::new(VecModel::from(Vec::<TextRow>::new())));
+                window.set_doctor_summary(SharedString::from("尚未体检"));
                 clear_interview_proposal(&window);
                 refresh_all(&window, &services, &state);
                 refresh_pipeline(&window, &services, &state);
                 refresh_interview(&window, &services, &state);
                 refresh_projects(&window, &services, &state);
+                refresh_change(&window, &services, &state);
+                refresh_deliverable(&window, &services, &state);
                 report(&window, Ok(format!("已载入项目 {archive_id}")));
             }
         });
@@ -191,6 +491,60 @@ fn hook_project_callbacks(
             }
         });
     }
+    // 工作台重置第一步：只摆出警示语，不改任何数据（破坏性操作必须二次确认）。
+    {
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_workbench_reset_arm(move || {
+            if let Some(window) = weak.upgrade() {
+                if state.borrow().current_archive.is_none() {
+                    report::<String>(
+                        &window,
+                        Err(Adm4Error::invalid_input("请先在列表里载入要重置的项目")),
+                    );
+                    return;
+                }
+                window.set_reset_result(SharedString::default());
+                window.set_reset_warning(SharedString::from(view::reset_workbench_warning()));
+                window.set_reset_armed(true);
+                report(&window, Ok("重置需二次确认：请读警示条后点「确认重置」"));
+            }
+        });
+    }
+    // 工作台重置第二步：操作人与理由必填由后端校验（R3），UI 只转发并展示拒绝原因。
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_workbench_reset(move |actor, note| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    return;
+                };
+                match services.project_reset_workbench(&archive, actor.as_str(), note.as_str()) {
+                    Ok(reset) => {
+                        window.set_reset_armed(false);
+                        window.set_reset_result(SharedString::from(view::reset_workbench_text(
+                            &reset,
+                        )));
+                        {
+                            let mut borrowed = state.borrow_mut();
+                            borrowed.current_decision = None;
+                            borrowed.current_option = None;
+                            borrowed.pending_turn = None;
+                        }
+                        clear_interview_proposal(&window);
+                        refresh_all(&window, &services, &state);
+                        refresh_interview(&window, &services, &state);
+                        refresh_logs(&window, &services, "");
+                        report(&window, Ok(reset.summary()));
+                    }
+                    // 拒绝（署名/理由缺失）时保持警示条开着，用户改完可直接重试。
+                    Err(error) => report::<String>(&window, Err(error)),
+                }
+            }
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +553,7 @@ fn hook_project_callbacks(
 
 fn hook_workbench_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -270,7 +624,7 @@ fn hook_workbench_callbacks(
 
 fn hook_authoring_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -540,7 +894,7 @@ fn export_workbench(
 
 fn hook_editor_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -652,7 +1006,7 @@ fn hook_editor_callbacks(
 /// 转换失败（表格无法解析 / JSON 非法）则停留在原模式并报错——不丢数据不吞错。
 fn toggle_advanced_mode(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
     advanced: bool,
 ) {
@@ -715,7 +1069,7 @@ fn toggle_advanced_mode(
 
 fn hook_interview_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -733,7 +1087,9 @@ fn hook_interview_callbacks(
                     );
                     return;
                 };
-                match services.interview_next(&archive) {
+                match provider_now(&services)
+                    .and_then(|provider| services.interview_next_with(&archive, provider.as_ref()))
+                {
                     Ok(turn) => show_interview_turn(&window, &services, &state, &archive, turn),
                     Err(error) => report::<String>(&window, Err(error)),
                 }
@@ -792,7 +1148,7 @@ fn hook_interview_callbacks(
 /// 展示一条访谈回合：提案暂存进 UiState，等待用户手势处置。
 fn show_interview_turn(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
     archive: &str,
     turn: InterviewTurnDto,
@@ -861,7 +1217,7 @@ fn show_interview_turn(
 /// 多选点确认后若仍缺主选，这里补一条可见提示（T9 已知缺口：访谈不代设主选）。
 fn confirm_interview_proposal(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
     params_text: &str,
 ) {
@@ -1001,8 +1357,9 @@ fn refresh_interview(window: &MainWindow, services: &AppServices, state: &Rc<Ref
 
 fn hook_freeze_pipeline_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
+    cancel: &CancelSignal,
 ) {
     let weak = window.as_weak();
 
@@ -1016,7 +1373,9 @@ fn hook_freeze_pipeline_callbacks(
                     report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
                     return;
                 };
-                let result = services.freeze_red_team(&archive);
+                let result = provider_now(&services).and_then(|provider| {
+                    services.freeze_red_team_with(&archive, provider.as_ref())
+                });
                 refresh_all(&window, &services, &state);
                 report(
                     &window,
@@ -1084,23 +1443,150 @@ fn hook_freeze_pipeline_callbacks(
             }
         });
     }
+    // 范围运行：工作线程执行，主线程保留「停止」的响应能力。
     {
         let services = services.clone();
         let state = state.clone();
         let weak = weak.clone();
-        window.on_pipeline_run(move || {
+        let cancel = cancel.clone();
+        window.on_pipeline_run_range(move |from, to| {
             if let Some(window) = weak.upgrade() {
                 let Some(archive) = state.borrow().current_archive.clone() else {
                     report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
                     return;
                 };
-                let result = services.pipeline_run(&archive, "C0", "C6");
-                refresh_pipeline(&window, &services, &state);
-                refresh_logs(&window, &services, "");
+                let (from, to) = (from.to_string(), to.to_string());
+                spawn_pipeline_job(
+                    &window,
+                    &services,
+                    &cancel,
+                    PipelineJob::Run {
+                        archive,
+                        from: from.clone(),
+                        to: to.clone(),
+                    },
+                    &from,
+                    &to,
+                );
+            }
+        });
+    }
+    // 停止：只置标志位；运行器在下一个段边界停止推进（当前段的 AI 调用仍会跑完）。
+    {
+        let weak = weak.clone();
+        let cancel = cancel.clone();
+        window.on_pipeline_stop(move || {
+            if let Some(window) = weak.upgrade() {
+                if !window.get_pipeline_running() {
+                    report::<String>(
+                        &window,
+                        Err(Adm4Error::invalid_input("当前没有正在运行的流水线")),
+                    );
+                    return;
+                }
+                cancel.cancel();
                 report(
                     &window,
-                    result.map(|_| "C0-C6 运行结束（逐段状态见列表）".to_string()),
+                    Ok("已请求停止：将在当前阶段结束后停止（当前段的 AI 调用仍会跑完），已完成段的产物保留"),
                 );
+            }
+        });
+    }
+    // 重跑第一步：只取下游清单并给出警示语，不做任何变更（二次确认后才真跑）。
+    {
+        let weak = weak.clone();
+        window.on_pipeline_rerun_arm(move |stage| {
+            if let Some(window) = weak.upgrade() {
+                match PipelineRunner::new().downstream_stages(stage.as_str()) {
+                    Ok(downstream) => {
+                        window.set_rerun_armed_stage(stage.clone());
+                        window.set_rerun_warning(SharedString::from(view::rerun_warning(
+                            stage.as_str(),
+                            &downstream,
+                        )));
+                        report(
+                            &window,
+                            Ok(format!(
+                                "重跑 {stage} 需二次确认：请读列表下方的警示条，再点「确认重跑」"
+                            )),
+                        );
+                    }
+                    Err(error) => report::<String>(&window, Err(error)),
+                }
+            }
+        });
+    }
+    // 重跑第二步：用户已确认，走 pipeline_rerun_with_cancel（重置该段及全部下游后再跑）。
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        let cancel = cancel.clone();
+        window.on_pipeline_rerun_confirm(move |stage, to| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let (stage, to) = (stage.to_string(), to.to_string());
+                window.set_rerun_armed_stage(SharedString::default());
+                window.set_reset_rows(ModelRc::new(VecModel::from(Vec::<TextRow>::new())));
+                spawn_pipeline_job(
+                    &window,
+                    &services,
+                    &cancel,
+                    PipelineJob::Rerun {
+                        archive,
+                        from: stage.clone(),
+                        to: to.clone(),
+                    },
+                    &stage,
+                    &to,
+                );
+            }
+        });
+    }
+    // 阶段产物入口：只读查询 document.md / contract.json。
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_pipeline_artifact(move |stage| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let result = services
+                    .latest_frozen_version(&archive)
+                    .and_then(|version| {
+                        services.pipeline_artifact(&archive, version, stage.as_str())
+                    });
+                match result {
+                    Ok(artifact) => {
+                        window.set_artifact_stage(stage.clone());
+                        window.set_artifact_title(SharedString::from(view::artifact_title(
+                            &artifact,
+                        )));
+                        window.set_artifact_rows(ModelRc::new(VecModel::from(
+                            view::artifact_rows(&artifact),
+                        )));
+                        window.set_artifact_doc(SharedString::from(view::artifact_document(
+                            &artifact,
+                        )));
+                        window
+                            .set_artifact_hint(SharedString::from(view::artifact_hint(&artifact)));
+                        report(
+                            &window,
+                            Ok(if artifact.complete {
+                                format!("已载入 {stage} 的产物（contract.json + document.md）")
+                            } else {
+                                format!("{stage} 产物不齐：缺 {}", artifact.missing.join("、"))
+                            }),
+                        );
+                    }
+                    Err(error) => report::<String>(&window, Err(error)),
+                }
             }
         });
     }
@@ -1156,13 +1642,156 @@ fn hook_freeze_pipeline_callbacks(
     }
 }
 
+/// 一次后台流水线作业：范围运行 / 强制重跑（重跑 = 重置该段及全部下游后再跑）。
+enum PipelineJob {
+    Run {
+        archive: String,
+        from: String,
+        to: String,
+    },
+    Rerun {
+        archive: String,
+        from: String,
+        to: String,
+    },
+}
+
+impl PipelineJob {
+    fn archive(&self) -> &str {
+        match self {
+            Self::Run { archive, .. } | Self::Rerun { archive, .. } => archive,
+        }
+    }
+}
+
+/// 作业回执：状态栏文案 + （重跑才有的）重置明细。
+struct PipelineJobDone {
+    message: String,
+    reset: Option<adm4_pipeline::StageResetReport>,
+}
+
+/// 后台跑流水线：GUI 线程只负责发起、显示运行中、接收回执。
+///
+/// 三件必须做对的事：① 同一 `CancelSignal` 复用前先 `reset()`，否则下一次运行会在第一个
+/// 段边界立刻停下；② 工作线程不碰任何 UI 句柄，回程一律走 `upgrade_in_event_loop`；
+/// ③ 「运行中」标志由主线程置、由回程清（成功与失败两条路都清），否则按钮会永久变灰。
+fn spawn_pipeline_job(
+    window: &MainWindow,
+    services: &Arc<AppServices>,
+    cancel: &CancelSignal,
+    job: PipelineJob,
+    from: &str,
+    to: &str,
+) {
+    if window.get_pipeline_running() {
+        report::<String>(
+            window,
+            Err(Adm4Error::conflict(
+                "流水线正在运行：请先等它跑完，或点「停止运行」",
+            )),
+        );
+        return;
+    }
+    cancel.reset();
+    window.set_pipeline_running(true);
+    window.set_pipeline_run_hint(SharedString::from(view::pipeline_run_hint(true, from, to)));
+    report(
+        window,
+        Ok(format!(
+            "已启动 {from} → {to}（后台运行，界面保持可用；停止请点「停止运行」）"
+        )),
+    );
+
+    let services = services.clone();
+    let cancel = cancel.clone();
+    let weak = window.as_weak();
+    let (from, to) = (from.to_string(), to.to_string());
+    let archive = job.archive().to_string();
+    std::thread::spawn(move || {
+        let outcome = run_pipeline_job(&services, &job, &cancel);
+        // 跨线程回 UI 只能走事件循环；窗口已关闭时 upgrade 失败，作业结果照旧落在日志里。
+        let _ = weak.upgrade_in_event_loop(move |window| {
+            window.set_pipeline_running(false);
+            window.set_pipeline_run_hint(SharedString::from(view::pipeline_run_hint(
+                false, &from, &to,
+            )));
+            apply_pipeline_rows(&window, &services, &archive);
+            refresh_logs(&window, &services, "");
+            match outcome {
+                Ok(done) => {
+                    if let Some(reset) = &done.reset {
+                        window.set_reset_rows(ModelRc::new(VecModel::from(
+                            view::reset_report_rows(reset),
+                        )));
+                    }
+                    report(&window, Ok(done.message));
+                }
+                Err(error) => report::<String>(&window, Err(error)),
+            }
+        });
+    });
+}
+
+fn run_pipeline_job(
+    services: &AppServices,
+    job: &PipelineJob,
+    cancel: &CancelSignal,
+) -> Adm4Result<PipelineJobDone> {
+    // AI 不可用直接上抛（R7）：不静默降级成「跳过 AI 段」。
+    let provider = provider_now(services)?;
+    match job {
+        PipelineJob::Run { archive, from, to } => {
+            let outcome =
+                services.pipeline_run_with_cancel(archive, from, to, provider.as_ref(), cancel)?;
+            Ok(PipelineJobDone {
+                message: run_message(from, to, outcome.cancelled_at.as_deref(), None),
+                reset: None,
+            })
+        }
+        PipelineJob::Rerun { archive, from, to } => {
+            let outcome = services.pipeline_rerun_with_cancel(
+                archive,
+                from,
+                to,
+                provider.as_ref(),
+                cancel,
+            )?;
+            // 回执文案取报告自带的摘要：呈现层不再自拼一份（与日志/CLI 同一口径）。
+            let reset_note = outcome.reset.summary();
+            Ok(PipelineJobDone {
+                message: run_message(from, to, outcome.cancelled_at.as_deref(), Some(&reset_note)),
+                reset: Some(outcome.reset),
+            })
+        }
+    }
+}
+
+/// 运行回执文案：被取消不是失败，必须说清停在哪、已完成段保留、可续跑。
+fn run_message(
+    from: &str,
+    to: &str,
+    cancelled_at: Option<&str>,
+    reset_note: Option<&str>,
+) -> String {
+    let head = match reset_note {
+        Some(note) => format!("强制重跑 {from} → {to}：{note}。"),
+        None => format!("{from} → {to} "),
+    };
+    match cancelled_at {
+        None => format!("{head}运行结束（逐段状态/耗时见列表）"),
+        Some(stage) => format!(
+            "{head}已按请求停止：停在阶段 {stage} 之前（该段记为未运行而非失败），已完成段的产物保留，再次运行会断点续跑"
+        ),
+    }
+}
+
 // ---------------------------------------------------------------------------
-// 模板：查看 / 预填 / 逆向维护产线五步 / 对照
+// 模板：查看 / 预填 / 另存为模板 / 逆向维护产线五步 / 对照
 // ---------------------------------------------------------------------------
 
 fn hook_reverse_callbacks(
     window: &MainWindow,
-    services: &Rc<AppServices>,
+    services: &Arc<AppServices>,
     state: &Rc<RefCell<UiState>>,
 ) {
     let weak = window.as_weak();
@@ -1302,8 +1931,10 @@ fn hook_reverse_callbacks(
                 };
                 report(
                     &window,
-                    services
-                        .template_map(&pack, &template_id)
+                    provider_now(&services)
+                        .and_then(|provider| {
+                            services.template_map_with(&pack, &template_id, provider.as_ref())
+                        })
                         .map(|count| format!("AI 映射 {count} 条答案（Draft→Mapped）")),
                 );
                 refresh_reverse(&window, &services, &state);
@@ -1319,7 +1950,9 @@ fn hook_reverse_callbacks(
                 let Some((pack, template_id)) = reverse_pair(&window, &state) else {
                     return;
                 };
-                let result = services.template_cross_check(&pack, &template_id);
+                let result = provider_now(&services).and_then(|provider| {
+                    services.template_cross_check_with(&pack, &template_id, provider.as_ref())
+                });
                 refresh_reverse(&window, &services, &state);
                 match result {
                     Ok(check) => {
@@ -1457,6 +2090,43 @@ fn hook_reverse_callbacks(
                 let result = template_prefill(&services, &state);
                 refresh_all(&window, &services, &state);
                 report(&window, result);
+            }
+        });
+    }
+    // 另存为模板（项目 → 模板）：审核人与结论必填由后端校验（R3），UI 只转发并展示拒绝原因。
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_template_export(move |template_id, game_name, aliases, reviewer, note| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let alias_list = split_list(aliases.as_str());
+                match services.template_export_from_project(
+                    &archive,
+                    template_id.as_str(),
+                    game_name.as_str(),
+                    &alias_list,
+                    reviewer.as_str(),
+                    note.as_str(),
+                ) {
+                    Ok(export) => {
+                        window.set_template_export_text(SharedString::from(
+                            view::template_export_text(&export),
+                        ));
+                        state.borrow_mut().reverse_template = Some(export.template_id.clone());
+                        refresh_reverse(&window, &services, &state);
+                        refresh_logs(&window, &services, "");
+                        report(&window, Ok(export.summary()));
+                    }
+                    Err(error) => {
+                        window.set_template_export_text(SharedString::default());
+                        report::<String>(&window, Err(error));
+                    }
+                }
             }
         });
     }
@@ -1824,6 +2494,334 @@ fn axis_label(axis: &AxisRef) -> String {
 
 fn push_table_model(window: &MainWindow, buffer: &[Vec<String>]) {
     window.set_table_rows_model(ModelRc::new(VecModel::from(view::table_model(buffer))));
+}
+
+// ---------------------------------------------------------------------------
+// T12 三视图：补充开发 / 打包 / SDK 知识库
+// ---------------------------------------------------------------------------
+
+fn hook_lifecycle_callbacks(
+    window: &MainWindow,
+    services: &Arc<AppServices>,
+    state: &Rc<RefCell<UiState>>,
+) {
+    let weak = window.as_weak();
+
+    // ---------------- SDK 知识库（全局，无需项目）----------------
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_sdk_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                refresh_sdk(&window, &services);
+                report(&window, Ok("SDK 知识库已刷新"));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_sdk_add(move |name, url, category, purpose| {
+            if let Some(window) = weak.upgrade() {
+                let result = services.sdk_add(
+                    name.as_str(),
+                    url.as_str(),
+                    category.as_str(),
+                    purpose.as_str(),
+                );
+                refresh_sdk(&window, &services);
+                report(
+                    &window,
+                    result.map(|id| format!("已登记 SDK 资源（待审）：{id}")),
+                );
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_sdk_approve(move |id, reviewer, note| {
+            if let Some(window) = weak.upgrade() {
+                let result = services.sdk_approve(id.as_str(), reviewer.as_str(), note.as_str());
+                refresh_sdk(&window, &services);
+                report(&window, result.map(|()| format!("已批准 SDK 资源 {id}")));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_sdk_reject(move |id, reviewer, note| {
+            if let Some(window) = weak.upgrade() {
+                let result = services.sdk_reject(id.as_str(), reviewer.as_str(), note.as_str());
+                refresh_sdk(&window, &services);
+                report(&window, result.map(|()| format!("已拒绝 SDK 资源 {id}")));
+            }
+        });
+    }
+
+    // ---------------- 补充开发变更流（项目内）----------------
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_change_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                refresh_change(&window, &services, &state);
+                report(&window, Ok("补充开发变更清单已刷新"));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_change_add(move |title, requester, description| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                // 参数顺序：change_add(archive, title, description, requested_by, target_frozen_version)。
+                let result = services.change_add(
+                    &archive,
+                    title.as_str(),
+                    description.as_str(),
+                    requester.as_str(),
+                    0,
+                );
+                refresh_change(&window, &services, &state);
+                report(&window, result.map(|id| format!("已登记变更请求 {id}")));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_change_impact(move |id, segments_csv| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let segments = split_list(segments_csv.as_str());
+                let result = services.change_set_impact(&archive, id.as_str(), &segments);
+                refresh_change(&window, &services, &state);
+                report(
+                    &window,
+                    result.map(|()| format!("变更 {id} 已记录影响分析")),
+                );
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_change_advance(move |id, target_token, actor, note| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let Some(target) = ChangeStatus::from_token(target_token.as_str()) else {
+                    report::<String>(
+                        &window,
+                        Err(Adm4Error::invalid_input(format!(
+                            "未知目标状态 {target_token}"
+                        ))),
+                    );
+                    return;
+                };
+                let result = services.change_advance(
+                    &archive,
+                    id.as_str(),
+                    target,
+                    actor.as_str(),
+                    note.as_str(),
+                );
+                refresh_change(&window, &services, &state);
+                report(
+                    &window,
+                    result.map(|()| format!("变更 {id} 已推进至 {}", target.label_zh())),
+                );
+            }
+        });
+    }
+
+    // ---------------- 文档集交付打包（项目内）----------------
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_deliver_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                refresh_deliverable(&window, &services, &state);
+                report(&window, Ok("交付清单已重新清点"));
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_deliver_package(move || {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let version = match services.latest_frozen_version(&archive) {
+                    Ok(version) => version,
+                    Err(error) => {
+                        report::<String>(&window, Err(error));
+                        return;
+                    }
+                };
+                let result = services.deliverable_package(&archive, version);
+                refresh_deliverable(&window, &services, &state);
+                refresh_logs(&window, &services, "");
+                report(
+                    &window,
+                    result.map(|manifest| {
+                        if manifest.complete {
+                            format!("v{version} 文档集打包完成：7/7 段齐备")
+                        } else {
+                            format!(
+                                "v{version} 文档集已打包，但缺段：{}",
+                                manifest.missing_segments.join(",")
+                            )
+                        }
+                    }),
+                );
+            }
+        });
+    }
+    // 存档体检（`project doctor` 的 GUI 入口；判定与 CLI 共用门面的同一份实现）
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_project_doctor(move || {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                match services.project_doctor(&archive) {
+                    Ok(doctor) => {
+                        window.set_doctor_rows(ModelRc::new(VecModel::from(view::doctor_rows(
+                            &doctor,
+                        ))));
+                        let summary = if doctor.healthy {
+                            "体检结论：健康（无问题）".to_string()
+                        } else {
+                            format!("体检结论：发现 {} 个问题", doctor.problems.len())
+                        };
+                        window.set_doctor_summary(SharedString::from(summary.clone()));
+                        report(&window, Ok(summary));
+                    }
+                    Err(error) => report::<String>(&window, Err(error)),
+                }
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_project_export(move |path| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(&window, Err(Adm4Error::invalid_input("请先打开项目")));
+                    return;
+                };
+                let target = path.trim().to_string();
+                let result = if target.is_empty() {
+                    Err(Adm4Error::invalid_input("请先填写导出路径"))
+                } else {
+                    services
+                        .export_project(&archive, Path::new(&target))
+                        .map(|count| format!("已导出 {count} 个文件到 {target}"))
+                };
+                report(&window, result);
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_project_import(move |path, name| {
+            if let Some(window) = weak.upgrade() {
+                let target = path.trim().to_string();
+                let project_name = name.trim().to_string();
+                let result = if target.is_empty() || project_name.is_empty() {
+                    Err(Adm4Error::invalid_input("请填写导入路径与新项目名"))
+                } else {
+                    services
+                        .import_project(Path::new(&target), &project_name)
+                        .map(|archive_id| format!("已导入项目 {project_name} → {archive_id}"))
+                };
+                refresh_projects(&window, &services, &state);
+                refresh_logs(&window, &services, "");
+                report(&window, result);
+            }
+        });
+    }
+}
+
+fn refresh_sdk(window: &MainWindow, services: &AppServices) {
+    match services.sdk_list() {
+        Ok(snapshot) => {
+            window.set_sdk_rows(ModelRc::new(VecModel::from(view::sdk_rows(&snapshot))));
+            window.set_sdk_counts(SharedString::from(view::sdk_counts(&snapshot)));
+        }
+        Err(error) => report::<String>(window, Err(error)),
+    }
+}
+
+fn refresh_change(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
+    let Some(archive) = state.borrow().current_archive.clone() else {
+        window.set_change_rows(ModelRc::new(VecModel::from(Vec::<ChangeRow>::new())));
+        window.set_change_summary(SharedString::from("尚未打开项目"));
+        return;
+    };
+    match services.change_list(&archive) {
+        Ok(requests) => {
+            window.set_change_rows(ModelRc::new(VecModel::from(view::change_rows(&requests))));
+            window.set_change_summary(SharedString::from(view::change_summary(&requests)));
+        }
+        Err(error) => report::<String>(window, Err(error)),
+    }
+}
+
+fn refresh_deliverable(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
+    let Some(archive) = state.borrow().current_archive.clone() else {
+        window.set_deliver_rows(ModelRc::new(VecModel::from(Vec::<DeliverRow>::new())));
+        window.set_deliver_summary(SharedString::from("尚未打开项目"));
+        return;
+    };
+    // 版本取最新冻结版；未冻结不是错误——给出提示、清单留空。
+    match services.latest_frozen_version(&archive) {
+        Ok(version) => match services.deliverable_status(&archive, version) {
+            Ok(manifest) => {
+                window.set_deliver_rows(ModelRc::new(VecModel::from(view::deliverable_rows(
+                    &manifest,
+                ))));
+                window
+                    .set_deliver_summary(SharedString::from(view::deliverable_summary(&manifest)));
+            }
+            Err(error) => report::<String>(window, Err(error)),
+        },
+        Err(_) => {
+            window.set_deliver_rows(ModelRc::new(VecModel::from(Vec::<DeliverRow>::new())));
+            window.set_deliver_summary(SharedString::from(
+                "项目尚未冻结：先在设计工作台完成冻结，再打包文档集",
+            ));
+        }
+    }
 }
 
 fn report<T: Into<String>>(window: &MainWindow, result: Adm4Result<T>) {
@@ -2303,9 +3301,21 @@ fn refresh_pipeline(window: &MainWindow, services: &AppServices, state: &Rc<RefC
         window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(None))));
         return;
     };
-    // 未冻结时 pipeline_status 返回 not_found：这是正常前置状态，不当错误报。
-    let run_state = services.pipeline_status(&archive).ok();
-    window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(
-        run_state.as_ref(),
-    ))));
+    apply_pipeline_rows(window, services, &archive);
+}
+
+/// 按存档 id 刷新阶段行（工作线程回程与运行期轮询都走这里：它们拿不到 `Rc<RefCell<UiState>>`）。
+fn apply_pipeline_rows(window: &MainWindow, services: &AppServices, archive: &str) {
+    match services.pipeline_status(archive) {
+        Ok(run_state) => window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(Some(
+            &run_state,
+        ))))),
+        // 未冻结时 pipeline_status 返回 not_found：这是正常前置状态，不当错误报。
+        Err(error) if error.kind == Adm4ErrorKind::NotFound => {
+            window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(None))));
+        }
+        // 其它读失败（例如运行期轮询恰好撞上该轮产物落盘）：保留上一轮行，
+        // 不把整块面板刷成「未冻结」——那会让运行中的流水线看起来消失了。
+        Err(_) => {}
+    }
 }

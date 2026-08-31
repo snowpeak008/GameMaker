@@ -23,7 +23,8 @@ export struct TextRow { title: string, text: string, kind: string, target: strin
 export struct LevelRow { label: string, text: string, current: bool }
 
 // —— 流水线全版图：segment = C 段（实跑）/ P 段（Phase 2 占位）——
-export struct StageItem { id: string, name: string, status: string, summary: string, segment: string, waiting: bool, placeholder: bool }
+// duration/running/can-rerun/can-inspect 全部由 Rust 侧按后端运行状态推出，UI 只渲染。
+export struct StageItem { id: string, name: string, status: string, summary: string, segment: string, duration: string, waiting: bool, running: bool, can-rerun: bool, can-inspect: bool, placeholder: bool }
 
 export struct LogItem { at: string, category: string, message: string }
 
@@ -32,6 +33,11 @@ export struct TemplateRow { id: string, game: string, status: string, depth: str
 export struct StepRow { name: string, reached: bool, current: bool }
 export struct ConflictRow { decision: string, reason: string }
 export struct CompareRow { decision: string, template-option: string, project-option: string, same: bool, params: string }
+
+// T12 三视图行模型：SDK 审批队列 / 补充开发变更请求 / 文档集交付段。
+export struct SdkRow { id: string, name: string, url: string, category: string, purpose: string, status: string, status-kind: string, signed: string, pending: bool }
+export struct ChangeRow { id: string, title: string, requester: string, status: string, status-kind: string, segments: string, signed: string, next-token: string, next-label: string, can-impact: bool, can-advance: bool }
+export struct DeliverRow { stage: string, present: bool, detail: string }
 
 export component MainWindow inherits Window {
     title: "AutoDesignMaker V4 · 设计工作台";
@@ -47,6 +53,8 @@ export component MainWindow inherits Window {
     in-out property <bool> archive-panel-open: false;
     in-out property <bool> template-panel-open: false;
     in-out property <bool> interview-open: true;
+    // AI 配置面板是全局覆盖层（任何视图下都能开）：桌面用户配不了 AI，访谈/红队/C1-C5 全链走不通。
+    in-out property <bool> ai-panel-open: false;
 
     // ---------------- 顶栏与状态栏 ----------------
     in property <string> project-title: "（未打开项目）";
@@ -119,6 +127,49 @@ export component MainWindow inherits Window {
     in property <string> pipeline-note: "";
     in property <[LogItem]> logs: [];
 
+    // 范围运行 / 停止 / 重跑 / 阶段产物（F4c）
+    in property <[string]> stage-ids: [];
+    in-out property <string> pipeline-from: "C0";
+    in-out property <string> pipeline-to: "C6";
+    in property <bool> pipeline-running: false;
+    in property <string> pipeline-run-hint: "";
+    // 重跑二次确认：警示语由 Rust 侧按后端 downstream 列表生成，UI 只负责「先看再点」。
+    in-out property <string> rerun-armed-stage: "";
+    in property <string> rerun-warning: "";
+    in property <[TextRow]> reset-rows: [];
+    in property <string> artifact-stage: "";
+    in property <string> artifact-title: "";
+    in property <[TextRow]> artifact-rows: [];
+    in property <string> artifact-doc: "";
+    in property <string> artifact-hint: "";
+
+    // ---------------- AI Provider 配置与体检 ----------------
+    in property <[string]> ai-presets: [];
+    in-out property <string> ai-provider-id: "";
+    in-out property <string> ai-base-url: "";
+    in-out property <string> ai-model: "";
+    in-out property <string> ai-key-ref: "";
+    in-out property <string> ai-timeout: "";
+    in property <string> ai-config-summary: "";
+    in property <string> ai-status: "AI：尚未诊断";
+    in property <bool> ai-available: false;
+    in property <[TextRow]> ai-doctor-rows: [];
+    // 实调用检查（真发一次请求，走网络）：后台线程期间置 true，按钮据此变灰。
+    in property <bool> ai-invoke-running: false;
+    in property <[TextRow]> ai-invoke-rows: [];
+    // 密钥写入表单：名字进 app.json 的 named: 引用，值只进 config/secrets.json。
+    in-out property <string> ai-secret-name: "";
+    in-out property <string> ai-secret-value: "";
+    in property <string> ai-secret-names: "";
+
+    // ---------------- 另存模板 / 工作台重置 / 存档体检 ----------------
+    in property <string> template-export-text: "";
+    in-out property <bool> reset-armed: false;
+    in property <string> reset-warning: "";
+    in property <string> reset-result: "";
+    in property <[TextRow]> doctor-rows: [];
+    in property <string> doctor-summary: "尚未体检";
+
     // ---------------- 逆向模板维护 ----------------
     in property <[TemplateRow]> template-list: [];
     in property <[StepRow]> template-steps: [];
@@ -126,6 +177,14 @@ export component MainWindow inherits Window {
     in property <[ConflictRow]> template-conflicts: [];
     in property <[CompareRow]> compare-rows: [];
     in property <string> compare-title: "";
+
+    // ---------------- T12 三视图（补充开发 / 打包 / SDK 知识库）----------------
+    in property <[SdkRow]> sdk-rows: [];
+    in property <string> sdk-counts: "待审 0 · 已批准 0 · 已拒绝 0";
+    in property <[ChangeRow]> change-rows: [];
+    in property <string> change-summary: "尚未打开项目";
+    in property <[DeliverRow]> deliver-rows: [];
+    in property <string> deliver-summary: "尚未打开项目";
 
     // ---------------- 回调 ----------------
     callback refresh-projects();
@@ -162,10 +221,29 @@ export component MainWindow inherits Window {
     callback freeze-run();
     callback export-workbench(string);
 
-    callback pipeline-run();
+    callback pipeline-run-range(string, string);             // from, to
+    callback pipeline-stop();
+    callback pipeline-rerun-arm(string);                     // 取该段的下游清单并生成警示语（不执行）
+    callback pipeline-rerun-confirm(string, string);         // stage, to（二次确认后才真跑）
+    callback pipeline-artifact(string);                      // 查看该段产物（document.md / contract.json）
     callback pipeline-confirm(string, string);
     callback refresh-logs(string);
     callback export-logs(string);
+
+    // AI Provider 配置与体检（V2 的 7 个 AI 回调在此收敛为 5 个）
+    callback ai-refresh();
+    callback ai-apply-preset(string);
+    callback ai-save(string, string, string, string, string); // provider-id, base-url, model, key-ref, timeout
+    callback ai-doctor();
+    callback ai-invoke-check();
+    callback ai-save-secret(string, string); // 密钥名, 密钥值（值只落 config/secrets.json）
+    callback ai-disable();
+
+    // 另存模板 / 工作台重置 / 存档体检
+    callback template-export(string, string, string, string, string); // id, 模板名, 别名, 审核人, 审核结论
+    callback workbench-reset-arm();
+    callback workbench-reset(string, string);                          // 操作人, 理由
+    callback project-doctor();
 
     callback reverse-select-pack(string);
     callback reverse-refresh();
@@ -178,6 +256,20 @@ export component MainWindow inherits Window {
     callback reverse-certify();
     callback reverse-compare();
     callback template-prefill();
+
+    // T12 三视图回调（GUI 无业务规则：一律转发给 AppServices，可用性由后端结果推出）。
+    callback sdk-refresh();
+    callback sdk-add(string, string, string, string);        // name, url, category, purpose
+    callback sdk-approve(string, string, string);            // id, reviewer, note
+    callback sdk-reject(string, string, string);             // id, reviewer, note
+    callback change-refresh();
+    callback change-add(string, string, string);             // title, requester, description
+    callback change-impact(string, string);                  // id, segments-csv（C0..C6）
+    callback change-advance(string, string, string, string); // id, target-token, actor, note
+    callback deliver-refresh();
+    callback deliver-package();
+    callback project-export(string);                         // 导出路径
+    callback project-import(string, string);                 // 导入路径, 项目名
 
     VerticalLayout {
         // =====================================================================
@@ -239,6 +331,14 @@ export component MainWindow inherits Window {
                     width: 104px;
                     primary: root.active-view == "sdk";
                     clicked => { root.active-view = "sdk"; }
+                }
+                Button {
+                    text: root.ai-panel-open ? "关闭AI配置" : "AI配置/诊断";
+                    width: 108px;
+                    clicked => {
+                        root.ai-panel-open = !root.ai-panel-open;
+                        if (root.ai-panel-open) { root.ai-refresh(); }
+                    }
                 }
                 Text {
                     text: root.status-message;
@@ -1268,17 +1368,55 @@ export component MainWindow inherits Window {
                             color: #57606a;
                             wrap: word-wrap;
                         }
+                        // 范围运行：段清单来自 registry（root.stage-ids），不在 UI 里硬编码段名。
                         HorizontalLayout {
                             height: 30px;
                             spacing: 6px;
-                            Button { text: "运行 C0-C6"; primary: true; clicked => { root.pipeline-run(); } }
+                            Text { text: "从"; width: 18px; font-size: 11px; color: #57606a; vertical-alignment: center; }
+                            from-box := ComboBox {
+                                model: root.stage-ids;
+                                current-value: root.pipeline-from;
+                                horizontal-stretch: 1;
+                                selected(value) => { root.pipeline-from = value; }
+                            }
+                            Text { text: "到"; width: 18px; font-size: 11px; color: #57606a; vertical-alignment: center; }
+                            to-box := ComboBox {
+                                model: root.stage-ids;
+                                current-value: root.pipeline-to;
+                                horizontal-stretch: 1;
+                                selected(value) => { root.pipeline-to = value; }
+                            }
+                        }
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 6px;
+                            Button {
+                                text: "运行选定范围";
+                                primary: true;
+                                horizontal-stretch: 1;
+                                enabled: !root.pipeline-running;
+                                clicked => { root.pipeline-run-range(from-box.current-value, to-box.current-value); }
+                            }
+                            Button {
+                                text: "停止运行";
+                                width: 92px;
+                                enabled: root.pipeline-running;
+                                clicked => { root.pipeline-stop(); }
+                            }
+                        }
+                        Text {
+                            text: root.pipeline-run-hint;
+                            height: 58px;
+                            font-size: 10px;
+                            color: root.pipeline-running ? #bf8700 : #6e7781;
+                            wrap: word-wrap;
                         }
                         ListView {
                             vertical-stretch: 1;
                             for stage in root.stages: Rectangle {
-                                height: 52px;
-                                background: stage.placeholder ? #f6f8fa : #ffffff;
-                                border-color: #eaeef2;
+                                height: 62px;
+                                background: stage.placeholder ? #f6f8fa : (stage.id == root.artifact-stage ? #ddf4ff : #ffffff);
+                                border-color: stage.id == root.artifact-stage ? #54aeff : #eaeef2;
                                 border-width: 1px;
                                 VerticalLayout {
                                     padding: 4px;
@@ -1291,9 +1429,15 @@ export component MainWindow inherits Window {
                                         overflow: elide;
                                     }
                                     Text {
-                                        text: stage.status;
+                                        text: stage.running ? "▶ " + stage.status : stage.status;
                                         font-size: 10px;
-                                        color: stage.waiting ? #bf8700 : #57606a;
+                                        color: stage.running ? #0969da : (stage.waiting ? #bf8700 : #57606a);
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: stage.duration;
+                                        font-size: 10px;
+                                        color: #6e7781;
                                         overflow: elide;
                                     }
                                 }
@@ -1332,9 +1476,9 @@ export component MainWindow inherits Window {
                         ListView {
                             vertical-stretch: 1;
                             for stage in root.stages: Rectangle {
-                                height: 58px;
-                                background: stage.placeholder ? #f6f8fa : #ffffff;
-                                border-color: #eaeef2;
+                                height: 62px;
+                                background: stage.placeholder ? #f6f8fa : (stage.id == root.artifact-stage ? #ddf4ff : #ffffff);
+                                border-color: stage.id == root.artifact-stage ? #54aeff : #eaeef2;
                                 border-width: 1px;
                                 HorizontalLayout {
                                     padding: 5px;
@@ -1356,22 +1500,162 @@ export component MainWindow inherits Window {
                                             overflow: elide;
                                         }
                                         Text {
-                                            text: stage.status;
+                                            text: (stage.running ? "▶ " : "") + stage.status + "   " + stage.duration;
                                             font-size: 10px;
-                                            color: stage.waiting ? #bf8700 : #6e7781;
+                                            color: stage.running ? #0969da : (stage.waiting ? #bf8700 : #6e7781);
                                             overflow: elide;
                                         }
                                     }
                                     if stage.waiting: Button {
                                         text: "人工确认";
-                                        width: 96px;
+                                        width: 88px;
                                         clicked => { root.pipeline-confirm(stage.id, confirm-note.text); }
+                                    }
+                                    // 产物入口与重跑：可用性由后端运行状态推出（没跑过的段两个按钮都不出）。
+                                    if stage.can-inspect: Button {
+                                        text: "产物";
+                                        width: 62px;
+                                        clicked => { root.pipeline-artifact(stage.id); }
+                                    }
+                                    if stage.can-rerun: Button {
+                                        text: "重跑";
+                                        width: 62px;
+                                        enabled: !root.pipeline-running;
+                                        clicked => { root.pipeline-rerun-arm(stage.id); }
                                     }
                                 }
                             }
                         }
+
+                        // 重跑二次确认条：先把「连带作废什么」摆出来，确认后才真跑。
+                        if root.rerun-armed-stage != "": Rectangle {
+                            height: 104px;
+                            background: #fff8c5;
+                            border-color: #d4a72c;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 4px;
+                                Text {
+                                    text: root.rerun-warning;
+                                    vertical-stretch: 1;
+                                    font-size: 11px;
+                                    color: #7d4e00;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    height: 28px;
+                                    spacing: 6px;
+                                    Button {
+                                        text: "确认重跑 " + root.rerun-armed-stage;
+                                        width: 168px;
+                                        enabled: !root.pipeline-running;
+                                        clicked => { root.pipeline-rerun-confirm(root.rerun-armed-stage, to-box.current-value); }
+                                    }
+                                    Button {
+                                        text: "取消";
+                                        width: 76px;
+                                        clicked => { root.rerun-armed-stage = ""; }
+                                    }
+                                    Text {
+                                        text: "重跑后会从该段继续跑到「到」下拉选中的段";
+                                        font-size: 10px;
+                                        color: #7d4e00;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 重跑回执：重置段清单 + 作废署名逐条在案。
+                        if root.reset-rows.length > 0: Rectangle {
+                            height: 96px;
+                            background: #ffffff;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            ListView {
+                                x: 4px;
+                                y: 4px;
+                                width: parent.width - 8px;
+                                height: parent.height - 8px;
+                                for row in root.reset-rows: Rectangle {
+                                    height: row.kind == "header" ? 22px : 30px;
+                                    background: transparent;
+                                    VerticalLayout {
+                                        padding-left: 4px;
+                                        padding-right: 4px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: row.kind == "bad" ? #cf222e : #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 阶段产物详情（document.md 预览 + 双格式路径/sha256）
                         Rectangle {
-                            height: 120px;
+                            height: 236px;
+                            background: #ffffff;
+                            border-color: #d8dee4;
+                            border-width: 1px;
+                            border-radius: 6px;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 4px;
+                                Text {
+                                    text: root.artifact-title == "" ? "阶段产物：点任一已跑过阶段的「产物」按钮查看 document.md 与 contract.json" : root.artifact-title;
+                                    height: 18px;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: #1f2328;
+                                    overflow: elide;
+                                }
+                                for row in root.artifact-rows: VerticalLayout {
+                                    height: 30px;
+                                    Text {
+                                        text: row.title;
+                                        font-size: 11px;
+                                        color: row.kind == "bad" ? #cf222e : #1a7f37;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: row.text;
+                                        font-size: 10px;
+                                        color: #57606a;
+                                        overflow: elide;
+                                    }
+                                }
+                                if root.artifact-hint != "": Text {
+                                    text: root.artifact-hint;
+                                    height: 16px;
+                                    font-size: 10px;
+                                    color: #bf8700;
+                                    overflow: elide;
+                                }
+                                artifact-view := TextEdit {
+                                    vertical-stretch: 1;
+                                    read-only: true;
+                                    text: root.artifact-doc;
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            height: 92px;
                             background: #f6f8fa;
                             border-color: #d8dee4;
                             border-width: 1px;
@@ -1406,29 +1690,63 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 8px;
-                    Text { text: "补充开发"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 8px;
+                        Text { text: "补充开发"; font-size: 17px; font-weight: 700; color: #1f2328; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: root.change-summary; font-size: 11px; color: #57606a; vertical-alignment: center; overflow: elide; }
+                        Button { text: "刷新"; width: 72px; clicked => { root.change-refresh(); } }
+                    }
                     Text {
-                        text: "四版语义：冻结之后的变更走「追加需求 → 影响分析 → 增量重跑受影响段」，而不是在冻结产物上原地改。二版「追加需求/补充任务列表」的能力归宿在此视图。";
-                        height: 52px;
-                        font-size: 12px;
+                        text: "四版语义：冻结之后的变更走「追加需求 → 影响分析（标注受影响 C0..C6 段）→ 排期 → 应用」，不在冻结产物上原地改。推进需署名+结论（R3）。";
+                        height: 30px;
+                        font-size: 11px;
                         color: #57606a;
                         wrap: word-wrap;
                     }
-                    Rectangle {
+                    // 录入表单
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        chg-title := LineEdit { placeholder-text: "变更标题"; horizontal-stretch: 2; }
+                        chg-requester := LineEdit { placeholder-text: "申请人（署名）"; horizontal-stretch: 1; }
+                        chg-desc := LineEdit { placeholder-text: "描述（可选）"; horizontal-stretch: 2; }
+                        Button { text: "登记变更"; width: 88px; clicked => { root.change-add(chg-title.text, chg-requester.text, chg-desc.text); } }
+                    }
+                    // 影响分析 / 推进 共享署名行
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        chg-segments := LineEdit { placeholder-text: "受影响段 CSV，例如 C2,C3"; horizontal-stretch: 1; }
+                        chg-actor := LineEdit { placeholder-text: "评审人（推进署名）"; horizontal-stretch: 1; }
+                        chg-note := LineEdit { placeholder-text: "结论/理由（推进署名）"; horizontal-stretch: 2; }
+                    }
+                    ListView {
                         vertical-stretch: 1;
-                        background: #f6f8fa;
-                        border-color: #d8dee4;
-                        border-width: 1px;
-                        border-radius: 6px;
-                        Text {
-                            x: 12px;
-                            y: 12px;
-                            width: parent.width - 24px;
-                            height: parent.height - 24px;
-                            text: "占位区块（由 T12 填充）：\n· 追加需求录入与影响分析结果\n· 受影响冻结段与增量重跑范围\n· 补充任务列表与状态追踪\n\n本波次（T11）只负责视图可切换与能力归宿可见，不在此处放不可用的按钮。";
-                            font-size: 12px;
-                            color: #6e7781;
-                            wrap: word-wrap;
+                        for row in root.change-rows: Rectangle {
+                            height: 62px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            HorizontalLayout {
+                                padding: 6px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 1px;
+                                    Text { text: row.title + "  · " + row.requester; font-size: 12px; font-weight: 700; color: #1f2328; overflow: elide; }
+                                    Text {
+                                        text: "[" + row.status + "]  受影响段：" + row.segments;
+                                        font-size: 10px;
+                                        color: row.status-kind == "bad" ? #cf222e : (row.status-kind == "good" ? #1a7f37 : #57606a);
+                                        overflow: elide;
+                                    }
+                                    Text { text: row.signed; font-size: 10px; color: #6e7781; overflow: elide; }
+                                }
+                                if row.can-impact: Button { text: "影响分析"; width: 78px; clicked => { root.change-impact(row.id, chg-segments.text); } }
+                                if row.can-advance: Button { text: row.next-label; width: 72px; clicked => { root.change-advance(row.id, row.next-token, chg-actor.text, chg-note.text); } }
+                                if row.can-advance: Button { text: "拒绝"; width: 60px; clicked => { root.change-advance(row.id, "rejected", chg-actor.text, chg-note.text); } }
+                            }
                         }
                     }
                 }
@@ -1449,30 +1767,107 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 8px;
-                    Text { text: "打包阶段"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 8px;
+                        Text { text: "打包阶段"; font-size: 17px; font-weight: 700; color: #1f2328; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: root.deliver-summary; font-size: 11px; color: #57606a; vertical-alignment: center; overflow: elide; }
+                    }
                     Text {
-                        text: "四版归宿：项目包导出导入（.adm4proj）已在存档层实现；游戏构建 / Unity / 运行时验证属 P0-P5（Phase 2），本视图先立版图与占位。";
-                        height: 46px;
-                        font-size: 12px;
+                        text: "四版归宿：文档集交付 = 清点最新冻结版的 C0-C6 产物、算 sha256、标完整性（本视图落地）；游戏构建 / Unity / 运行时验证属 P0-P5（Phase 2，下方占位说明）。";
+                        height: 30px;
+                        font-size: 11px;
                         color: #57606a;
                         wrap: word-wrap;
                     }
-                    Rectangle {
-                        vertical-stretch: 1;
-                        background: #f6f8fa;
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        Button { text: "打包文档集（最新冻结版）"; width: 190px; primary: true; clicked => { root.deliver-package(); } }
+                        Button { text: "刷新清点"; width: 88px; clicked => { root.deliver-refresh(); } }
+                        Button { text: "存档体检"; width: 88px; clicked => { root.project-doctor(); } }
+                        Text {
+                            text: root.doctor-summary;
+                            font-size: 11px;
+                            color: #57606a;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                    // 体检明细（`project doctor` 上提到门面后，CLI 与桌面共用同一份判定）
+                    if root.doctor-rows.length > 0: Rectangle {
+                        height: 108px;
+                        background: #ffffff;
                         border-color: #d8dee4;
                         border-width: 1px;
                         border-radius: 6px;
-                        Text {
-                            x: 12px;
-                            y: 12px;
-                            width: parent.width - 24px;
-                            height: parent.height - 24px;
-                            text: "占位区块（由 T12 填充）：\n· 项目包导出/导入 UI（服务层已就绪）\n· 构建目标清单与产物校验\n· SDK 套件暂存、引擎构建、运行时验证\n\n二版「暂存发布/诊断/构建包/Unity 构建/运行时验证」逐项在此视图有归宿。";
-                            font-size: 12px;
-                            color: #6e7781;
-                            wrap: word-wrap;
+                        ListView {
+                            x: 4px;
+                            y: 4px;
+                            width: parent.width - 8px;
+                            height: parent.height - 8px;
+                            for row in root.doctor-rows: Rectangle {
+                                height: row.kind == "header" ? 22px : 32px;
+                                background: transparent;
+                                VerticalLayout {
+                                    padding-left: 4px;
+                                    padding-right: 4px;
+                                    Text {
+                                        text: row.title;
+                                        font-size: row.kind == "header" ? 12px : 11px;
+                                        font-weight: row.kind == "header" ? 700 : 400;
+                                        color: row.kind == "bad" ? #cf222e : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                        overflow: elide;
+                                    }
+                                    if row.kind != "header": Text {
+                                        text: row.text;
+                                        font-size: 10px;
+                                        color: #57606a;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
                         }
+                    }
+                    // 文档集清单：逐段 C0-C6
+                    ListView {
+                        vertical-stretch: 1;
+                        for row in root.deliver-rows: Rectangle {
+                            height: 34px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                Text { text: row.stage; width: 48px; font-size: 12px; font-weight: 700; color: row.present ? #1a7f37 : #cf222e; vertical-alignment: center; }
+                                Text { text: row.present ? "齐备" : "缺失"; width: 48px; font-size: 11px; color: row.present ? #1a7f37 : #cf222e; vertical-alignment: center; }
+                                Text { text: row.detail; font-size: 10px; color: #57606a; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                            }
+                        }
+                    }
+                    // 整包导出/导入（.adm4proj）
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        pkg-export-path := LineEdit { placeholder-text: "导出路径，例如 D:\\proj.adm4proj"; horizontal-stretch: 1; }
+                        Button { text: "导出 .adm4proj"; width: 118px; clicked => { root.project-export(pkg-export-path.text); } }
+                    }
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        pkg-import-path := LineEdit { placeholder-text: "导入路径 .adm4proj"; horizontal-stretch: 1; }
+                        pkg-import-name := LineEdit { placeholder-text: "新项目名"; width: 200px; }
+                        Button { text: "导入为新项目"; width: 118px; clicked => { root.project-import(pkg-import-path.text, pkg-import-name.text); } }
+                    }
+                    Text {
+                        text: "Phase 2 占位（P0-P5，执行器另行立项）：游戏构建 / Unity 工程导出 / 运行时验证 / 发布包。二版「暂存发布 · 诊断 · 构建包 · Unity 构建 · 运行时验证」在此有归宿，本期不放不可用按钮。";
+                        height: 44px;
+                        font-size: 10px;
+                        color: #8c959f;
+                        wrap: word-wrap;
                     }
                 }
             }
@@ -1575,29 +1970,62 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     padding: 16px;
                     spacing: 8px;
-                    Text { text: "SDK 知识库"; height: 26px; font-size: 17px; font-weight: 700; color: #1f2328; }
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 8px;
+                        Text { text: "SDK 知识库"; font-size: 17px; font-weight: 700; color: #1f2328; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: root.sdk-counts; font-size: 11px; color: #57606a; vertical-alignment: center; }
+                        Button { text: "刷新"; width: 72px; clicked => { root.sdk-refresh(); } }
+                    }
                     Text {
-                        text: "四版归宿：SDK 资源的登记与审批流是 Phase 2 构建集成的前置；数据模型与审批视图本期立占位，构建集成留 P0-P5。";
-                        height: 46px;
-                        font-size: 12px;
+                        text: "四版归宿：SDK 资源登记 + 三态审批流（待审 → 批准/拒绝，署名+意见必填）。审批产物是 Phase 2 构建集成的前置——未批准的资源不得进入构建。全局共享，跨项目一致。";
+                        height: 30px;
+                        font-size: 11px;
                         color: #57606a;
                         wrap: word-wrap;
                     }
-                    Rectangle {
+                    // 登记表单
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        sdk-name := LineEdit { placeholder-text: "资源名，例如 DOTween"; horizontal-stretch: 1; }
+                        sdk-url := LineEdit { placeholder-text: "URL/来源"; horizontal-stretch: 2; }
+                        sdk-cat := LineEdit { placeholder-text: "类别（默认 custom）"; width: 150px; }
+                        sdk-purpose := LineEdit { placeholder-text: "取用目的"; horizontal-stretch: 1; }
+                        Button { text: "提交待审"; width: 88px; clicked => { root.sdk-add(sdk-name.text, sdk-url.text, sdk-cat.text, sdk-purpose.text); } }
+                    }
+                    // 审批共享署名行
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 6px;
+                        sdk-reviewer := LineEdit { placeholder-text: "评审人（审批署名）"; horizontal-stretch: 1; }
+                        sdk-review-note := LineEdit { placeholder-text: "审核结论/拒绝理由（必填）"; horizontal-stretch: 2; }
+                    }
+                    ListView {
                         vertical-stretch: 1;
-                        background: #f6f8fa;
-                        border-color: #d8dee4;
-                        border-width: 1px;
-                        border-radius: 6px;
-                        Text {
-                            x: 12px;
-                            y: 12px;
-                            width: parent.width - 24px;
-                            height: parent.height - 24px;
-                            text: "占位区块（由 T12 填充）：\n· 新增 SDK 资源与来源登记\n· 审批队列（待审/批准/拒绝）与署名\n· 已索引资源清单与构建必需标记\n\n审批流与四版「取用关卡」同源：未审批的资源不得进入构建。";
-                            font-size: 12px;
-                            color: #6e7781;
-                            wrap: word-wrap;
+                        for row in root.sdk-rows: Rectangle {
+                            height: 56px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            HorizontalLayout {
+                                padding: 6px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 1px;
+                                    Text { text: row.name + "  [" + row.category + "]"; font-size: 12px; font-weight: 700; color: #1f2328; overflow: elide; }
+                                    Text { text: row.url + "  · " + row.purpose; font-size: 10px; color: #57606a; overflow: elide; }
+                                    Text {
+                                        text: row.status + "  " + row.signed;
+                                        font-size: 10px;
+                                        color: row.status-kind == "bad" ? #cf222e : (row.status-kind == "good" ? #1a7f37 : #bf8700);
+                                        overflow: elide;
+                                    }
+                                }
+                                if row.pending: Button { text: "批准"; width: 60px; clicked => { root.sdk-approve(row.id, sdk-reviewer.text, sdk-review-note.text); } }
+                                if row.pending: Button { text: "拒绝"; width: 60px; clicked => { root.sdk-reject(row.id, sdk-reviewer.text, sdk-review-note.text); } }
+                            }
                         }
                     }
                 }
@@ -1632,7 +2060,42 @@ export component MainWindow inherits Window {
                             overflow: elide;
                         }
                         Button { text: "刷新列表"; width: 96px; clicked => { root.refresh-projects(); } }
+                        Button { text: "体检当前项目"; width: 112px; clicked => { root.project-doctor(); } }
                         Button { text: "关闭"; width: 76px; clicked => { root.archive-panel-open = false; } }
+                    }
+                    if root.doctor-rows.length > 0: Rectangle {
+                        height: 92px;
+                        background: #ffffff;
+                        border-color: #d8dee4;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        ListView {
+                            x: 4px;
+                            y: 4px;
+                            width: parent.width - 8px;
+                            height: parent.height - 8px;
+                            for row in root.doctor-rows: Rectangle {
+                                height: row.kind == "header" ? 22px : 32px;
+                                background: transparent;
+                                VerticalLayout {
+                                    padding-left: 4px;
+                                    padding-right: 4px;
+                                    Text {
+                                        text: row.title;
+                                        font-size: row.kind == "header" ? 12px : 11px;
+                                        font-weight: row.kind == "header" ? 700 : 400;
+                                        color: row.kind == "bad" ? #cf222e : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                        overflow: elide;
+                                    }
+                                    if row.kind != "header": Text {
+                                        text: row.text;
+                                        font-size: 10px;
+                                        color: #57606a;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
                     }
                     HorizontalLayout {
                         height: 34px;
@@ -1661,6 +2124,65 @@ export component MainWindow inherits Window {
                             vertical-alignment: center;
                             overflow: elide;
                         }
+                    }
+                    // 破坏性操作：重置设计工作台（二版 reset-design-workbench 的四版归宿）
+                    HorizontalLayout {
+                        height: 34px;
+                        spacing: 8px;
+                        Text {
+                            text: "重置工作台";
+                            width: 68px;
+                            font-size: 12px;
+                            color: #cf222e;
+                            vertical-alignment: center;
+                        }
+                        reset-actor := LineEdit { placeholder-text: "操作人（署名，必填）"; width: 190px; }
+                        reset-note := LineEdit { placeholder-text: "重置理由（必填，进审计日志）"; horizontal-stretch: 1; }
+                        Button {
+                            text: "重置当前项目…";
+                            width: 128px;
+                            clicked => { root.workbench-reset-arm(); }
+                        }
+                    }
+                    if root.reset-armed: Rectangle {
+                        height: 96px;
+                        background: #fff8c5;
+                        border-color: #d4a72c;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 4px;
+                            Text {
+                                text: root.reset-warning;
+                                vertical-stretch: 1;
+                                font-size: 11px;
+                                color: #7d4e00;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                height: 28px;
+                                spacing: 6px;
+                                Button {
+                                    text: "确认重置（不可撤销）";
+                                    width: 168px;
+                                    clicked => { root.workbench-reset(reset-actor.text, reset-note.text); }
+                                }
+                                Button {
+                                    text: "取消";
+                                    width: 76px;
+                                    clicked => { root.reset-armed = false; }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                        }
+                    }
+                    if root.reset-result != "": Text {
+                        text: root.reset-result;
+                        height: 46px;
+                        font-size: 11px;
+                        color: #1a7f37;
+                        wrap: word-wrap;
                     }
                     Text {
                         text: "项目列表（点击载入）";
@@ -1866,6 +2388,39 @@ export component MainWindow inherits Window {
                                 }
                             }
                             GroupBox {
+                                title: "另存为模板（当前项目 → 模板；审核人与结论必填，R3）";
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    HorizontalLayout {
+                                        height: 32px;
+                                        spacing: 4px;
+                                        tpl-export-id := LineEdit { placeholder-text: "新模板 id（snake_case）"; horizontal-stretch: 1; }
+                                        tpl-export-name := LineEdit { placeholder-text: "模板展示名（留空=项目名）"; horizontal-stretch: 1; }
+                                        tpl-export-aliases := LineEdit { placeholder-text: "别名（逗号分隔）"; width: 130px; }
+                                    }
+                                    HorizontalLayout {
+                                        height: 32px;
+                                        spacing: 4px;
+                                        tpl-export-reviewer := LineEdit { placeholder-text: "审核人署名"; width: 130px; }
+                                        tpl-export-note := LineEdit { placeholder-text: "审核结论"; horizontal-stretch: 1; }
+                                        Button {
+                                            text: "另存为模板";
+                                            width: 96px;
+                                            clicked => {
+                                                root.template-export(tpl-export-id.text, tpl-export-name.text, tpl-export-aliases.text, tpl-export-reviewer.text, tpl-export-note.text);
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        text: root.template-export-text == "" ? "只导出「已确认」的决策点；未确认的点会被跳过并如实计数。另存结果落「已审核」态，需再走 S5 认证入库才能预填。" : root.template-export-text;
+                                        height: 56px;
+                                        font-size: 10px;
+                                        color: root.template-export-text == "" ? #6e7781 : #1a7f37;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                            GroupBox {
                                 title: "S1 语料检索（本地目录，零网络）";
                                 VerticalLayout {
                                     spacing: 4px;
@@ -2006,6 +2561,222 @@ export component MainWindow inherits Window {
                     }
                 }
             }
+
+            // -----------------------------------------------------------------
+            // 覆盖面板三：AI Provider 配置与体检（全局，任何视图下可开）
+            // -----------------------------------------------------------------
+            if root.ai-panel-open: Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #54aeff;
+                border-width: 2px;
+                border-radius: 8px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 8px;
+                        Text {
+                            text: "AI Provider 配置与体检（写入 config/app.json）";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.ai-status;
+                            font-size: 12px;
+                            color: root.ai-available ? #1a7f37 : #cf222e;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Button { text: "刷新"; width: 72px; clicked => { root.ai-refresh(); } }
+                        Button { text: "关闭"; width: 72px; clicked => { root.ai-panel-open = false; } }
+                    }
+                    Text {
+                        text: "AI 介入点：访谈提案 / 冻结门红队 / 流水线 C1-C5 / 逆向 S2-S3。未配置或密钥解析不了时，这些功能一律显式 blocked（不做模板兜底，R7）。";
+                        height: 30px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.ai-config-summary;
+                        height: 30px;
+                        font-size: 11px;
+                        color: #1f2328;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Text { text: "内置 preset"; width: 80px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-preset-box := ComboBox { model: root.ai-presets; width: 200px; }
+                        Button {
+                            text: "套用 preset 到表单";
+                            width: 156px;
+                            clicked => { root.ai-apply-preset(ai-preset-box.current-value); }
+                        }
+                        Text {
+                            text: "套用只填表单，点「保存并诊断」才落盘。";
+                            font-size: 11px;
+                            color: #6e7781;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Text { text: "Provider id"; width: 80px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-id := LineEdit { text <=> root.ai-provider-id; placeholder-text: "例如 openai"; width: 200px; }
+                        Text { text: "模型"; width: 40px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-model-edit := LineEdit { text <=> root.ai-model; placeholder-text: "例如 gpt-4o-mini"; horizontal-stretch: 1; }
+                        Text { text: "超时(s)"; width: 56px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-timeout-edit := LineEdit { text <=> root.ai-timeout; placeholder-text: "120"; width: 90px; }
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Text { text: "Base URL"; width: 80px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-url := LineEdit { text <=> root.ai-base-url; placeholder-text: "例如 https://api.openai.com/v1"; horizontal-stretch: 1; }
+                        Text { text: "密钥引用"; width: 60px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-key := LineEdit { text <=> root.ai-key-ref; placeholder-text: "env:OPENAI_API_KEY 或 named:my_key"; width: 280px; }
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Button {
+                            text: "保存并诊断";
+                            width: 120px;
+                            primary: true;
+                            clicked => { root.ai-save(ai-id.text, ai-url.text, ai-model-edit.text, ai-key.text, ai-timeout-edit.text); }
+                        }
+                        Button { text: "只诊断（查配置）"; width: 132px; clicked => { root.ai-doctor(); } }
+                        Button {
+                            text: root.ai-invoke-running ? "实调用中…" : "实调用检查（真打一次）";
+                            width: 196px;
+                            enabled: !root.ai-invoke-running;
+                            clicked => { root.ai-invoke-check(); }
+                        }
+                        Button { text: "停用 AI（清空配置）"; width: 168px; clicked => { root.ai-disable(); } }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    Text {
+                        text: "「只诊断」零网络，只看配置在不在、密钥解析得出来——base_url 写错 / 密钥失效 / 模型名不存在它照旧报可用。「实调用检查」真发一次最小请求（走网络、消耗额度），失败原因原样呈现，不重试不兜底（R7）。";
+                        height: 44px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Text { text: "写入密钥"; width: 80px; font-size: 12px; color: #57606a; vertical-alignment: center; }
+                        ai-secret-name-edit := LineEdit {
+                            text <=> root.ai-secret-name;
+                            placeholder-text: "密钥名，例如 my_key";
+                            width: 200px;
+                        }
+                        ai-secret-value-edit := LineEdit {
+                            text <=> root.ai-secret-value;
+                            input-type: InputType.password;
+                            placeholder-text: "真实密钥（只落 config/secrets.json）";
+                            horizontal-stretch: 1;
+                        }
+                        Button {
+                            text: "保存密钥";
+                            width: 96px;
+                            clicked => { root.ai-save-secret(ai-secret-name-edit.text, ai-secret-value-edit.text); }
+                        }
+                    }
+                    Text {
+                        text: "密钥本身不写进 app.json：上面「密钥引用」只填引用。env:NAME 读环境变量；named:NAME 读 config/secrets.json——用这一行直接写入即可，无需手工维护该文件。密钥值不落运行日志、不进存档与导出包、不进任何报告。";
+                        height: 44px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.ai-secret-names;
+                        height: 20px;
+                        font-size: 11px;
+                        color: #6e7781;
+                        overflow: elide;
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for row in root.ai-invoke-rows: Rectangle {
+                            height: row.kind == "header" ? 26px : 38px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            VerticalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 2px;
+                                Text {
+                                    text: row.title;
+                                    font-size: 12px;
+                                    font-weight: row.kind == "header" ? 700 : 400;
+                                    color: row.kind == "bad" ? #cf222e : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                    overflow: elide;
+                                }
+                                if row.kind != "header": Text {
+                                    text: row.text;
+                                    font-size: 11px;
+                                    color: #57606a;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        for row in root.ai-doctor-rows: Rectangle {
+                            height: row.kind == "header" ? 26px : 38px;
+                            background: #ffffff;
+                            border-color: #eaeef2;
+                            border-width: 1px;
+                            VerticalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 2px;
+                                Text {
+                                    text: row.title;
+                                    font-size: row.kind == "header" ? 12px : 12px;
+                                    font-weight: row.kind == "header" ? 700 : 400;
+                                    color: row.kind == "bad" ? #cf222e : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                    overflow: elide;
+                                }
+                                if row.kind != "header": Text {
+                                    text: row.text;
+                                    font-size: 11px;
+                                    color: #57606a;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        text: "改动即时生效：保存/刷新会同时更新落盘配置与运行期生效配置（AppServices::set_ai_provider / reload_config），无需重启。";
+                        height: 20px;
+                        font-size: 11px;
+                        color: #6e7781;
+                        overflow: elide;
+                    }
+                }
+            }
         }
 
         // =====================================================================
@@ -2022,9 +2793,18 @@ export component MainWindow inherits Window {
                 spacing: 12px;
                 Text {
                     text: root.project-title + (root.project-pack == "" ? "" : "  ·  " + root.project-pack);
-                    width: 34%;
+                    width: 26%;
                     font-size: 11px;
                     color: #57606a;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                // 底栏 AI Provider 状态（docs/design/06 §4）：不可用时红字照实显示。
+                Text {
+                    text: root.ai-status;
+                    width: 20%;
+                    font-size: 11px;
+                    color: root.ai-available ? #1a7f37 : #cf222e;
                     vertical-alignment: center;
                     overflow: elide;
                 }

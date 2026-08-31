@@ -2,7 +2,9 @@
 //! C0-C6 全链（确定性脚本 AI）→ 两个人工门确认 → 全绿。
 
 use adm4_ai::ScriptedProvider;
-use adm4_app::{AppConfig, AppServices, InterviewTurnDto, save_config};
+use adm4_app::{
+    AppConfig, AppServices, CONTRACT_FILE, DOCUMENT_FILE, InterviewTurnDto, save_config,
+};
 use adm4_archive::DataRoot;
 use adm4_authoring::TemplateMode;
 use adm4_contracts::{MatrixCell, TypedValue};
@@ -10,7 +12,7 @@ use adm4_decision::{
     DesignLevel, NaJustification, ParameterValues, PointRequirement, Provenance, SelectionMode,
     UNASSIGNED_DOMAIN_ID,
 };
-use adm4_pipeline::StageStatus;
+use adm4_pipeline::{CancelSignal, StageStatus};
 use adm4_template::{CROSSCHECK_PURPOSE, CertificationStatus, MAPPING_PURPOSE, load_skin_wordlist};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -371,6 +373,32 @@ fn full_chain_from_space_to_signed_phase1() {
     assert!(exported >= 10);
     let imported_id = services.import_project(&package, "导入副本").unwrap();
     assert!(services.archives.doctor(&imported_id).unwrap().is_empty());
+    // 双真相修复核验：导入后 manifest 名与创作态名归一，工作台摘要报的是传入名（非导出方名）。
+    assert_eq!(
+        services
+            .workbench_overview(&imported_id)
+            .unwrap()
+            .summary
+            .project_name,
+        "导入副本"
+    );
+
+    // 10. 文档集交付打包：C0-C6 全跑通 → 清单完整、无缺段、每段带非空 sha256。
+    let manifest = services.deliverable_package(&archive_id, 1).unwrap();
+    assert!(manifest.complete, "缺段：{:?}", manifest.missing_segments);
+    assert!(manifest.missing_segments.is_empty());
+    assert_eq!(manifest.segments.len(), 7);
+    assert!(
+        manifest
+            .segments
+            .iter()
+            .all(|s| s.present && !s.document_sha256.is_empty())
+    );
+    // 落盘产物存在，且只读 status 与打包结果一致（段数一致）。
+    assert!(content.join("deliverable/v1/manifest.json").is_file());
+    let status = services.deliverable_status(&archive_id, 1).unwrap();
+    assert_eq!(status.segments.len(), manifest.segments.len());
+    assert!(status.complete);
 
     std::fs::remove_dir_all(&temp).ok();
 }
@@ -1518,6 +1546,17 @@ fn universal_template_prefills_across_packs_via_services() {
     patched.game_name = "虚构探针甲".into();
     patched.answers.truncate(2);
     let evidence = patched.answers[0].evidence.clone();
+    // F4d：探针改了答卷，批量迁移登记里的答卷指纹必须一起重算——否则取用关卡会
+    // 判定「登记不为当前答卷背书」而拒绝预填（那正是它该做的事，见 T4d 负例）。
+    let restamp = |template: &mut adm4_template::Template| {
+        template.origin = adm4_template::TemplateOrigin::BulkMigration {
+            batch_id: "e2e-probe".into(),
+            tool_version: "e2e/1.0.0".into(),
+            source_ref: "tests/end_to_end.rs".into(),
+            answers_digest: template.answers_digest(),
+            migrated_at: "2026-08-31T00:00:00Z".into(),
+        };
+    };
     let probe = |decision_id: &str, option_id: &str| adm4_template::TemplateAnswer {
         decision_id: decision_id.into(),
         option_id: option_id.into(),
@@ -1531,6 +1570,7 @@ fn universal_template_prefills_across_packs_via_services() {
     // 1. 决策点不存在（其它品类包的专属点）；2. 选项不存在。
     patched.answers.push(probe("gs.grid_shape", "hex_grid"));
     patched.answers.push(probe("u.platform", "ghost_option"));
+    restamp(&mut patched);
     services.templates().save_draft(&patched).unwrap();
 
     let probe_archive = services
@@ -1717,4 +1757,1824 @@ fn design_space_cache_is_hit_and_behaviourally_equivalent() {
     assert!(services.load_space("no_such_pack").is_err());
 
     std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4a 新增场景：流水线控制三项（强制重跑 + 协作式取消 + 阶段产物查询）。
+// ---------------------------------------------------------------------------
+
+/// 造一个「品类最小链路已冻结（v1）」的 lane_defense 项目，返回存档 id。
+///
+/// 与 `full_chain_from_space_to_signed_phase1` 的创作块同源（同一组决策点与参数），
+/// 但只到冻结为止——流水线怎么跑由各测试自己决定。
+fn frozen_minimal_lane_defense_project(services: &AppServices, ai: &ScriptedProvider) -> String {
+    frozen_lane_defense_project_named(services, ai, "重跑与取消验证项目")
+}
+
+/// [`frozen_minimal_lane_defense_project`] 的具名版：项目名参数化（其余逐字相同）。
+/// F4d 需要一个**项目名可指定**的已冻结项目来验证换皮豁免（豁免词就是项目名）。
+fn frozen_lane_defense_project_named(
+    services: &AppServices,
+    ai: &ScriptedProvider,
+    project_name: &str,
+) -> String {
+    let archive_id = services
+        .project_new(project_name, "lane_defense", DesignLevel::L6, None)
+        .unwrap();
+    exempt_v2_domain_entry_points(services, &archive_id);
+
+    const STRUCTURAL: [(&str, &str); 15] = [
+        ("u.business_model", "premium"),
+        ("u.platform", "pc_single"),
+        ("u.experience", "guardian_underdog"),
+        ("u.genre", "lane_defense"),
+        ("ld.combat_system", "counter_combat"),
+        ("ld.deploy_system", "grid_deploy"),
+        ("ld.wave_system", "scripted_waves"),
+        ("ld.economy_system", "regen_resource"),
+        ("ld.counter_damage", "multiplier_formula"),
+        ("ld.deploy_cost", "cost_gate"),
+        ("ld.income_rule", "periodic_income"),
+        ("ld.guard_roster", "guard_table"),
+        ("ld.enemy_roster", "enemy_table"),
+        ("ld.counter_matrix", "matrix_full"),
+        ("ld.wave_table", "wave_rows"),
+    ];
+
+    services
+        .with_project(&archive_id, |engine| {
+            for (decision, option) in STRUCTURAL {
+                engine
+                    .select_option(decision, option, Provenance::UserManual)
+                    .unwrap();
+            }
+            engine
+                .set_parameters(
+                    "u.experience",
+                    scalars(&[(
+                        "statement",
+                        TypedValue::Text("以有限资源守护脆弱的生态穹顶，从濒危走向掌控".into()),
+                    )]),
+                )
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.counter_damage",
+                    scalars(&[("base_multiplier", TypedValue::Float(2.0))]),
+                )
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.deploy_cost",
+                    scalars(&[("refund_ratio", TypedValue::Float(0.8))]),
+                )
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.income_rule",
+                    scalars(&[
+                        ("interval_seconds", TypedValue::Float(5.0)),
+                        ("amount", TypedValue::Int(25)),
+                    ]),
+                )
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.guard_roster",
+                    ParameterValues::Rows {
+                        rows: vec![
+                            guard_row("thorn_archer", 100, 12, 1.2),
+                            guard_row("mist_mage", 150, 20, 1.8),
+                            guard_row("stone_ward", 75, 4, 2.0),
+                            guard_row("sun_harvester", 50, 0, 3.0),
+                        ],
+                    },
+                )
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.enemy_roster",
+                    ParameterValues::Rows {
+                        rows: vec![enemy_row("crawler", 60, 1.0), enemy_row("glider", 40, 2.2)],
+                    },
+                )
+                .unwrap();
+            let mut cells = Vec::new();
+            for guard in ["thorn_archer", "mist_mage", "stone_ward", "sun_harvester"] {
+                for enemy in ["crawler", "glider"] {
+                    cells.push(MatrixCell {
+                        row: guard.into(),
+                        col: enemy.into(),
+                        value: TypedValue::Float(if guard == "mist_mage" && enemy == "glider" {
+                            2.5
+                        } else {
+                            1.0
+                        }),
+                    });
+                }
+            }
+            engine
+                .set_parameters("ld.counter_matrix", ParameterValues::Cells { cells })
+                .unwrap();
+            engine
+                .set_parameters(
+                    "ld.wave_table",
+                    ParameterValues::Rows {
+                        rows: vec![
+                            wave_row(1, "crawler", 5, 2.0),
+                            wave_row(2, "crawler", 8, 1.6),
+                            wave_row(3, "glider", 4, 1.5),
+                            wave_row(4, "crawler", 10, 1.2),
+                            wave_row(5, "glider", 8, 1.0),
+                        ],
+                    },
+                )
+                .unwrap();
+            for (decision, _) in STRUCTURAL {
+                engine.confirm_selection(decision).unwrap();
+            }
+            let report = engine.completeness();
+            assert!(report.is_complete(), "blocking: {:?}", report.blocking);
+            Ok(())
+        })
+        .unwrap();
+
+    services.freeze_red_team_with(&archive_id, ai).unwrap();
+    let frozen = services.freeze_run(&archive_id).unwrap();
+    assert_eq!(frozen.version, 1);
+    archive_id
+}
+
+fn assert_stage_statuses(state: &adm4_pipeline::PipelineRunState, expected: &[(&str, &str)]) {
+    for (stage_id, wanted) in expected {
+        let actual = match state.stage_status(stage_id) {
+            StageStatus::Pending => "pending".to_string(),
+            StageStatus::Running => "running".to_string(),
+            StageStatus::Succeeded => "succeeded".to_string(),
+            StageStatus::Failed { reasons } => format!("failed({})", reasons.join("; ")),
+            StageStatus::Blocked { reasons } => format!("blocked({})", reasons.join("; ")),
+            StageStatus::WaitingHuman { .. } => "waiting_human".to_string(),
+        };
+        assert_eq!(&actual, wanted, "阶段 {stage_id} 状态");
+    }
+}
+
+#[test]
+fn pipeline_cancellation_stops_at_stage_boundary_without_marking_failure() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4a_cancel_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+
+    // 1. 运行前已取消：第一段就停，且记为「未运行」而不是 Failed。
+    let cancel = CancelSignal::new();
+    cancel.cancel();
+    let outcome = services
+        .pipeline_run_with_cancel(&archive_id, "C0", "C6", &ai, &cancel)
+        .unwrap();
+    assert_eq!(outcome.cancelled_at.as_deref(), Some("C0"));
+    assert_stage_statuses(
+        &outcome.state,
+        &[("C0", "pending"), ("C1", "pending"), ("C6", "pending")],
+    );
+    // 一段都没跑 → 产物一份都不该在，且查询如实报缺失（不是空文档）。
+    let c0 = services.pipeline_artifact(&archive_id, 1, "C0").unwrap();
+    assert!(!c0.complete);
+    assert_eq!(c0.missing, vec![DOCUMENT_FILE, CONTRACT_FILE]);
+    assert_eq!(c0.document_text, None);
+
+    // 2. 取消发生在半途：先正常跑到 C2，再带已取消的信号跑全程。
+    services
+        .pipeline_run_with(&archive_id, "C0", "C2", &ai)
+        .unwrap();
+    let mid_cancel = CancelSignal::new();
+    mid_cancel.cancel();
+    let outcome = services
+        .pipeline_run_with_cancel(&archive_id, "C0", "C6", &ai, &mid_cancel)
+        .unwrap();
+    assert_eq!(
+        outcome.cancelled_at.as_deref(),
+        Some("C3"),
+        "取消应在下一个未完成段的边界生效"
+    );
+    assert_stage_statuses(
+        &outcome.state,
+        &[
+            ("C0", "succeeded"),
+            ("C1", "succeeded"),
+            ("C2", "succeeded"),
+            ("C3", "pending"),
+            ("C4", "pending"),
+        ],
+    );
+    // 已完成段的产物必须原样保留（协作式取消不回滚已完成的工作）。
+    assert!(
+        services
+            .pipeline_artifact(&archive_id, 1, "C2")
+            .unwrap()
+            .complete
+    );
+    assert!(
+        !services
+            .pipeline_artifact(&archive_id, 1, "C3")
+            .unwrap()
+            .complete
+    );
+
+    // 3. 复位同一个信号即可继续断点续跑，一路推进到 C5 人工门。
+    mid_cancel.reset();
+    let outcome = services
+        .pipeline_run_with_cancel(&archive_id, "C0", "C6", &ai, &mid_cancel)
+        .unwrap();
+    assert_eq!(outcome.cancelled_at, None);
+    assert_stage_statuses(
+        &outcome.state,
+        &[
+            ("C3", "succeeded"),
+            ("C4", "succeeded"),
+            ("C5", "waiting_human"),
+            ("C6", "pending"),
+        ],
+    );
+
+    // 4. 取消在审计流里留痕（"为什么停在 C3" 必须可追查）。
+    let messages: Vec<String> = services
+        .log
+        .tail(2000)
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.category == "pipeline")
+        .map(|entry| entry.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("被用户取消") && message.contains("阶段 C3")),
+        "取消必须落日志：{messages:?}"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+#[test]
+fn pipeline_rerun_invalidates_downstream_stages_artifacts_and_human_gates() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4a_rerun_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+
+    // 先把 C0-C6 跑成全绿（两道人工门都署名通过）。
+    services
+        .pipeline_run_with(&archive_id, "C0", "C6", &ai)
+        .unwrap();
+    services
+        .pipeline_confirm(&archive_id, "C5", "初审评审员", "风格方向确认")
+        .unwrap();
+    services
+        .pipeline_run_with(&archive_id, "C0", "C6", &ai)
+        .unwrap();
+    let state = services
+        .pipeline_confirm(&archive_id, "C6", "初审评审员", "Phase 1 文档集签收")
+        .unwrap();
+    for stage_id in ["C0", "C1", "C2", "C3", "C4", "C5", "C6"] {
+        assert!(state.is_succeeded(stage_id), "{stage_id} 应先全绿");
+        assert!(
+            services
+                .pipeline_artifact(&archive_id, 1, stage_id)
+                .unwrap()
+                .complete
+        );
+    }
+    let c4_before = services.pipeline_artifact(&archive_id, 1, "C4").unwrap();
+
+    // --- 强制重跑 C2：C2 及其全部下游（C3-C6）的状态、产物、人工门署名一并失效 ---
+    let rerun = services
+        .pipeline_rerun_with(&archive_id, "C2", "C6", &ai)
+        .unwrap();
+    assert_eq!(rerun.reset.target, "C2");
+    assert_eq!(rerun.reset.reset_stages, ["C2", "C3", "C4", "C5", "C6"]);
+    assert_eq!(
+        rerun.reset.cleared_artifacts,
+        ["C2", "C3", "C4", "C5", "C6"]
+    );
+    let revoked: Vec<(&str, &str)> = rerun
+        .reset
+        .revoked_confirmations
+        .iter()
+        .map(|item| (item.stage_id.as_str(), item.actor.as_str()))
+        .collect();
+    assert_eq!(
+        revoked,
+        vec![("C5", "初审评审员"), ("C6", "初审评审员")],
+        "R3：重置范围内的旧署名必须作废，不许为新产物背书"
+    );
+    assert_eq!(rerun.cancelled_at, None);
+
+    // 重跑后：C2/C3/C4 重新产出，C5 回到等待人工确认，C6 停在未运行。
+    assert_stage_statuses(
+        &rerun.state,
+        &[
+            ("C0", "succeeded"),
+            ("C1", "succeeded"),
+            ("C2", "succeeded"),
+            ("C3", "succeeded"),
+            ("C4", "succeeded"),
+            ("C5", "waiting_human"),
+            ("C6", "pending"),
+        ],
+    );
+
+    // C6 产物确实失效（缺段如实报，不是空文档兜底）。
+    let c6_after = services.pipeline_artifact(&archive_id, 1, "C6").unwrap();
+    assert!(!c6_after.complete);
+    assert_eq!(c6_after.missing, vec![DOCUMENT_FILE, CONTRACT_FILE]);
+    assert_eq!(c6_after.document_text, None);
+    assert!(c6_after.document.sha256.is_empty());
+    assert_eq!(c6_after.document.bytes, 0);
+    // C4 是重跑范围内的确定性段：产物被删后重新生成，内容哈希与上一版一致（确定性投影）。
+    let c4_after = services.pipeline_artifact(&archive_id, 1, "C4").unwrap();
+    assert!(c4_after.complete);
+    assert_eq!(c4_after.contract.sha256, c4_before.contract.sha256);
+
+    // 人工门确认确实失效：C6 未运行不能确认，C5 必须重新署名。
+    let stale = services
+        .pipeline_confirm(&archive_id, "C6", "初审评审员", "沿用上次签收")
+        .unwrap_err();
+    assert_eq!(stale.kind, adm4_foundation::Adm4ErrorKind::NotFound);
+    services
+        .pipeline_confirm(&archive_id, "C5", "复审评审员", "重跑后重新确认风格")
+        .unwrap();
+    let state = services
+        .pipeline_run_with(&archive_id, "C0", "C6", &ai)
+        .unwrap();
+    assert_stage_statuses(&state, &[("C6", "waiting_human")]);
+    let state = services
+        .pipeline_confirm(&archive_id, "C6", "复审评审员", "重跑后重新签收")
+        .unwrap();
+    for stage_id in ["C0", "C1", "C2", "C3", "C4", "C5", "C6"] {
+        assert!(state.is_succeeded(stage_id), "{stage_id} 重跑后应重新全绿");
+    }
+    for gate in ["C5", "C6"] {
+        assert_eq!(
+            state.stages[gate]
+                .human_confirmation
+                .as_ref()
+                .map(|item| item.actor.as_str()),
+            Some("复审评审员"),
+            "{gate} 应由重跑后的新署名背书"
+        );
+    }
+
+    // 重跑与作废逐条落日志。
+    let messages: Vec<String> = services
+        .log
+        .tail(2000)
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.category == "pipeline")
+        .map(|entry| entry.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("强制重跑 C2..C6") && message.contains("重置 5 段")),
+        "重跑必须落日志：{messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .filter(|message| message.contains("随重跑作废"))
+            .count()
+            >= 2,
+        "两处作废的人工门确认应各留一条日志：{messages:?}"
+    );
+
+    // --- 负例：参数不合法时一份产物都不许被动 ---
+    assert!(
+        services
+            .pipeline_rerun_with(&archive_id, "C4", "C2", &ai)
+            .is_err(),
+        "区间非法（from > to）必须被拒"
+    );
+    let unknown = services
+        .pipeline_rerun_with(&archive_id, "C9", "C6", &ai)
+        .unwrap_err();
+    assert_eq!(unknown.kind, adm4_foundation::Adm4ErrorKind::NotFound);
+    for stage_id in ["C0", "C1", "C2", "C3", "C4", "C5", "C6"] {
+        assert!(
+            services
+                .pipeline_artifact(&archive_id, 1, stage_id)
+                .unwrap()
+                .complete,
+            "{stage_id} 的产物不该被失败的重跑请求误伤"
+        );
+    }
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+#[test]
+fn stage_artifact_query_exposes_documents_and_reports_gaps() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4a_artifact_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+    services
+        .pipeline_run_with(&archive_id, "C0", "C2", &ai)
+        .unwrap();
+
+    // 已产出段：双格式产物齐备 + 路径/摘要/字节数/预览文本全部可用。
+    let c2 = services.pipeline_artifact(&archive_id, 1, "C2").unwrap();
+    assert_eq!(c2.archive_id, archive_id);
+    assert_eq!((c2.frozen_version, c2.stage_id.as_str()), (1, "C2"));
+    assert!(c2.complete && c2.missing.is_empty());
+    assert!(c2.document.present && c2.contract.present);
+    let document_path = std::path::Path::new(&c2.document.path);
+    assert!(
+        document_path.is_file(),
+        "路径必须真能打开：{}",
+        c2.document.path
+    );
+    let on_disk = std::fs::read(document_path).unwrap();
+    assert_eq!(c2.document.bytes as usize, on_disk.len());
+    let text = c2.document_text.clone().expect("预览文本");
+    assert_eq!(text.as_bytes(), on_disk.as_slice(), "小文档应给全文");
+    assert!(text.contains("玩法设计文档"), "C2 渲染文档正文：{text}");
+    assert!(!c2.document_truncated);
+    assert!(c2.preview_limit_bytes > 0);
+
+    // 未产出段：如实报缺失（present=false + missing 列名 + 文本 None）。
+    let c5 = services.pipeline_artifact(&archive_id, 1, "C5").unwrap();
+    assert!(!c5.complete);
+    assert_eq!(c5.missing, vec![DOCUMENT_FILE, CONTRACT_FILE]);
+    assert_eq!(c5.document_text, None);
+    assert!(c5.document.path.contains("C5"), "{}", c5.document.path);
+
+    // 未知阶段 id → 报错，不能伪装成「该段没跑」。
+    for bad in ["C7", "P0", "c2"] {
+        assert_eq!(
+            services
+                .pipeline_artifact(&archive_id, 1, bad)
+                .unwrap_err()
+                .kind,
+            adm4_foundation::Adm4ErrorKind::NotFound,
+            "阶段 id {bad}"
+        );
+    }
+    // 不存在的冻结版本：整版目录缺失 → 七段全缺，不报错也不兜底。
+    let ghost = services.pipeline_artifact(&archive_id, 9, "C0").unwrap();
+    assert!(!ghost.complete);
+    assert_eq!(ghost.missing, vec![DOCUMENT_FILE, CONTRACT_FILE]);
+    // 不存在的存档 → not_found。
+    assert_eq!(
+        services
+            .pipeline_artifact("arc-not-there", 1, "C0")
+            .unwrap_err()
+            .kind,
+        adm4_foundation::Adm4ErrorKind::NotFound
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4b 新增场景：另存模板 / 工作台重置 / 画像取点 / 体检上提 / 阶段耗时与运行中状态。
+// ---------------------------------------------------------------------------
+
+/// 二版「风格定位·感受目标」：L3、baseline（恒适用）、multi + allow_primary。
+/// 既是另存模板里验证多选/主选导出的样本，也是画像卡「美术风格」字段的归宿。
+const ART_STYLE_POINT: &str =
+    "v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target";
+
+/// 造一个「答了几个点、其中一个故意不确认」的 lane_defense 项目（不冻结，够快）。
+///
+/// 已确认：`u.business_model`（单选）/ `u.platform`（单选）/ `ART_STYLE_POINT`（多选 + 主选）。
+/// 未确认：`u.genre` —— 另存模板必须把它挡在门外。
+fn project_with_one_unconfirmed_point(services: &AppServices) -> String {
+    let archive_id = services
+        .project_new("霜落峡谷防卫计划", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    services
+        .with_project(&archive_id, |engine| {
+            engine.select_option("u.business_model", "premium", Provenance::UserManual)?;
+            engine.set_rationale("u.business_model", "单机塔防以一次性交付内容为宜")?;
+            engine.confirm_selection("u.business_model")?;
+            engine.select_option("u.platform", "pc_single", Provenance::UserManual)?;
+            engine.confirm_selection("u.platform")?;
+            engine.select_option(ART_STYLE_POINT, "clear_readable", Provenance::UserManual)?;
+            engine.add_option(ART_STYLE_POINT, "immersive_mood")?;
+            engine.set_primary_option(ART_STYLE_POINT, "immersive_mood")?;
+            engine.confirm_selection(ART_STYLE_POINT)?;
+            // 选了但没确认：预填/提案的半成品，不该被当成定论传播出去。
+            engine.select_option(
+                "u.genre",
+                "lane_defense",
+                Provenance::Template {
+                    template_id: "someone_else".into(),
+                },
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    archive_id
+}
+
+/// 另存模板（H1）：只导出已确认的点 → 落 HumanReviewed → certify → 可预填且仍需逐条确认；
+/// 逆向来源缺 S2/S3 证据在门面层同样被拒；落盘前过换皮扫描（R5）。
+#[test]
+fn template_save_as_exports_only_confirmed_selections_then_certifies_and_prefills() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4b_saveas_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let archive_id = project_with_one_unconfirmed_point(&services);
+
+    // --- R5 落盘钩子：项目里残留参考游戏名 → 另存被拒（不许随模板扩散出去） ---
+    services
+        .with_project(&archive_id, |engine| {
+            engine.set_rationale("u.platform", "照 Kingdom Rush 的布防节奏来")
+        })
+        .unwrap();
+    let blocked = services
+        .template_export_from_project(
+            &archive_id,
+            "tpl_from_project",
+            "",
+            &[],
+            "评审员甲",
+            "逐条复核已确认选择",
+        )
+        .unwrap_err();
+    assert_eq!(blocked.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+    assert!(
+        blocked.message.contains("kingdom rush"),
+        "{}",
+        blocked.message
+    );
+    assert!(
+        services
+            .templates()
+            .get("lane_defense", "tpl_from_project")
+            .is_err(),
+        "被换皮门拦下时一份模板都不许落盘"
+    );
+
+    // --- 正例：改写理由后另存 ---
+    services
+        .with_project(&archive_id, |engine| {
+            engine.set_rationale("u.platform", "键鼠精确布防是本作的核心操作前提")
+        })
+        .unwrap();
+    let report = services
+        .template_export_from_project(
+            &archive_id,
+            "tpl_from_project",
+            "",
+            &["霜落定稿".to_string()],
+            " 评审员甲 ",
+            " 逐条复核已确认选择 ",
+        )
+        .unwrap();
+
+    // 钉子 ①：未确认的点不进模板，且跳过数如实在案（R2）。
+    assert_eq!(report.exported_points, 3, "{}", report.summary());
+    assert_eq!(
+        report.skipped_unconfirmed, 1,
+        "u.genre 未确认，必须被挡在门外"
+    );
+    assert!(report.skipped_unknown.is_empty());
+    assert_eq!(report.exported_additional_options, 1);
+    assert_eq!(report.exported_primary_marks, 1);
+    assert_eq!(report.status, "HumanReviewed");
+    assert_eq!(report.reviewed_by, "评审员甲");
+    assert_eq!(report.source_project_name, "霜落峡谷防卫计划");
+    assert_eq!(report.depth_reached, DesignLevel::L4);
+
+    let saved = services
+        .templates()
+        .get("lane_defense", "tpl_from_project")
+        .unwrap();
+    assert!(saved.is_project_export());
+    assert_eq!(
+        saved.origin,
+        adm4_template::TemplateOrigin::ProjectExport {
+            source_archive_id: archive_id.clone(),
+            source_project_name: "霜落峡谷防卫计划".into(),
+            exported_at: match &saved.origin {
+                adm4_template::TemplateOrigin::ProjectExport { exported_at, .. } =>
+                    exported_at.clone(),
+                other => panic!("来源应为本项目导出，实际 {other:?}"),
+            },
+        }
+    );
+    assert_eq!(saved.game_name, "霜落峡谷防卫计划", "缺 --game 时用项目名");
+    let ids: Vec<&str> = saved
+        .answers
+        .iter()
+        .map(|answer| answer.decision_id.as_str())
+        .collect();
+    assert!(
+        !ids.contains(&"u.genre"),
+        "未确认的点不许出现在答卷里：{ids:?}"
+    );
+    let art = saved
+        .answers
+        .iter()
+        .find(|answer| answer.decision_id == ART_STYLE_POINT)
+        .expect("多选点应导出");
+    assert_eq!(art.primary_option.as_deref(), Some("immersive_mood"));
+    assert_eq!(art.selected_count(), 2);
+    assert_eq!(
+        art.selected_option_ids(),
+        vec!["immersive_mood", "clear_readable"],
+        "主选排在最前"
+    );
+    let business = saved
+        .answers
+        .iter()
+        .find(|answer| answer.decision_id == "u.business_model")
+        .expect("单选点应导出");
+    assert_eq!(
+        business.notes, "单机塔防以一次性交付内容为宜",
+        "选择理由落答卷备注"
+    );
+    assert!(
+        business.evidence.is_empty(),
+        "本项目导出没有外部来源可引，宁缺勿造（不许塞假 URL）"
+    );
+
+    // 同名模板不许覆盖（另存不该悄悄毁掉别人的产线进度）。
+    assert_eq!(
+        services
+            .template_export_from_project(
+                &archive_id,
+                "tpl_from_project",
+                "",
+                &[],
+                "评审员甲",
+                "再来一次"
+            )
+            .unwrap_err()
+            .kind,
+        adm4_foundation::Adm4ErrorKind::Conflict
+    );
+
+    // 认证前不可预填（取用关卡对本项目导出来源一视同仁）。
+    let target = services
+        .project_new("接收另存模板的项目", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    assert_eq!(
+        services
+            .project_prefill_template(&target, "tpl_from_project")
+            .unwrap_err()
+            .kind,
+        adm4_foundation::Adm4ErrorKind::Blocked
+    );
+
+    // --- S5 认证：本项目导出来源不要求 S2/S3 机器证据，但**照常登记换皮词表** ---
+    //
+    // F4d 修红线：曾经「本项目导出不登记词表」，理由是源项目自己的名字进了词表后
+    // 它自己过不了换皮门。代价是 B 项目预填 A 的模板、带着 A 的名字通过冻结门——
+    // 换皮扫描对「抄另一个项目」彻底失效。现在登记照做，源项目自身的放行改由
+    // 扫描侧按当前项目名豁免（`skin_scanner_for_project`）。
+    let wordlist_before = load_skin_wordlist(&services.skin_wordlist_path())
+        .unwrap()
+        .words;
+    let certified = services
+        .template_certify("lane_defense", "tpl_from_project")
+        .unwrap();
+    assert_eq!(
+        certified.certification.status,
+        CertificationStatus::Certified
+    );
+    let wordlist_after = load_skin_wordlist(&services.skin_wordlist_path())
+        .unwrap()
+        .words;
+    for word in ["霜落峡谷防卫计划", "霜落定稿"] {
+        assert!(
+            !wordlist_before.contains(&word.to_string())
+                && wordlist_after.contains(&word.to_string()),
+            "另存模板认证后 {word} 必须进词表（否则别的项目抄它没人拦）：{wordlist_after:?}"
+        );
+    }
+
+    // 钉子（R5 豁免作用域）①：源项目自己的名字已在词表里，它自己照旧过得了换皮门。
+    // 用「再另存一份」验证：另存前整份模板过换皮扫描，而模板的 game_name 与
+    // origin.source_project_name 就是项目名——没有豁免的话这一步必被 RedLine 拦下。
+    services
+        .template_export_from_project(
+            &archive_id,
+            "tpl_from_project_again",
+            "",
+            &[],
+            "评审员甲",
+            "自身名字已在词表里，本项目仍应可导出",
+        )
+        .expect("源项目自己的名字不该拦住源项目自己（R5 豁免只放行当前项目名）");
+
+    // 钉子 ③：认证后可预填，且预填条目一条都不算已确认。
+    let prefill = services
+        .project_prefill_template(&target, "tpl_from_project")
+        .unwrap();
+    assert_eq!(prefill.applied, 3, "{}", prefill.summary());
+    assert_eq!(prefill.multi_options_applied, 1);
+    assert!(prefill.skipped.is_empty(), "{:?}", prefill.skipped);
+    let views = services.decision_points(&target).unwrap();
+    for decision_id in ["u.business_model", "u.platform", ART_STYLE_POINT] {
+        let view = views
+            .iter()
+            .find(|view| view.decision_id == decision_id)
+            .unwrap_or_else(|| panic!("{decision_id} 应已预填"));
+        assert!(
+            !view.confirmed,
+            "{decision_id} 预填后必须仍待用户逐条确认（AI/模板永不代提交）"
+        );
+    }
+    assert!(
+        services.project_profile(&target).unwrap().fields.is_empty(),
+        "未确认的预填条目不上画像卡"
+    );
+    services
+        .with_project(&target, |engine| engine.confirm_selection("u.platform"))
+        .unwrap();
+    assert!(
+        services
+            .project_profile(&target)
+            .unwrap()
+            .fields
+            .iter()
+            .any(|field| field.decision_id == "u.platform"),
+        "逐条确认后才计入"
+    );
+
+    // 钉子（R5 豁免作用域）②：换到别的项目，A 的名字照旧被拦。
+    // `target` 刚用 tpl_from_project 预填，预填理由是「模板预填自 霜落峡谷防卫计划」。
+    let target_gates = services.freeze_check(&target).unwrap();
+    let skin_hits: Vec<String> = target_gates
+        .gates
+        .iter()
+        .flat_map(|gate| gate.findings.iter())
+        .filter(|finding| finding.code == "reference_name_hit")
+        .map(|finding| finding.message.clone())
+        .collect();
+    assert!(
+        skin_hits
+            .iter()
+            .any(|message| message.contains("霜落峡谷防卫计划")),
+        "B 项目的产物带着 A 的项目名必须被换皮门拦下：{skin_hits:?}"
+    );
+    // 钉子（R5 豁免作用域）③：同一份词表下，逆向来源的外部游戏名拦截行为一条不变。
+    services
+        .with_project(&target, |engine| {
+            engine.set_rationale("u.platform", "参考 Kingdom Rush 的布防节奏")
+        })
+        .unwrap();
+    assert!(
+        services
+            .freeze_check(&target)
+            .unwrap()
+            .gates
+            .iter()
+            .flat_map(|gate| gate.findings.iter())
+            .any(|finding| finding.code == "reference_name_hit"
+                && finding.message.contains("kingdom rush")),
+        "逆向来源的外部游戏名照旧被拦"
+    );
+
+    // --- 钉子 ②：逆向来源缺 S2/S3 证据，门面层的 certify 同样拒绝 ---
+    services
+        .template_new_draft(
+            "lane_defense",
+            "tpl_forged",
+            "虚构逆向甲",
+            &[],
+            DesignLevel::L4,
+        )
+        .unwrap();
+    let mut forged = services
+        .templates()
+        .get("lane_defense", "tpl_forged")
+        .unwrap();
+    forged.certification = adm4_template::Certification {
+        status: CertificationStatus::HumanReviewed,
+        reviewed_by: "评审员乙".into(),
+        reviewed_at: "2026-08-31T00:00:00Z".into(),
+        review_note: "手改状态字段伪造的审核".into(),
+    };
+    services.templates().save_draft(&forged).unwrap();
+    let refused = services
+        .template_certify("lane_defense", "tpl_forged")
+        .unwrap_err();
+    assert_eq!(refused.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+    assert!(refused.message.contains("逆向模板"), "{}", refused.message);
+    assert_eq!(
+        services
+            .templates()
+            .get("lane_defense", "tpl_forged")
+            .unwrap()
+            .certification
+            .status,
+        CertificationStatus::HumanReviewed,
+        "被拒时磁盘上的模板一字不改"
+    );
+    assert_eq!(
+        services
+            .project_prefill_template(&target, "tpl_forged")
+            .unwrap_err()
+            .kind,
+        adm4_foundation::Adm4ErrorKind::Blocked
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// 工作台重置（H2）：清空创作态，保留项目、已冻结版本与流水线产物；actor/note 双必填。
+#[test]
+fn workbench_reset_clears_authoring_state_but_keeps_frozen_history() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4b_reset_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+    services
+        .pipeline_run_with(&archive_id, "C0", "C2", &ai)
+        .unwrap();
+    services
+        .authoring_set_node_design_note(&archive_id, "core_fun_decision", "核心乐趣以布防抉择为轴")
+        .unwrap();
+    services
+        .authoring_set_node_risk_note(&archive_id, "core_fun_decision", "体验参数尚未经试玩验证")
+        .unwrap();
+
+    let before = services.load_authoring_state(&archive_id).unwrap();
+    assert_eq!(before.frozen_versions, 1);
+    assert!(before.selections.len() >= 15);
+    assert!(!before.not_applicable.is_empty());
+
+    // 钉子 ⑤：破坏性操作缺署名或缺理由一律被拒（R3），且什么都没被清掉。
+    for (actor, note) in [("   ", "返工重来"), ("主策划", "  ")] {
+        let error = services
+            .project_reset_workbench(&archive_id, actor, note)
+            .unwrap_err();
+        assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::InvalidInput);
+    }
+    assert_eq!(
+        services
+            .load_authoring_state(&archive_id)
+            .unwrap()
+            .selections
+            .len(),
+        before.selections.len(),
+        "被拒的重置不许动任何数据"
+    );
+
+    let report = services
+        .project_reset_workbench(&archive_id, " 主策划 ", " 品类方向推翻，创作重来 ")
+        .unwrap();
+    assert_eq!(report.actor, "主策划");
+    assert_eq!(report.cleared_selections, before.selections.len());
+    assert_eq!(report.cleared_exemptions, before.not_applicable.len());
+    assert_eq!(report.cleared_node_design_notes, 1);
+    assert_eq!(report.cleared_node_risk_notes, 1);
+    assert!(report.cleared_parameter_values >= 7, "{}", report.summary());
+    assert!(!report.is_noop());
+
+    // 钉子 ④a：创作态回到初始未作答状态。
+    let after = services.load_authoring_state(&archive_id).unwrap();
+    assert!(after.selections.is_empty());
+    assert!(after.not_applicable.is_empty());
+    assert!(after.node_design_notes.is_empty());
+    assert!(after.node_risk_notes.is_empty());
+    assert_eq!(after.template_mode, TemplateMode::None);
+    assert!(after.revision > before.revision, "重置也是一次变更");
+    let completeness = services.open_engine(&archive_id).unwrap().completeness();
+    assert_eq!(completeness.done, 0);
+    assert!(completeness.total > 0, "分母仍在，只是一个都没答");
+    assert!(
+        services
+            .project_profile(&archive_id)
+            .unwrap()
+            .fields
+            .is_empty()
+    );
+
+    // 钉子 ④b：项目身份、已冻结版本与流水线产物全部保留。
+    assert_eq!(after.project_name, before.project_name);
+    assert_eq!(after.frozen_versions, 1, "冻结版本是只增不改的历史（D4）");
+    assert_eq!(
+        services.load_frozen(&archive_id, 1).unwrap().version,
+        1,
+        "冻结产物必须还能读出来"
+    );
+    assert_eq!(services.latest_frozen_version(&archive_id).unwrap(), 1);
+    let state = services.pipeline_status(&archive_id).unwrap();
+    for stage_id in ["C0", "C1", "C2"] {
+        assert!(state.is_succeeded(stage_id), "{stage_id} 的运行状态应保留");
+        assert!(
+            services
+                .pipeline_artifact(&archive_id, 1, stage_id)
+                .unwrap()
+                .complete,
+            "{stage_id} 的产物应保留"
+        );
+    }
+    assert!(
+        services
+            .project_list()
+            .unwrap()
+            .iter()
+            .any(|manifest| manifest.archive_id == archive_id),
+        "项目本身不该消失"
+    );
+    // 体检仍一致（重置走的是 with_project 事务，指纹与内容同步刷新）。
+    let doctor = services.project_doctor(&archive_id).unwrap();
+    assert!(doctor.healthy, "{:?}", doctor.problems);
+
+    // 重置在审计流里留痕（清了什么、谁按的、为什么按）。
+    let messages: Vec<String> = services
+        .log
+        .tail(2000)
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.category == "project")
+        .map(|entry| entry.message)
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("工作台重置") && message.contains("主策划")),
+        "{messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("品类方向推翻，创作重来")),
+        "重置理由必须落日志：{messages:?}"
+    );
+
+    // 重置一个已经空白的项目：幂等且如实报告「无可清空」。
+    let again = services
+        .project_reset_workbench(&archive_id, "主策划", "确认已清空")
+        .unwrap();
+    assert!(again.is_noop());
+    assert_eq!(again.cleared_selections, 0);
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// 画像取点（M4）：清单驱动取点让 L2/L3 点上画像卡，但**不动**完备度分母；
+/// 写错 id 被装载校验拦下；去掉清单即回退 L0/L1（旧数据零影响）。
+#[test]
+fn profile_points_drive_profile_card_without_touching_completeness_denominator() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4b_profile_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let pack_path = temp
+        .join("design_space")
+        .join("lane_defense")
+        .join("pack.json");
+
+    // 仓内数据的清单覆盖二版画像六字段，且每个 id 都真实存在。
+    let declared = services
+        .load_space("lane_defense")
+        .unwrap()
+        .pack
+        .profile_points
+        .clone();
+    for wanted in [
+        "u.genre",                                              // 品类
+        "u.platform",                                           // 平台
+        "v2.target_player_decision.wan_jia_hua_xiang.age_band", // 目标用户
+        "u.business_model",                                     // 商业模式
+        ART_STYLE_POINT,                                        // 美术风格
+        "u.target_scale",                                       // 内容规模
+        "u.operation_model",                                    // 上线节奏
+    ] {
+        assert!(
+            declared.iter().any(|id| id == wanted),
+            "画像清单应覆盖 {wanted}"
+        );
+    }
+
+    let archive_id = services
+        .project_new("画像取点验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    services
+        .with_project(&archive_id, |engine| {
+            engine.select_option("u.platform", "pc_single", Provenance::UserManual)?;
+            engine.confirm_selection("u.platform")?;
+            // u.genre 是 L2、ART_STYLE_POINT 是 L3：按老的 L0/L1 过滤这两个永远上不了画像卡。
+            engine.select_option("u.genre", "lane_defense", Provenance::UserManual)?;
+            engine.confirm_selection("u.genre")?;
+            engine.select_option(ART_STYLE_POINT, "immersive_mood", Provenance::UserManual)?;
+            engine.confirm_selection(ART_STYLE_POINT)?;
+            Ok(())
+        })
+        .unwrap();
+
+    let profile = services.project_profile(&archive_id).unwrap();
+    let field_ids: Vec<&str> = profile
+        .fields
+        .iter()
+        .map(|field| field.decision_id.as_str())
+        .collect();
+    assert_eq!(
+        field_ids,
+        vec!["u.genre", "u.platform", ART_STYLE_POINT],
+        "取点与展示顺序都由清单决定"
+    );
+    let art = &profile.fields[2];
+    assert_eq!(art.level, DesignLevel::L3);
+    assert_eq!(art.selected.len(), 1);
+    assert!(art.label.contains("风格定位"), "{}", art.label);
+    let with_list = services.open_engine(&archive_id).unwrap().completeness();
+    let views_with_list = services.decision_points(&archive_id).unwrap();
+
+    // --- 钉子 ⑥：清单里写错 id → 装载即 fail-closed（不静默忽略） ---
+    let original: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&pack_path).unwrap()).unwrap();
+    let rewrite = |pack: &serde_json::Value| {
+        std::fs::write(&pack_path, serde_json::to_string_pretty(pack).unwrap()).unwrap();
+    };
+    let mut typo = original.clone();
+    typo["profile_points"] = serde_json::json!(["u.platform", "u.target_scale_typo"]);
+    rewrite(&typo);
+    let reopened = AppServices::open(Some(temp.clone())).unwrap();
+    let error = reopened.load_space("lane_defense").unwrap_err();
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::Blocked);
+    assert!(
+        error.message.contains("profile.unknown_point"),
+        "{}",
+        error.message
+    );
+    assert!(
+        error.message.contains("u.target_scale_typo"),
+        "{}",
+        error.message
+    );
+
+    // --- 钉子 ⑦：去掉清单后完备度分母/分子/非必做计数一字不变，只有画像卡变少 ---
+    let mut stripped = original.clone();
+    stripped
+        .as_object_mut()
+        .expect("pack.json 是对象")
+        .remove("profile_points")
+        .expect("清单键应存在");
+    rewrite(&stripped);
+    let without_list = AppServices::open(Some(temp.clone())).unwrap();
+    assert!(
+        without_list
+            .load_space("lane_defense")
+            .unwrap()
+            .pack
+            .profile_points
+            .is_empty(),
+        "清单应已移除（模拟旧数据）"
+    );
+    let fallback = without_list
+        .open_engine(&archive_id)
+        .unwrap()
+        .completeness();
+    assert_eq!(
+        (fallback.total, fallback.done, fallback.optional_skipped),
+        (with_list.total, with_list.done, with_list.optional_skipped),
+        "画像取点是纯展示层，不许动完备度分母"
+    );
+    assert_eq!(fallback.blocking.len(), with_list.blocking.len());
+    let views_without_list = without_list.decision_points(&archive_id).unwrap();
+    assert_eq!(views_with_list.len(), views_without_list.len());
+    for (with, without) in views_with_list.iter().zip(views_without_list.iter()) {
+        assert_eq!(
+            (
+                with.decision_id.as_str(),
+                with.level,
+                with.requirement,
+                with.applicability.as_str()
+            ),
+            (
+                without.decision_id.as_str(),
+                without.level,
+                without.requirement,
+                without.applicability.as_str()
+            ),
+            "清单不得改变任何决策点的层级/必填性/适用性"
+        );
+    }
+    let fallback_profile = without_list.project_profile(&archive_id).unwrap();
+    assert_eq!(
+        fallback_profile
+            .fields
+            .iter()
+            .map(|field| field.decision_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u.platform"],
+        "回退到 L0/L1 过滤：L2 的品类与 L3 的美术风格都上不了卡（正是本项要修的老毛病）"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// 体检上提（D）：`project doctor` / `ai doctor` 的判定进门面，两端共用同一份结论。
+#[test]
+fn doctor_reports_are_structured_at_the_service_layer() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4b_doctor_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let archive_id = services
+        .project_new("体检验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+
+    let healthy = services.project_doctor(&archive_id).unwrap();
+    assert_eq!(healthy.archive_id, archive_id);
+    assert!(healthy.healthy);
+    assert!(healthy.problems.is_empty());
+
+    // 内容被外部改动 → 指纹不一致，逐条报问题（体检报告问题，不是自己失败）。
+    let content = services.archives.content_dir(&archive_id);
+    std::fs::write(content.join("tampered.txt"), b"outside edit").unwrap();
+    let broken = services.project_doctor(&archive_id).unwrap();
+    assert!(!broken.healthy);
+    assert_eq!(broken.problems.len(), 1);
+    assert!(
+        broken.problems[0].contains("内容指纹不一致"),
+        "{:?}",
+        broken.problems
+    );
+
+    // 存档不存在 → manifest 不可读也是一条问题（而不是抛错）。
+    let missing = services.project_doctor("archive-not-there").unwrap();
+    assert!(!missing.healthy);
+    assert!(
+        missing.problems[0].contains("manifest 不可读"),
+        "{:?}",
+        missing.problems
+    );
+
+    // AI 体检：本测试的配置里 ai_provider=None → 不可用，并如实带出原始原因。
+    let ai = services.ai_doctor();
+    assert!(!ai.available);
+    assert!(ai.provider_id.is_empty());
+    assert!(ai.detail.contains("未配置 AI Provider"), "{}", ai.detail);
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// 阶段耗时与运行中状态（E）：段执行期间落 `Running` + `started_at`，完成后可算耗时；
+/// 取消不留 `Running` 残留；旧存档（无 `started_at`）照旧可读。
+#[test]
+fn pipeline_records_running_state_and_stage_durations() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4b_running_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_minimal_lane_defense_project(&services, &ai);
+    let run_state_path = services
+        .archives
+        .content_dir(&archive_id)
+        .join("pipeline")
+        .join("v1")
+        .join("run_state.json");
+
+    // 在 C1 的 AI 调用时刻窥一眼磁盘上的运行状态：本段必须已经是「运行中」。
+    // 这是桌面端把流水线放进工作线程后显示「C1 正在跑」的唯一依据。
+    let spy = RunStateSpy {
+        inner: &ai,
+        run_state_path: run_state_path.clone(),
+        observed: std::sync::Mutex::new(Vec::new()),
+    };
+    let state = services
+        .pipeline_run_with(&archive_id, "C0", "C2", &spy)
+        .unwrap();
+    let observed = spy.observed.into_inner().expect("观测锁");
+    assert!(
+        observed
+            .iter()
+            .any(|(stage_id, status)| stage_id == "C1" && status == "running"),
+        "C1 执行期间磁盘上的状态应为 running，实测 {observed:?}"
+    );
+    assert!(
+        observed
+            .iter()
+            .any(|(stage_id, status)| stage_id == "C0" && status == "succeeded"),
+        "上一段照旧是 succeeded：{observed:?}"
+    );
+
+    // 跑完之后：三段都是成功，开始/结束时刻俱在，耗时算得出来。
+    for stage_id in ["C0", "C1", "C2"] {
+        let record = state
+            .stages
+            .get(stage_id)
+            .unwrap_or_else(|| panic!("{stage_id} 记录应在案"));
+        assert_eq!(record.status, StageStatus::Succeeded);
+        assert!(!record.started_at.is_empty(), "{stage_id} 缺开始时刻");
+        assert!(!record.finished_at.is_empty(), "{stage_id} 缺结束时刻");
+        assert!(
+            record.duration_seconds().is_some(),
+            "{stage_id} 的耗时必须算得出来"
+        );
+    }
+
+    // 取消：被取消的段记为未运行、无开始时刻，全表不留任何 Running 残留。
+    let cancel = CancelSignal::new();
+    cancel.cancel();
+    let outcome = services
+        .pipeline_run_with_cancel(&archive_id, "C0", "C6", &ai, &cancel)
+        .unwrap();
+    assert_eq!(outcome.cancelled_at.as_deref(), Some("C3"));
+    let cancelled = &outcome.state.stages["C3"];
+    assert_eq!(cancelled.status, StageStatus::Pending);
+    assert!(
+        cancelled.started_at.is_empty(),
+        "一步都没执行的段不该有开始时刻"
+    );
+    assert_eq!(cancelled.duration_seconds(), None);
+    assert!(
+        outcome
+            .state
+            .stages
+            .values()
+            .all(|record| record.status != StageStatus::Running),
+        "取消后不许留下「正在跑」的幽灵段：{:?}",
+        outcome.state.stages
+    );
+
+    // 人工门：产物就绪后等人签字，确认时刻即结束时刻，等待时长也算进耗时。
+    services
+        .pipeline_run_with(&archive_id, "C0", "C6", &ai)
+        .unwrap();
+    let state = services
+        .pipeline_confirm(&archive_id, "C5", "评审员甲", "风格方向确认")
+        .unwrap();
+    let gate = &state.stages["C5"];
+    assert!(!gate.started_at.is_empty());
+    assert!(gate.duration_seconds().is_some());
+
+    // 钉子 ⑧：旧存档（run_state.json 里没有 started_at 键）照旧可读，耗时如实为未知。
+    let legacy = r#"{
+      "frozen_hash": "PLACEHOLDER",
+      "stages": {
+        "C0": {"stage_id":"C0","status":{"status":"succeeded"},"contract_hash":"","finished_at":"2026-08-31T10:00:30Z","human_confirmation":null}
+      }
+    }"#
+    .replace(
+        "PLACEHOLDER",
+        &services.load_frozen(&archive_id, 1).unwrap().content_hash,
+    );
+    std::fs::write(&run_state_path, legacy).unwrap();
+    let reloaded = services.pipeline_status(&archive_id).unwrap();
+    let record = &reloaded.stages["C0"];
+    assert!(record.started_at.is_empty());
+    assert_eq!(record.duration_seconds(), None, "缺开始时刻就说不知道");
+    assert!(reloaded.is_succeeded("C0"));
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4d 场景 1：换皮词表按项目排除（R5 跨项目漏洞）——A 的产物放行、B 的产物被拦
+//
+// 与 `template_save_as_...` 里的钉子互补：那条走「另存 + 冻结门」，这条走
+// **流水线产物落盘钩子**（C0 文档标题就是项目名，最容易被自己的名字拦住的地方）。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn skin_wordlist_exempts_only_the_current_project_name() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4d_skin_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+
+    // A 项目：手动答满 → 冻结 → C0 产物落盘成功（此时词表里还没有 A 的名字）。
+    let ai = scripted_ai();
+    let archive_a = frozen_lane_defense_project_named(&services, &ai, "霜落峡谷防卫计划");
+    let state = services
+        .pipeline_run_with(&archive_a, "C0", "C0", &ai)
+        .unwrap();
+    assert!(state.is_succeeded("C0"));
+
+    // A 另存模板并认证 → A 的项目名进全局词表（R5 照常登记）。
+    services
+        .template_export_from_project(
+            &archive_a,
+            "tpl_frostfall",
+            "",
+            &[],
+            "评审员甲",
+            "逐条复核已确认选择",
+        )
+        .unwrap();
+    services
+        .template_certify("lane_defense", "tpl_frostfall")
+        .unwrap();
+    let words = load_skin_wordlist(&services.skin_wordlist_path())
+        .unwrap()
+        .words;
+    assert!(
+        words.contains(&"霜落峡谷防卫计划".to_string()),
+        "另存模板认证必须登记源项目名（否则别的项目抄它没人拦）：{words:?}"
+    );
+
+    // ① A 自己重跑 C0：文档标题就是「霜落峡谷防卫计划」，落盘钩子必须放行。
+    let rerun = services
+        .pipeline_rerun_with(&archive_a, "C0", "C0", &ai)
+        .unwrap();
+    assert!(
+        rerun.state.is_succeeded("C0"),
+        "自身名字在词表里不该拦住自己：{:?}",
+        rerun.state.stage_status("C0")
+    );
+    let document = services
+        .pipeline_artifact(&archive_a, 1, "C0")
+        .unwrap()
+        .document_text
+        .expect("C0 文档应可读");
+    assert!(
+        document.contains("霜落峡谷防卫计划"),
+        "C0 文档标题确实带项目名（否则本用例证明不了什么）"
+    );
+
+    // ② B 项目预填 A 的模板 → 理由里带 A 的名字 → 冻结门必须拦。
+    let archive_b = services
+        .project_new("晨星台地防线", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    services
+        .project_prefill_template(&archive_b, "tpl_frostfall")
+        .unwrap();
+    let hits: Vec<String> = services
+        .freeze_check(&archive_b)
+        .unwrap()
+        .gates
+        .iter()
+        .flat_map(|gate| gate.findings.iter())
+        .filter(|finding| finding.code == "reference_name_hit")
+        .map(|finding| finding.message.clone())
+        .collect();
+    assert!(
+        hits.iter()
+            .any(|message| message.contains("霜落峡谷防卫计划")),
+        "B 的产物带着 A 的项目名必须被拦：{hits:?}"
+    );
+
+    // ③ 逆向来源的外部游戏名：两个项目视角下都照旧拦，一条没放松。
+    for archive in [&archive_a, &archive_b] {
+        services
+            .with_project(archive, |engine| {
+                engine.set_rationale("u.platform", "参考 Kingdom Rush 的布防节奏")
+            })
+            .unwrap();
+        assert!(
+            services
+                .freeze_check(archive)
+                .unwrap()
+                .gates
+                .iter()
+                .flat_map(|gate| gate.findings.iter())
+                .any(|finding| finding.code == "reference_name_hit"
+                    && finding.message.contains("kingdom rush")),
+            "逆向来源的外部游戏名拦截行为必须一条不变"
+        );
+    }
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4e：换皮豁免的作用域收窄到「由本存档 ProjectExport 模板登记的词」
+//
+// F4d 的豁免是按**词面**剔除当前项目名，不问该词条是谁登记的，于是留下一条缝：
+// 项目取名恰好等于词表里某个逆向外部游戏名（如项目就叫「Kingdom Rush」）时，
+// 那个外部名对这个项目整体失效——该项目可以随便抄它而不被 R5 拦住。
+//
+// 四条钉子一起写，因为它们是同一个判定的四个方向，分开写会掩盖作用域被放宽：
+// ① 本存档导出登记的自身名放行；② 换到别的存档视角照旧拦；
+// ③ 逆向外部游戏名一条不放松；④ 项目名与外部游戏名同名时，外部名**依然生效**。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn skin_exemption_only_covers_words_registered_by_this_archives_own_export() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4e_exemption_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let space = services.load_space("lane_defense").unwrap();
+
+    // A 项目（名为「霜落峡谷防卫计划」）另存模板并认证 → 它的名字由 A 的 ProjectExport 登记。
+    let archive_a = project_with_one_unconfirmed_point(&services);
+    let archive_b = services
+        .project_new("晨星台地防线", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    services
+        .template_export_from_project(
+            &archive_a,
+            "tpl_frostfall",
+            "",
+            &[],
+            "评审员甲",
+            "逐条复核已确认选择",
+        )
+        .unwrap();
+    services
+        .template_certify("lane_defense", "tpl_frostfall")
+        .unwrap();
+    let words = load_skin_wordlist(&services.skin_wordlist_path())
+        .unwrap()
+        .words;
+    assert!(
+        words.contains(&"霜落峡谷防卫计划".to_string()),
+        "另存模板认证必须登记源项目名：{words:?}"
+    );
+
+    // ① 唯一登记来源是本存档的另存模板 → 豁免成立，A 自己的产物含 A 名不被拦。
+    let scanner_a = services
+        .skin_scanner_for_project(&space, &archive_a, "霜落峡谷防卫计划")
+        .unwrap();
+    assert_eq!(scanner_a.exempted(), ["霜落峡谷防卫计划".to_string()]);
+    assert!(
+        scanner_a
+            .scan("c0/document.md", "霜落峡谷防卫计划设计规格")
+            .is_empty(),
+        "C0 文档标题就是项目名，拦了它这个项目永远走不完流水线"
+    );
+
+    // ② 同一个词换到 B 的视角：B 没导出过它 → 一个词都不豁免，照旧命中。
+    let scanner_b = services
+        .skin_scanner_for_project(&space, &archive_b, "晨星台地防线")
+        .unwrap();
+    assert!(scanner_b.exempted().is_empty());
+    assert_eq!(
+        scanner_b
+            .scan("c0/document.md", "模板预填自霜落峡谷防卫计划")
+            .len(),
+        1,
+        "B 的产物带着 A 的项目名必须被拦"
+    );
+    // 反向也钉住：拿 A 的名字当 B 的项目名去要豁免同样拿不到（豁免看登记的存档，不看词面）。
+    assert!(
+        services
+            .skin_scanner_for_project(&space, &archive_b, "霜落峡谷防卫计划")
+            .unwrap()
+            .exempted()
+            .is_empty(),
+        "词条登记在 A 名下，B 冒用同一个词面不得获得豁免"
+    );
+
+    // ③ 逆向外部游戏名（品类包 reference_games）：两种视角下拦截行为一条不变。
+    for scanner in [&scanner_a, &scanner_b] {
+        assert_eq!(
+            scanner
+                .scan("c2/document.md", "参考 Kingdom Rush 的布防节奏")
+                .len(),
+            1
+        );
+    }
+
+    // ④a 本次要修的缝：项目取名恰好等于品类包里的外部游戏名，该外部名**依然生效**。
+    let archive_kingdom = services
+        .project_new("Kingdom Rush", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+    let scanner_kingdom = services
+        .skin_scanner_for_project(&space, &archive_kingdom, "Kingdom Rush")
+        .unwrap();
+    assert!(
+        scanner_kingdom.exempted().is_empty(),
+        "项目取名 Kingdom Rush 不得让这个外部游戏名对本项目整体失效"
+    );
+    assert!(
+        scanner_kingdom
+            .wordlist()
+            .contains(&"kingdom rush".to_string()),
+        "外部名必须仍在生效词表里：{:?}",
+        scanner_kingdom.wordlist()
+    );
+    // 行为层同款：该项目的产物带这个名字照旧被冻结门拦下。
+    services
+        .with_project(&archive_kingdom, |engine| {
+            engine.select_option("u.platform", "pc_single", Provenance::UserManual)?;
+            engine.set_rationale("u.platform", "沿用 Kingdom Rush 的布防节奏")
+        })
+        .unwrap();
+    assert!(
+        services
+            .freeze_check(&archive_kingdom)
+            .unwrap()
+            .gates
+            .iter()
+            .flat_map(|gate| gate.findings.iter())
+            .any(|finding| finding.code == "reference_name_hit"
+                && finding.message.contains("kingdom rush")),
+        "同名项目的换皮门必须照常拦住那个外部游戏名"
+    );
+
+    // ④b 同一条缝的另一半：词条**同时**有逆向来源登记时，豁免立即撤销。
+    // 造一份 game_name 与 A 逐字相同的逆向模板（外部游戏恰好与本项目同名），
+    // 落盘即可——判定的问题是「这个词面有没有可能指某个外部游戏」，不看认证状态。
+    let rival = adm4_template::Template {
+        template_id: "tpl_rival_same_name".into(),
+        game_name: "霜落峡谷防卫计划".into(),
+        aliases: Vec::new(),
+        genre_pack: "lane_defense".into(),
+        pack_version: space.pack.pack_version.clone(),
+        depth_reached: DesignLevel::L4,
+        answers: Vec::new(),
+        certification: adm4_template::Certification::default(),
+        origin: adm4_template::TemplateOrigin::Reverse,
+        mapping_hash: String::new(),
+        crosscheck_proof: None,
+    };
+    services.templates().save_draft(&rival).unwrap();
+    let scanner_a_after = services
+        .skin_scanner_for_project(&space, &archive_a, "霜落峡谷防卫计划")
+        .unwrap();
+    assert!(
+        scanner_a_after.exempted().is_empty(),
+        "词条一旦另有逆向来源登记，豁免必须撤销（宁可拦住 A 自己，也不放过抄同名外部游戏）"
+    );
+    assert_eq!(
+        scanner_a_after
+            .scan("c0/document.md", "霜落峡谷防卫计划设计规格")
+            .len(),
+        1
+    );
+    // 该模板对别的存档一样是外部名（不因为它与某个项目同名而对谁松一档）。
+    assert!(
+        services
+            .skin_scanner_for_project(&space, &archive_b, "霜落峡谷防卫计划")
+            .unwrap()
+            .exempted()
+            .is_empty()
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4d 场景 2：认证证据旁路收口（R1/R3）——伪认证被拒、25 份内置模板照旧可预填
+// ---------------------------------------------------------------------------
+
+#[test]
+fn prefill_requires_verifiable_evidence_while_builtin_templates_still_work() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4d_evidence_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let archive_id = services
+        .project_new("证据关卡验证", "lane_defense", DesignLevel::L4, None)
+        .unwrap();
+
+    // ① 25 份批量迁移的内置模板：登记齐备且答卷指纹对得上 → 照旧可预填。
+    let builtins = services.templates().list("universal").unwrap();
+    assert!(
+        builtins.len() >= 25,
+        "内置模板应有 25+ 份，实际 {}",
+        builtins.len()
+    );
+    for template in &builtins {
+        assert!(
+            template.is_bulk_migration(),
+            "内置模板 {} 应带批量迁移登记（迁移工具 --stamp-origin 补的）",
+            template.template_id
+        );
+        template
+            .require_certification_evidence()
+            .unwrap_or_else(|error| {
+                panic!(
+                    "内置模板 {} 的迁移登记应可核对：{}",
+                    template.template_id, error.message
+                )
+            });
+    }
+    let report = services
+        .project_prefill_template(&archive_id, "builtin_midcore_arknights")
+        .unwrap();
+    assert!(report.applied > 0);
+
+    // ② 手工往 references/ 里塞一份 status=certified、无任何证据的 JSON → 预填被拒。
+    let forged = r#"{
+      "template_id": "tpl_forged_certified",
+      "game_name": "伪造甲",
+      "genre_pack": "lane_defense",
+      "pack_version": "0.1.0",
+      "depth_reached": "L4",
+      "certification": {"status": "certified", "reviewed_by": "我自己", "reviewed_at": "2026-08-31T00:00:00Z", "review_note": "手改的"},
+      "answers": [{"decision_id": "u.platform", "option_id": "pc_single", "evidence": []}]
+    }"#;
+    let references = Path::new(services.design_space_root())
+        .join("lane_defense")
+        .join("references");
+    std::fs::create_dir_all(&references).unwrap();
+    std::fs::write(references.join("tpl_forged_certified.json"), forged).unwrap();
+    assert!(
+        services
+            .templates()
+            .get("lane_defense", "tpl_forged_certified")
+            .unwrap()
+            .is_certified(),
+        "状态位确实是 Certified（这正是旁路的形态）"
+    );
+    let refused = services
+        .project_prefill_template(&archive_id, "tpl_forged_certified")
+        .unwrap_err();
+    assert_eq!(refused.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+    assert!(refused.message.contains("机器证据"), "{}", refused.message);
+    // 对照也走同一关卡（不能只堵预填，留个只读侧门把答卷抄出来）。
+    assert_eq!(
+        services
+            .template_compare(&archive_id, "tpl_forged_certified")
+            .unwrap_err()
+            .kind,
+        adm4_foundation::Adm4ErrorKind::RedLine
+    );
+
+    // ③ 篡改内置模板的答卷而不更新登记 → 指纹失配 → 取用被拒。
+    let mut tampered = services
+        .templates()
+        .get("universal", "builtin_midcore_arknights")
+        .unwrap();
+    tampered.template_id = "builtin_tampered".into();
+    tampered.answers.truncate(3);
+    services.templates().save_draft(&tampered).unwrap();
+    let refused = services
+        .project_prefill_template(&archive_id, "builtin_tampered")
+        .unwrap_err();
+    assert_eq!(refused.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+    assert!(refused.message.contains("指纹"), "{}", refused.message);
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// F4d 场景 3：配置热更新 + 密钥写入 + AI 实调用检查
+//
+// 全程零网络：实调用检查走 `ai_invoke_check_with(ScriptedProvider)`；
+// 「未配置 Provider」路径本就不发请求。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn config_hot_reload_secret_write_and_invoke_check() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_f4d_config_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+
+    // --- 热更新：open 时没有 ai_provider，运行期设上即刻生效（不必重开门面） ---
+    assert!(services.config().unwrap().ai_provider.is_none());
+    assert!(!services.ai_doctor().available);
+    assert_eq!(
+        services
+            .build_provider()
+            .err()
+            .expect("未配置时必须显式失败")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::AiUnavailable
+    );
+
+    services
+        .set_ai_provider(Some(adm4_ai::HttpProviderConfig {
+            provider_id: "smoke_local".into(),
+            base_url: "http://127.0.0.1:9/v1".into(),
+            model: "test-model".into(),
+            api_key_ref: "named:smoke_key".into(),
+            timeout_secs: 5,
+        }))
+        .unwrap();
+    // 密钥还没写 → 体检如实报不可用（配置在、密钥解析不出来）。
+    let doctor = services.ai_doctor();
+    assert!(!doctor.available, "{}", doctor.detail);
+    assert!(doctor.detail.contains("smoke_key"), "{}", doctor.detail);
+
+    // --- 密钥写入：值不进回执、不进运行日志 ---
+    const SECRET: &str = "sk-f4d-DO-NOT-LOG-0123456789";
+    assert!(
+        services.ai_save_secret("  ", SECRET).is_err(),
+        "空密钥名必须被拒"
+    );
+    assert!(
+        services.ai_save_secret("smoke_key", "").is_err(),
+        "空密钥值必须被拒（配置看着可用而调用必然 401）"
+    );
+    let receipt = services.ai_save_secret("smoke_key", SECRET).unwrap();
+    assert!(!receipt.contains(SECRET), "回执不得包含密钥值：{receipt}");
+    assert!(receipt.contains("smoke_key"));
+    let log_text =
+        std::fs::read_to_string(temp.join("logs").join("run_log.jsonl")).unwrap_or_default();
+    assert!(!log_text.contains(SECRET), "运行日志不得包含密钥值");
+    assert!(log_text.contains("smoke_key"), "日志应记下密钥名（可审计）");
+    // 落点是数据根 config/，不是项目存档内容树 → 不进存档、不进导出包、不进内容指纹。
+    let secrets_path = temp.join("config").join("secrets.json");
+    assert!(secrets_path.is_file());
+    assert!(
+        std::fs::read_to_string(&secrets_path)
+            .unwrap()
+            .contains(SECRET),
+        "密钥本身当然要落在 secrets.json 里（它就是密钥库）"
+    );
+    assert_eq!(services.ai_secret_names().unwrap(), vec!["smoke_key"]);
+
+    // 密钥齐备 → 体检转为可用（仍然零网络）。
+    let doctor = services.ai_doctor();
+    assert!(doctor.available, "{}", doctor.detail);
+    assert_eq!(doctor.provider_id, "smoke_local");
+
+    // --- 实调用检查：成功 / 失败 / 空应答三条路径（一律 ScriptedProvider，零网络） ---
+    let ok = ScriptedProvider::new();
+    ok.script(adm4_app::AI_INVOKE_CHECK_PURPOSE, vec!["OK".into()]);
+    let report = services.ai_invoke_check_with(&ok);
+    assert!(report.succeeded, "{}", report.summary());
+    assert_eq!(report.response_chars, 2);
+    assert_eq!(report.provider_id, "scripted");
+    assert!(report.summary().contains("实调用成功"));
+
+    // 没有脚本应答 = provider 报错 → 如实失败，原始原因原样保留（R7：不美化、不重试）。
+    let failing = ScriptedProvider::new();
+    let report = services.ai_invoke_check_with(&failing);
+    assert!(!report.succeeded);
+    assert!(
+        report.detail.contains("ai_invoke_check"),
+        "失败原因必须是后端原文：{}",
+        report.detail
+    );
+
+    // 空应答也算失败：调用链通但产出不可用，报「可用」等于误报。
+    let empty = ScriptedProvider::new();
+    empty.script(adm4_app::AI_INVOKE_CHECK_PURPOSE, vec!["   ".into()]);
+    let report = services.ai_invoke_check_with(&empty);
+    assert!(!report.succeeded);
+    assert!(report.detail.contains("空文本"), "{}", report.detail);
+
+    // --- reload_config：磁盘被别处改动后重载即生效；设计空间根被改则显式报错 ---
+    let mut on_disk = adm4_app::load_config(&services.data_root).unwrap();
+    on_disk
+        .ai_provider
+        .as_mut()
+        .expect("provider 应已落盘")
+        .model = "hand-edited-model".into();
+    save_config(&services.data_root, &on_disk).unwrap();
+    assert_eq!(
+        services.config().unwrap().ai_provider.unwrap().model,
+        "test-model",
+        "重载之前，运行期生效配置不该被磁盘悄悄改掉"
+    );
+    assert_eq!(
+        services.reload_config().unwrap().ai_provider.unwrap().model,
+        "hand-edited-model"
+    );
+
+    let mut moved = adm4_app::load_config(&services.data_root).unwrap();
+    moved.design_space_root = temp.join("another_space").to_string_lossy().into_owned();
+    save_config(&services.data_root, &moved).unwrap();
+    let error = services
+        .reload_config()
+        .expect_err("设计空间根是进程期不变量，改了必须显式报错而不是装作生效");
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::Blocked);
+    assert!(error.message.contains("重启"), "{}", error.message);
+
+    // 清空 Provider 也走同一通道：落盘 + 运行期同时生效。
+    services.set_ai_provider(None).unwrap();
+    assert!(services.config().unwrap().ai_provider.is_none());
+    assert!(
+        adm4_app::load_config(&services.data_root)
+            .unwrap()
+            .ai_provider
+            .is_none()
+    );
+    let report = services.ai_invoke_check();
+    assert!(!report.succeeded);
+    assert!(
+        report.provider_id.is_empty(),
+        "没构建出 Provider 就没发请求"
+    );
+    assert!(report.summary().contains("未能构建 Provider"));
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// 转发型 Provider：每次被调用时窥一眼磁盘上的 `run_state.json`，记录各段状态。
+///
+/// 只读文件、不改任何东西；AI 应答完全转发给内层的 [`ScriptedProvider`]（零网络、确定性）。
+/// 「段执行期间状态是 Running」这件事只有在段执行**中间**才观察得到，
+/// 而 AI 调用恰好就在段中间——所以探针挂在这里。
+struct RunStateSpy<'a> {
+    inner: &'a ScriptedProvider,
+    run_state_path: PathBuf,
+    /// `AiProvider` 要求 `Sync`，所以用 `Mutex` 而不是 `RefCell` 存观测结果。
+    observed: std::sync::Mutex<Vec<(String, String)>>,
+}
+
+impl adm4_ai::AiProvider for RunStateSpy<'_> {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+
+    fn capabilities(&self) -> &[adm4_ai::AiCapability] {
+        self.inner.capabilities()
+    }
+
+    fn invoke(
+        &self,
+        request: &adm4_ai::AiRequest,
+    ) -> adm4_foundation::Adm4Result<adm4_ai::AiResponse> {
+        if let Ok(text) = std::fs::read_to_string(&self.run_state_path)
+            && let Ok(state) = serde_json::from_str::<adm4_pipeline::PipelineRunState>(&text)
+        {
+            let mut observed = self.observed.lock().expect("观测锁");
+            for (stage_id, record) in &state.stages {
+                let label = match &record.status {
+                    StageStatus::Pending => "pending",
+                    StageStatus::Running => "running",
+                    StageStatus::Succeeded => "succeeded",
+                    StageStatus::Failed { .. } => "failed",
+                    StageStatus::Blocked { .. } => "blocked",
+                    StageStatus::WaitingHuman { .. } => "waiting_human",
+                };
+                observed.push((stage_id.clone(), label.to_string()));
+            }
+        }
+        self.inner.invoke(request)
+    }
 }

@@ -47,6 +47,52 @@ impl PrefillReport {
     }
 }
 
+/// 工作台重置的清空计数（二版 `reset-design-workbench` 的四版归宿）。
+///
+/// 破坏性操作必须能回答「到底清了什么」，否则用户点完只看到一片空白，
+/// 分不清是重置生效了还是项目坏了。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WorkbenchResetReport {
+    /// 清空的决策点选择数（含其参数值、理由、附加多选选项与主选标记）。
+    pub cleared_selections: usize,
+    /// 其中带主选标记的决策点数（子集，便于说明多选点也回到未作答）。
+    pub cleared_primary_marks: usize,
+    /// 其中填过参数值的决策点数（子集）。
+    pub cleared_parameter_values: usize,
+    /// 清除的 N/A 人工豁免与理由码跳过条数。
+    pub cleared_exemptions: usize,
+    /// 清除的节点设计说明条数。
+    pub cleared_node_design_notes: usize,
+    /// 清除的节点风险说明条数。
+    pub cleared_node_risk_notes: usize,
+    /// 重置执行者署名（R3）。
+    pub actor: String,
+    pub at: String,
+}
+
+impl WorkbenchResetReport {
+    /// 一行摘要（日志与 CLI/GUI 提示共用）。
+    pub fn summary(&self) -> String {
+        format!(
+            "清空 {} 个决策点选择（含 {} 处主选、{} 处参数值）、{} 处不适用豁免、{} 处设计说明、{} 处风险说明",
+            self.cleared_selections,
+            self.cleared_primary_marks,
+            self.cleared_parameter_values,
+            self.cleared_exemptions,
+            self.cleared_node_design_notes,
+            self.cleared_node_risk_notes
+        )
+    }
+
+    /// 什么都没清（重置一个本来就空白的项目）。
+    pub fn is_noop(&self) -> bool {
+        self.cleared_selections == 0
+            && self.cleared_exemptions == 0
+            && self.cleared_node_design_notes == 0
+            && self.cleared_node_risk_notes == 0
+    }
+}
+
 /// 创作引擎：装配设计空间 + 项目状态，提供全部经校验的变更操作。
 ///
 /// 设计空间以 `Arc` 持有：它在运行期只读，一个包的空间被多个引擎实例共享是常态
@@ -656,6 +702,58 @@ impl AuthoringEngine {
         self.state.template_mode = TemplateMode::Prefilled {
             template_id: template.template_id.clone(),
         };
+        self.invalidate_red_team();
+        Ok(report)
+    }
+
+    /// 工作台重置：清空创作选择，保留项目与已冻结历史（二版 `reset-design-workbench`）。
+    ///
+    /// **清空**：全部决策点选择（连带参数值、选择理由、附加多选选项与主选标记）、
+    /// N/A 豁免与理由码跳过、节点设计说明与风险说明、模板模式标记——创作态回到初始
+    /// 未作答状态。模板模式一并清掉是因为它描述的是「本项目由模板 X 预填而来」，
+    /// 而那些预填选择此刻已经不存在了，留着就是一句假话。
+    ///
+    /// **保留**：项目 id 与名称、`frozen_versions`（已冻结版本是只增不改的历史，D4：
+    /// 重置抹掉它等于伪造项目从没冻结过）、流水线产物、模板库、运行日志。
+    /// 访谈 transcript 与红队记录也保留：前者是审计流，后者随 `revision` 前移自动标记过期，
+    /// 冻结门第 4 道会要求重跑，不会被误当作对新设计的评审。
+    ///
+    /// R3：`actor` 与 `note` 双必填——重置是破坏性操作，说不出是谁按的、为什么按，不予受理。
+    pub fn reset_workbench(&mut self, actor: &str, note: &str) -> Adm4Result<WorkbenchResetReport> {
+        let actor = actor.trim();
+        let note = note.trim();
+        if actor.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "工作台重置必须署名（actor）：R3 要求破坏性操作可追责",
+            ));
+        }
+        if note.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "工作台重置必须写明理由（note）：清空全部选择的决定要能被复核",
+            ));
+        }
+        let mut report = WorkbenchResetReport {
+            cleared_selections: self.state.selections.len(),
+            cleared_exemptions: self.state.not_applicable.len(),
+            cleared_node_design_notes: self.state.node_design_notes.len(),
+            cleared_node_risk_notes: self.state.node_risk_notes.len(),
+            actor: actor.to_string(),
+            at: UtcTimestamp::now().to_iso8601(),
+            ..Default::default()
+        };
+        for selection in self.state.selections.values() {
+            if selection.primary_option.is_some() {
+                report.cleared_primary_marks += 1;
+            }
+            if !matches!(selection.parameters, ParameterValues::None) {
+                report.cleared_parameter_values += 1;
+            }
+        }
+        self.state.selections.clear();
+        self.state.not_applicable.clear();
+        self.state.node_design_notes.clear();
+        self.state.node_risk_notes.clear();
+        self.state.template_mode = TemplateMode::None;
         self.invalidate_red_team();
         Ok(report)
     }

@@ -88,6 +88,17 @@ pub struct GenrePack {
     pub display_name: String,
     /// ≥3 参考游戏名（硬要求；同时登记进换皮词表）。
     pub reference_games: Vec<String>,
+    /// 项目画像卡片的显式取点清单（决策点 id，按此顺序展示）。
+    ///
+    /// 为什么需要它：二版画像六字段里的「美术风格」「目标用户」落在 L3/L4 的检查单点上，
+    /// 按层级过滤（L0/L1）永远上不了画像卡；而把那些点的层级改成 L0 会连带改动完成度分母
+    /// （D4 只增不改）。所以画像取点改成**数据驱动的展示层清单**：动清单不动模型。
+    ///
+    /// 清单只决定「画像卡显示哪些点」，**不影响** `requirement`/`level`/完备度分母。
+    /// 为空（或旧包没有这个键）时回退到 L0/L1 过滤，旧数据零影响。
+    /// 清单里的 id 必须真实存在，写错由 `space validate` 拦下（不静默忽略）。
+    #[serde(default)]
+    pub profile_points: Vec<DecisionId>,
     #[serde(default)]
     pub cardinality_expectations: BTreeMap<String, CardinalityRange>,
     #[serde(default)]
@@ -252,5 +263,29 @@ mod tests {
         let pack: GenrePack = serde_json::from_str(pack_json).expect("品类包应可解析");
         assert_eq!(pack.nodes.len(), 1);
         assert_eq!(pack.nodes[0].domain_id, "gameplay_system_design");
+        // 旧包没有 profile_points 键 → 空清单（画像取点回退 L0/L1 过滤）。
+        assert!(pack.profile_points.is_empty());
+    }
+
+    /// 画像取点清单按声明顺序解析（顺序即画像卡的展示顺序）。
+    #[test]
+    fn pack_profile_points_parse_in_declared_order() {
+        let pack_json = r#"{
+          "pack_id": "lane_defense",
+          "pack_version": "0.1.0",
+          "display_name": "通道塔防",
+          "reference_games": ["虚构甲", "虚构乙", "虚构丙"],
+          "profile_points": ["u.genre", "u.platform", "v2.target_player_decision.wan_jia_hua_xiang.age_band"],
+          "decision_points": []
+        }"#;
+        let pack: GenrePack = serde_json::from_str(pack_json).expect("品类包应可解析");
+        assert_eq!(
+            pack.profile_points,
+            vec![
+                "u.genre".to_string(),
+                "u.platform".to_string(),
+                "v2.target_player_decision.wan_jia_hua_xiang.age_band".to_string()
+            ]
+        );
     }
 }

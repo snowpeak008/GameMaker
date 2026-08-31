@@ -6,7 +6,7 @@
 //! `--scripted-file` 为冒烟/离线测试开关（确定性脚本应答，零网络）。
 
 use adm4_ai::{AiProvider, ScriptedProvider};
-use adm4_app::{AppServices, InterviewTurnDto};
+use adm4_app::{AppServices, ChangeStatus, InterviewTurnDto};
 use adm4_authoring::InterviewProposal;
 use adm4_decision::ParameterValues;
 use adm4_foundation::{Adm4Error, Adm4Result};
@@ -141,19 +141,35 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             }
             Ok(())
         }
-        (Some("project"), Some("doctor")) => {
+        (Some("project"), Some("reset")) => {
             let archive_id = required(rest.next(), "archive_id")?;
-            let problems = services.archives.doctor(archive_id)?;
-            if problems.is_empty() {
+            let remaining: Vec<&str> = rest.collect();
+            let actor = required(flag_value(&remaining, "--actor"), "--actor <署名>")?;
+            let note = required(flag_value(&remaining, "--note"), "--note <重置理由>")?;
+            let report = services.project_reset_workbench(archive_id, actor, note)?;
+            println!("项目 {archive_id} 工作台已重置（署名 {}）", report.actor);
+            println!("  {}", report.summary());
+            if report.is_noop() {
+                println!("  提示：本次没有任何内容可清空（项目本来就是初始未作答状态）。");
+            }
+            println!(
+                "  保留：项目 id 与名称、已冻结版本与其流水线产物、模板库、运行日志（冻结版本是只增不改的历史）。"
+            );
+            Ok(())
+        }
+        (Some("project"), Some("doctor")) => {
+            let report = services.project_doctor(required(rest.next(), "archive_id")?)?;
+            if report.healthy {
                 println!("[OK] 存档一致");
                 return Ok(());
             }
-            let count = problems.len();
-            for problem in problems {
+            let count = report.problems.len();
+            for problem in &report.problems {
                 println!("[PROBLEM] {problem}");
             }
             Err(Adm4Error::validation(format!(
-                "存档 {archive_id} 体检发现 {count} 项问题（详见上方 [PROBLEM] 行；本命令只诊断不修复）"
+                "存档 {} 体检发现 {count} 项问题（详见上方 [PROBLEM] 行；本命令只诊断不修复）",
+                report.archive_id
             )))
         }
         (Some("project"), Some("export")) => {
@@ -172,6 +188,7 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
         }
         (Some("authoring"), Some("status")) => {
             let archive_id = required(rest.next(), "archive_id")?;
+            let remaining: Vec<&str> = rest.collect();
             let engine = services.open_engine(archive_id)?;
             let report = engine.completeness();
             println!(
@@ -182,8 +199,30 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
                 report.blocking.len(),
                 report.optional_skipped
             );
-            for item in report.blocking.iter().take(30) {
-                println!("  - {}：{}", item.decision_id, item.detail);
+            // --decision 只把服务层算好的待填清单按决策点过滤（纯呈现，判定仍在服务层）：
+            // 全量清单只列前 30 条，几千个点的项目里想看某一个点必须能点名要。
+            match flag_value(&remaining, "--decision") {
+                Some(decision_id) => {
+                    let items: Vec<_> = report
+                        .blocking
+                        .iter()
+                        .filter(|item| item.decision_id == decision_id)
+                        .collect();
+                    println!("决策点 {decision_id} 待填 {} 项：", items.len());
+                    for item in &items {
+                        println!("  - {}：{}", item.decision_id, item.detail);
+                    }
+                    if items.is_empty() {
+                        println!(
+                            "  （该点当前无待填项：已确认且校验通过，或不适用/未激活/未作答的非必做点）"
+                        );
+                    }
+                }
+                None => {
+                    for item in report.blocking.iter().take(30) {
+                        println!("  - {}：{}", item.decision_id, item.detail);
+                    }
+                }
             }
             Ok(())
         }
@@ -195,6 +234,35 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
                 engine.select_option(&decision, &option, adm4_decision::Provenance::UserManual)
             })?;
             println!("已选择 {decision}/{option}");
+            Ok(())
+        }
+        (Some("authoring"), Some("add-option")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let decision = required(rest.next(), "决策点")?;
+            let option = required(rest.next(), "选项")?;
+            services.authoring_add_option(archive_id, decision, option)?;
+            println!("已为多选点 {decision} 追加已选选项 {option}");
+            println!(
+                "提示：已选集合变化会作废该点的确认（多选点的确认覆盖整组选项），需重新 authoring confirm；\
+                 用 authoring status <项目id> --decision {decision} 查该点还缺什么。"
+            );
+            Ok(())
+        }
+        (Some("authoring"), Some("remove-option")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let decision = required(rest.next(), "决策点")?;
+            let option = required(rest.next(), "选项")?;
+            services.authoring_remove_option(archive_id, decision, option)?;
+            println!("已从多选点 {decision} 移除已选选项 {option}");
+            println!("提示：同上，移除后需重新 authoring confirm。");
+            Ok(())
+        }
+        (Some("authoring"), Some("set-primary")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let decision = required(rest.next(), "决策点")?;
+            let option = required(rest.next(), "选项")?;
+            services.authoring_set_primary_option(archive_id, decision, option)?;
+            println!("已把 {decision} 的主选标记为 {option}");
             Ok(())
         }
         (Some("authoring"), Some("set-param")) => {
@@ -311,9 +379,42 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             print_pipeline(&state);
             Ok(())
         }
+        (Some("pipeline"), Some("rerun")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let stage = required(rest.next(), "重跑起点阶段")?;
+            let remaining: Vec<&str> = rest.collect();
+            let to = flag_value(&remaining, "--to").unwrap_or("C6");
+            let provider = choose_provider(&services, flag_value(&remaining, "--scripted-file"))?;
+            let outcome = services.pipeline_rerun_with(archive_id, stage, to, provider.as_ref())?;
+            print_reset(&outcome.reset);
+            if let Some(cancelled_at) = &outcome.cancelled_at {
+                println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
+            }
+            print_pipeline(&outcome.state);
+            Ok(())
+        }
         (Some("pipeline"), Some("status")) => {
             let archive_id = required(rest.next(), "archive_id")?;
             print_pipeline(&services.pipeline_status(archive_id)?);
+            Ok(())
+        }
+        (Some("pipeline"), Some("artifacts")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let remaining: Vec<&str> = rest.collect();
+            let version = resolve_frozen_version(&services, archive_id, &remaining)?;
+            let stages: Vec<String> = match flag_value(&remaining, "--stage") {
+                Some(stage) => vec![stage.to_string()],
+                None => adm4_pipeline::design_compile_registry()
+                    .into_iter()
+                    .map(|stage| stage.id)
+                    .collect(),
+            };
+            let show_document = remaining.contains(&"--show-document");
+            println!("项目 {archive_id} 冻结版本 v{version} 的阶段产物：");
+            for stage_id in &stages {
+                let view = services.pipeline_artifact(archive_id, version, stage_id)?;
+                print_stage_artifact(&view, show_document);
+            }
             Ok(())
         }
         (Some("pipeline"), Some("confirm")) => {
@@ -325,6 +426,18 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             print_pipeline(&state);
             Ok(())
         }
+        (Some("sdk"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            sdk_command(&services, sub, &remaining)
+        }
+        (Some("change"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            change_command(&services, sub, &remaining)
+        }
+        (Some("deliver"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            deliver_command(&services, sub, &remaining)
+        }
         (Some("template"), sub) => {
             let remaining: Vec<&str> = rest.collect();
             template_command(&services, sub, &remaining)
@@ -333,23 +446,278 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             let remaining: Vec<&str> = rest.collect();
             interview_command(&services, sub, &remaining)
         }
-        (Some("ai"), Some("doctor")) => match services.build_provider() {
-            Ok(provider) => {
-                println!("[OK] Provider {} 已配置且密钥可解析", provider.id());
-                Ok(())
-            }
-            Err(error) => {
-                println!("[BLOCKED] {}", error.message);
-                Err(Adm4Error::blocked(
-                    "AI Provider 不可用（详见上方 [BLOCKED] 行；本命令只诊断不修复）",
-                ))
-            }
-        },
+        (Some("ai"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            ai_command(&services, sub, &remaining)
+        }
         _ => {
             print_usage();
             Err(Adm4Error::invalid_input(
                 "未知命令（上方为可用命令，子命令加 --help 查看中文详情）",
             ))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ai 子命令组：配置体检（零网络）/ 实调用检查（真打一次）/ 密钥写入
+// ---------------------------------------------------------------------------
+
+fn ai_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("doctor") => {
+            let report = services.ai_doctor();
+            if report.available {
+                println!("[OK] Provider {} 已配置且密钥可解析", report.provider_id);
+                println!(
+                    "提示：本命令零网络，只查配置与密钥可解析性；base_url/密钥/模型名是否真能用请跑 ai invoke-check。"
+                );
+                return Ok(());
+            }
+            println!("[BLOCKED] {}", report.detail);
+            Err(Adm4Error::blocked(
+                "AI Provider 不可用（详见上方 [BLOCKED] 行；本命令只诊断不修复）",
+            ))
+        }
+        Some("invoke-check") => {
+            // --scripted-file 是与其它 AI 命令同款的确定性测试开关（零网络）；
+            // 缺省走真实 Provider，真发一次最小请求。
+            let report = match flag_value(args, "--scripted-file") {
+                Some(path) => {
+                    let provider = scripted_provider_from_file(path)?;
+                    services.ai_invoke_check_with(provider.as_ref())
+                }
+                None => services.ai_invoke_check(),
+            };
+            if report.succeeded {
+                println!("[OK] {}", report.summary());
+                return Ok(());
+            }
+            // 失败绝不美化：原始原因原样打印 + 非零退出码（R7）。
+            println!("[FAIL] {}", report.summary());
+            Err(Adm4Error::ai_unavailable(
+                "AI 实调用失败（详见上方 [FAIL] 行的原始原因；不做重试兜底）",
+            ))
+        }
+        Some("secret-set") => {
+            let name = required(args.first().copied(), "密钥名")?;
+            // 值优先从 stdin 读（命令行参数会留在 shell 历史与进程列表里）。
+            let value = match (args.contains(&"--stdin"), flag_value(args, "--value")) {
+                (true, _) => read_stdin_text()?,
+                (false, Some(value)) => value.to_string(),
+                (false, None) => {
+                    return Err(Adm4Error::invalid_input(
+                        "缺少密钥值：用 --value <值>，或 --stdin 从标准输入读（推荐，值不进 shell 历史）",
+                    ));
+                }
+            };
+            // 尾随换行是 stdin 管道的常态，会让密钥比对失败；trim 掉再写。
+            println!("{}", services.ai_save_secret(name, value.trim())?);
+            Ok(())
+        }
+        Some("secret-list") => {
+            let names = services.ai_secret_names()?;
+            println!(
+                "已登记 named secret {} 条（只列名字，不列值）：",
+                names.len()
+            );
+            for name in &names {
+                println!("  named:{name}");
+            }
+            Ok(())
+        }
+        other => {
+            println!("{AI_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 ai 子命令：{other:?}（可用：doctor/invoke-check/secret-set/secret-list）"
+            )))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// sdk 子命令组：SDK 知识库登记 + 三态审批流（Pending → Approved / Rejected）
+//
+// 本组严格只做转发与呈现：署名/结论必填、只有 Pending 可裁决、重复裁决 blocked
+// 一律由 `AppServices` 与 `SdkKnowledgeBase` 判定，CLI 只把服务层的错误如实打出来。
+// ---------------------------------------------------------------------------
+
+fn sdk_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("list") => {
+            let snapshot = services.sdk_list()?;
+            // 查询命令：空队列是结论不是失败，退出码恒 0。
+            println!(
+                "SDK 审批队列共 {} 条：待审核 {} / 已批准 {} / 已拒绝 {}",
+                snapshot.records.len(),
+                snapshot.pending_count,
+                snapshot.approved_count,
+                snapshot.rejected_count
+            );
+            for record in &snapshot.records {
+                println!(
+                    "  {}  [{}]  {}  类别 {}  引擎 {}  平台 {}  来源 {}",
+                    record.id,
+                    record.status.label_zh(),
+                    record.sdk_name,
+                    record.category,
+                    record.target_engines,
+                    record.target_platforms,
+                    record.url
+                );
+                if !record.purpose.is_empty() {
+                    println!("      取用目的：{}", record.purpose);
+                }
+                if record.status.is_decided() {
+                    println!(
+                        "      审批署名 {} 于 {}：{}",
+                        record.reviewer, record.reviewed_at, record.review_note
+                    );
+                }
+            }
+            Ok(())
+        }
+        Some("add") => {
+            let name = required(args.first().copied(), "SDK 资源名")?;
+            let url = required(args.get(1).copied(), "URL/来源")?;
+            let category = flag_value(args, "--category").unwrap_or("");
+            let purpose = flag_value(args, "--purpose").unwrap_or("");
+            let id = services.sdk_add(name, url, category, purpose)?;
+            println!("已登记 SDK 资源 {name} → {id}（状态 待审核）");
+            Ok(())
+        }
+        Some("approve") => {
+            let id = required(args.first().copied(), "SDK 记录 id")?;
+            let reviewer = required(flag_value(args, "--reviewer"), "--reviewer <评审人>")?;
+            let note = required(flag_value(args, "--note"), "--note <审核结论>")?;
+            services.sdk_approve(id, reviewer, note)?;
+            println!("SDK 资源 {id} 已批准（署名 {reviewer}）");
+            Ok(())
+        }
+        Some("reject") => {
+            let id = required(args.first().copied(), "SDK 记录 id")?;
+            let reviewer = required(flag_value(args, "--reviewer"), "--reviewer <评审人>")?;
+            let note = required(flag_value(args, "--note"), "--note <拒绝理由>")?;
+            services.sdk_reject(id, reviewer, note)?;
+            println!("SDK 资源 {id} 已拒绝（署名 {reviewer}）");
+            Ok(())
+        }
+        None => {
+            println!("{SDK_HELP}");
+            Ok(())
+        }
+        Some(other) => {
+            println!("{SDK_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 sdk 子命令：{other}（可用：list/add/approve/reject）"
+            )))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// change 子命令组：补充开发变更流（起草 → 影响分析 → 排期 → 已应用，可拒绝）
+//
+// 同样只做转发与呈现：线性推进/跳级拒绝/终态拒绝/署名必填/受影响段合法性
+// 全部由 `ChangeLog` 判定；`--to` 只做「令牌 → 枚举」的解析。
+// ---------------------------------------------------------------------------
+
+fn change_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("list") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let requests = services.change_list(archive_id)?;
+            println!("项目 {archive_id} 变更请求共 {} 条：", requests.len());
+            print_change_rows(&requests, None);
+            Ok(())
+        }
+        Some("add") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let title = required(args.get(1).copied(), "变更标题")?;
+            let requested_by = required(flag_value(args, "--by"), "--by <申请人署名>")?;
+            let description = flag_value(args, "--description").unwrap_or("");
+            // 0 = 未绑定冻结版本（模型口径），因此缺省不报错也不猜。
+            let version = parse_u32_flag(flag_value(args, "--version"), "--version", 0)?;
+            let id = services.change_add(archive_id, title, description, requested_by, version)?;
+            println!("已登记变更请求 {id}：{title}");
+            print_change_rows(&services.change_list(archive_id)?, Some(&id));
+            Ok(())
+        }
+        Some("set-impact") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let id = required(args.get(1).copied(), "变更请求 id")?;
+            let segments = split_list(required(
+                flag_value(args, "--segments"),
+                "--segments <受影响段,逗号分隔>",
+            )?);
+            services.change_set_impact(archive_id, id, &segments)?;
+            // 回读服务层的落盘结果再打印：受影响段的规范化（大写/去重/保序）在服务层，
+            // CLI 复述一遍入参会在两者不一致时误导使用者。
+            println!("变更请求 {id} 影响分析已记录：");
+            print_change_rows(&services.change_list(archive_id)?, Some(id));
+            Ok(())
+        }
+        Some("advance") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let id = required(args.get(1).copied(), "变更请求 id")?;
+            let target =
+                parse_change_status(required(flag_value(args, "--to"), "--to <目标状态令牌>")?)?;
+            let actor = required(flag_value(args, "--actor"), "--actor <署名>")?;
+            let note = required(flag_value(args, "--note"), "--note <推进结论>")?;
+            services.change_advance(archive_id, id, target, actor, note)?;
+            println!(
+                "变更请求 {id} 已推进至 {}（署名 {actor}）：",
+                target.label_zh()
+            );
+            print_change_rows(&services.change_list(archive_id)?, Some(id));
+            Ok(())
+        }
+        None => {
+            println!("{CHANGE_HELP}");
+            Ok(())
+        }
+        Some(other) => {
+            println!("{CHANGE_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 change 子命令：{other}（可用：list/add/set-impact/advance）"
+            )))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// deliver 子命令组：文档集交付清点（C0-C6 产物 → manifest.json）
+// ---------------------------------------------------------------------------
+
+fn deliver_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("package") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let version = resolve_frozen_version(services, archive_id, args)?;
+            let manifest = services.deliverable_package(archive_id, version)?;
+            println!(
+                "项目 {archive_id} v{version} 交付清单已落盘（content/deliverable/v{version}/manifest.json）："
+            );
+            print_deliverable(&manifest);
+            Ok(())
+        }
+        Some("status") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let version = resolve_frozen_version(services, archive_id, args)?;
+            let manifest = services.deliverable_status(archive_id, version)?;
+            println!("项目 {archive_id} v{version} 交付清点（只读重算，不落盘）：");
+            print_deliverable(&manifest);
+            Ok(())
+        }
+        None => {
+            println!("{DELIVER_HELP}");
+            Ok(())
+        }
+        Some(other) => {
+            println!("{DELIVER_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 deliver 子命令：{other}（可用：package/status）"
+            )))
         }
     }
 }
@@ -367,10 +735,11 @@ fn template_command(services: &AppServices, sub: Option<&str>, args: &[&str]) ->
             println!("{pack} 可取用模板 {} 份：", templates.len());
             for template in &templates {
                 println!(
-                    "  {}/{}  {}  状态 {:?}  深度 {:?}  答卷 {} 条{}",
+                    "  {}/{}  {}  来源 {}  状态 {:?}  深度 {:?}  答卷 {} 条{}",
                     template.genre_pack,
                     template.template_id,
                     template.game_name,
+                    template.origin.label_zh(),
                     template.certification.status,
                     template.depth_reached,
                     template.answers.len(),
@@ -381,6 +750,41 @@ fn template_command(services: &AppServices, sub: Option<&str>, args: &[&str]) ->
                     }
                 );
             }
+            Ok(())
+        }
+        Some("save-as") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let template_id = required(args.get(1).copied(), "模板 id")?;
+            let reviewer = required(flag_value(args, "--reviewer"), "--reviewer <评审人>")?;
+            let note = required(flag_value(args, "--note"), "--note <审核结论>")?;
+            let game = flag_value(args, "--game").unwrap_or("");
+            let aliases = flag_values(args, "--alias");
+            let report = services.template_export_from_project(
+                archive_id,
+                template_id,
+                game,
+                &aliases,
+                reviewer,
+                note,
+            )?;
+            println!(
+                "已另存模板：{}/{}（展示名 {}，来源项目 {}）",
+                report.genre_pack, report.template_id, report.game_name, report.source_project_name
+            );
+            println!("  {}", report.summary());
+            for skipped in report.skipped_unknown.iter().take(30) {
+                println!("  - 跳过 {skipped}：选项已不在当前装配空间内");
+            }
+            if report.skipped_unknown.len() > 30 {
+                println!(
+                    "  …… 其余 {} 条见运行日志",
+                    report.skipped_unknown.len() - 30
+                );
+            }
+            println!(
+                "提示：模板现为 {}（另存已含人工审核署名 {}），还需 template certify {} {} 认证入库后才能预填。",
+                report.status, report.reviewed_by, report.genre_pack, report.template_id
+            );
             Ok(())
         }
         Some("new-draft") => {
@@ -511,7 +915,7 @@ fn template_command(services: &AppServices, sub: Option<&str>, args: &[&str]) ->
         Some(other) => {
             println!("{TEMPLATE_HELP}");
             Err(Adm4Error::invalid_input(format!(
-                "未知 template 子命令：{other}（可用：list/new-draft/search-corpus/map/cross-check/review/certify/compare）"
+                "未知 template 子命令：{other}（可用：list/new-draft/save-as/search-corpus/map/cross-check/review/certify/compare）"
             )))
         }
     }
@@ -598,9 +1002,14 @@ fn choose_provider(
     services: &AppServices,
     scripted_file: Option<&str>,
 ) -> Adm4Result<Box<dyn AiProvider>> {
-    let Some(path) = scripted_file else {
-        return services.build_provider();
-    };
+    match scripted_file {
+        Some(path) => scripted_provider_from_file(path),
+        None => services.build_provider(),
+    }
+}
+
+/// 从脚本应答文件构建 `ScriptedProvider`（零网络的确定性回放）。
+fn scripted_provider_from_file(path: &str) -> Adm4Result<Box<dyn AiProvider>> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| Adm4Error::io(format!("读取脚本应答文件 {path} 失败：{error}")))?;
     let scripts: BTreeMap<String, serde_json::Value> =
@@ -625,6 +1034,15 @@ fn choose_provider(
         provider.script(&purpose, responses);
     }
     Ok(Box::new(provider))
+}
+
+/// 从 stdin 读一整段文本（密钥写入用：值不进 shell 历史，也不出现在进程列表里）。
+fn read_stdin_text() -> Adm4Result<String> {
+    let mut buffer = String::new();
+    std::io::stdin()
+        .read_to_string(&mut buffer)
+        .map_err(|error| Adm4Error::io(format!("从 stdin 读取失败：{error}")))?;
+    Ok(buffer)
 }
 
 /// 读回访谈提案 JSON（`--proposal-file` 或 stdin）：接受 `interview next` 输出的
@@ -677,10 +1095,231 @@ fn read_parameter_values(path: &str) -> Adm4Result<ParameterValues> {
     })
 }
 
+/// 解析变更状态令牌（`--to`）：只做「字符串 → 枚举」，跳级/终态/署名等规则一律在服务层。
+fn parse_change_status(token: &str) -> Adm4Result<ChangeStatus> {
+    ChangeStatus::from_token(token.trim()).ok_or_else(|| {
+        Adm4Error::invalid_input(format!(
+            "未知变更状态令牌 {token}（可用：drafted/impact_analyzed/scheduled/applied/rejected）"
+        ))
+    })
+}
+
+/// 逗号（半角/全角）分隔清单 → 去空白后的非空项。
+///
+/// **只切分，不判定**：取值是否合法（如受影响段必须是 C0..C6）、清单是否可以为空，
+/// 都由服务层裁决——在这里补一道校验就等于把业务规则抄进了 CLI。
+fn split_list(text: &str) -> Vec<String> {
+    text.split([',', '，'])
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// 解析可选的 u32 flag；缺省用 `default`，给了但不是正整数则报错（不静默回落）。
+fn parse_u32_flag(value: Option<&str>, flag: &str, default: u32) -> Adm4Result<u32> {
+    match value {
+        None => Ok(default),
+        Some(text) => text
+            .trim()
+            .parse::<u32>()
+            .map_err(|error| Adm4Error::invalid_input(format!("{flag} 必须是非负整数：{error}"))),
+    }
+}
+
+/// 解析 `--version`：显式给出即用它，省略时取最近冻结版本（`pipeline artifacts` 同款口径）。
+fn resolve_frozen_version(
+    services: &AppServices,
+    archive_id: &str,
+    args: &[&str],
+) -> Adm4Result<u32> {
+    match flag_value(args, "--version") {
+        Some(text) => text
+            .trim()
+            .parse::<u32>()
+            .map_err(|error| Adm4Error::invalid_input(format!("--version 必须是正整数：{error}"))),
+        None => services.latest_frozen_version(archive_id),
+    }
+}
+
+/// 打印变更请求清单；`focus` 非空时只打印该 id 一条（动作命令的回执复用同一个渲染器）。
+fn print_change_rows(requests: &[adm4_app::ChangeRequest], focus: Option<&str>) {
+    for request in requests
+        .iter()
+        .filter(|request| focus.is_none_or(|id| request.id == id))
+    {
+        println!(
+            "  {}  [{}]  {}  申请人 {}  目标冻结版本 v{}  受影响段 {}",
+            request.id,
+            request.status.label_zh(),
+            request.title,
+            request.requested_by,
+            request.target_frozen_version,
+            if request.affected_segments.is_empty() {
+                "（尚未做影响分析）".to_string()
+            } else {
+                request.affected_segments.join("/")
+            }
+        );
+        if !request.description.is_empty() {
+            println!("      说明：{}", request.description);
+        }
+        if !request.last_actor.is_empty() {
+            println!(
+                "      最近推进署名 {} 于 {}：{}",
+                request.last_actor, request.updated_at, request.last_note
+            );
+        }
+        // 「下一步能推到哪」由状态机自己回答（`ChangeStatus::next`），CLI 不复刻状态表。
+        match request.status.next() {
+            Some(next) => println!(
+                "      下一步：--to {}（{}）；任意非终态也可 --to rejected",
+                next.as_token(),
+                next.label_zh()
+            ),
+            None => println!("      终态，不可再推进"),
+        }
+    }
+}
+
+/// 打印文档集交付清单：缺段逐条可见（R2/R6：不静默丢，也不用空内容冒充齐备）。
+fn print_deliverable(manifest: &adm4_app::DeliverableManifest) {
+    println!(
+        "  完整性：{}（{}/{} 段齐备），生成于 {}",
+        if manifest.complete {
+            "完整"
+        } else {
+            "缺段"
+        },
+        manifest
+            .segments
+            .iter()
+            .filter(|segment| segment.present)
+            .count(),
+        manifest.segments.len(),
+        manifest.generated_at
+    );
+    for segment in &manifest.segments {
+        if segment.present {
+            println!(
+                "  {}: 齐备  document.md {} 字节 {}  |  contract.json {}",
+                segment.stage_id,
+                segment.document_bytes,
+                short_hash(&segment.document_sha256),
+                short_hash(&segment.contract_sha256)
+            );
+        } else {
+            println!(
+                "  {}: 缺段——该段产物尚未产出或已被重跑作废",
+                segment.stage_id
+            );
+        }
+    }
+    if !manifest.missing_segments.is_empty() {
+        println!(
+            "  缺失段 {} 个：{}（清点如实报告，不改变退出码；补齐请跑 pipeline run/rerun）",
+            manifest.missing_segments.len(),
+            manifest.missing_segments.join(" / ")
+        );
+    }
+}
+
 fn print_pipeline(state: &adm4_pipeline::PipelineRunState) {
     for stage_id in ["C0", "C1", "C2", "C3", "C4", "C5", "C6"] {
         let status = state.stage_status(stage_id);
         println!("{stage_id}: {}", render_status(&status));
+    }
+}
+
+/// 打印重跑的重置清单：作废了什么必须逐条可见（R2/R3：不静默作废）。
+fn print_reset(reset: &adm4_pipeline::StageResetReport) {
+    println!(
+        "重跑起点 {}，重置 {} 段：{}",
+        reset.target,
+        reset.reset_stages.len(),
+        reset.reset_stages.join(" / ")
+    );
+    if reset.cleared_artifacts.is_empty() {
+        println!("清空产物：无（重置范围内原本没有已落盘产物）");
+    } else {
+        println!(
+            "清空产物 {} 段：{}",
+            reset.cleared_artifacts.len(),
+            reset.cleared_artifacts.join(" / ")
+        );
+    }
+    if reset.revoked_confirmations.is_empty() {
+        println!("作废人工门确认：无（重置范围内没有已通过的人工门）");
+    } else {
+        println!(
+            "作废人工门确认 {} 处（需重新确认，R3）：",
+            reset.revoked_confirmations.len()
+        );
+        for revoked in &reset.revoked_confirmations {
+            println!(
+                "  {} ← 原署名 {} 于 {}",
+                revoked.stage_id, revoked.actor, revoked.at
+            );
+        }
+    }
+}
+
+/// 打印单个阶段的产物清点；`show_document` 为真时附带 document.md 正文预览。
+fn print_stage_artifact(view: &adm4_app::StageArtifactView, show_document: bool) {
+    if view.complete {
+        println!(
+            "  {}: 齐备  {} {} 字节 {}  |  {} {} 字节 {}",
+            view.stage_id,
+            view.document.file_name,
+            view.document.bytes,
+            short_hash(&view.document.sha256),
+            view.contract.file_name,
+            view.contract.bytes,
+            short_hash(&view.contract.sha256)
+        );
+    } else {
+        println!(
+            "  {}: 缺产物（缺 {}）——该段尚未产出或产物已被重跑作废",
+            view.stage_id,
+            view.missing.join(", ")
+        );
+    }
+    if !show_document {
+        return;
+    }
+    match &view.document_text {
+        Some(text) => {
+            println!(
+                "  --- {} ({}) ---",
+                view.document.file_name, view.document.path
+            );
+            println!("{text}");
+            if view.document_truncated {
+                println!(
+                    "  …（预览已截断：只显示前 {} 字节，完整文件 {} 字节，摘要 {} 为全文真值）",
+                    view.preview_limit_bytes,
+                    view.document.bytes,
+                    short_hash(&view.document.sha256)
+                );
+            }
+        }
+        None => println!(
+            "  --- {} 不存在（预期路径 {}）---",
+            view.document.file_name, view.document.path
+        ),
+    }
+}
+
+/// 摘要短显：`sha256:` 前缀 + 前 12 位十六进制（与打包视图同款展示口径）。
+fn short_hash(sha256: &str) -> String {
+    if sha256.is_empty() {
+        return "（无摘要）".to_string();
+    }
+    match sha256.split_once(':') {
+        Some((algorithm, digest)) => {
+            format!("{algorithm}:{}…", &digest[..digest.len().min(12)])
+        }
+        None => sha256.to_string(),
     }
 }
 
@@ -747,6 +1386,9 @@ fn print_help(args: &[String]) {
         Some("authoring") => println!("{AUTHORING_HELP}"),
         Some("freeze") => println!("{FREEZE_HELP}"),
         Some("pipeline") => println!("{PIPELINE_HELP}"),
+        Some("sdk") => println!("{SDK_HELP}"),
+        Some("change") => println!("{CHANGE_HELP}"),
+        Some("deliver") => println!("{DELIVER_HELP}"),
         Some("template") => println!("{TEMPLATE_HELP}"),
         Some("interview") => println!("{INTERVIEW_HELP}"),
         Some("ai") => println!("{AI_HELP}"),
@@ -756,7 +1398,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status|select|set-param|set-rationale|confirm|na <id> ...\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | status <id> | confirm <id> <阶段> <确认人> [备注]\n  template list|new-draft|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -775,7 +1417,8 @@ const PROJECT_HELP: &str = r#"项目生命周期（project）
 用法：
   adm4 project new <名称> --pack <包id> [--depth L4|L5|L6] [--template <模板id>]
       创建新项目存档。--depth 为设计深度档，默认 L4。
-      --template 用已认证（Certified）模板预填；未认证模板会被拒。
+      --template 用已认证（Certified）模板预填；未认证、或状态写着 Certified 但
+      查不到认证证据的模板一律被拒（见 template certify --help 的取用说明）。
       模板先在项目品类包里找，找不到落通用层（genre_pack=universal 的模板跨包可预填）。
       预填条目需逐条用户确认（authoring confirm），并改写选择理由完成换皮
       （authoring set-rationale）——预填理由含模板游戏名会被冻结换皮门拦截（R5）。
@@ -791,6 +1434,15 @@ const PROJECT_HELP: &str = r#"项目生命周期（project）
       答卷里引用了本项目装配空间中不存在的决策点/选项时逐条跳过并打印原因与总数
       （R2：不静默丢弃），跳过明细同时进运行日志。
 
+  adm4 project reset <项目存档id> --actor <署名> --note <重置理由>
+      工作台重置（破坏性操作）：清空全部决策点选择（连带参数值、选择理由、
+      多选附加选项与主选标记）、不适用豁免、节点设计说明与风险说明、模板模式标记，
+      创作态回到初始未作答状态。
+      保留：项目 id 与名称、已冻结版本与其流水线产物、模板库、运行日志——
+      冻结版本是只增不改的历史（D4），重置不得抹掉它。
+      --actor 与 --note 双必填（R3：破坏性操作必须可追责）；打印清空计数并落运行日志。
+      要清空的是「已冻结之后的返工」而不是当前草稿时，请另建项目而不是重置。
+
   adm4 project doctor <项目存档id>
       存档体检：manifest 可读、内容指纹一致。发现问题逐条打印 [PROBLEM]。
       本命令只诊断不修复；发现任意 [PROBLEM]（含存档不存在导致 manifest 不可读）
@@ -805,11 +1457,31 @@ const PROJECT_HELP: &str = r#"项目生命周期（project）
 const AUTHORING_HELP: &str = r#"创作命令（authoring）——对项目存档逐决策点操作
 
 用法：
-  adm4 authoring status <项目存档id>
+  adm4 authoring status <项目存档id> [--decision <决策点id>]
       完成度概览：已完成/总数（百分比）与阻塞项清单（最多列 30 条）。
+      --decision 只看某一个决策点的待填项（不截断）：几千个点的项目里，
+      默认清单的前 30 条通常轮不到你关心的那个点。
+      待填项文本由服务层的完备度判定产出（如「多选点要求标记主选…」），CLI 只过滤呈现。
+      本命令是查询：待填项非空不改变退出码（要判门禁请用 freeze check）。
 
   adm4 authoring select <项目存档id> <决策点id> <选项id>
       为决策点选择选项（来源记为用户手动）。
+      无论单选还是多选点，本命令都把已选集合**重置**为这一个选项（清空附加选项与主选）；
+      多选点追加选项用 add-option。
+
+  adm4 authoring add-option <项目存档id> <决策点id> <选项id>
+      多选点追加一个已选选项（单选点会被服务层拒绝）。
+      已选集合变化会作废该点的确认——多选点的确认覆盖整组选项，需重新 confirm。
+
+  adm4 authoring remove-option <项目存档id> <决策点id> <选项id>
+      多选点移除一个已选选项。移除首选项时下一个已选选项自动上位；移除的是主选则主选清空；
+      只剩一个选项时被拒（整点撤销是另一件事，语义不同）。
+
+  adm4 authoring set-primary <项目存档id> <决策点id> <选项id>
+      标记多选点的主选。必须是开启 allow_primary 的多选点，且该选项已在已选集合内，
+      否则由服务层拒绝（非零退出码）。开启 allow_primary 的点缺主选时，
+      该点会出现在完备度待填清单里（authoring status --decision <决策点> 可直接看到），
+      并拦住冻结门第 1 道。
 
   adm4 authoring set-param <项目存档id> <决策点id> <参数JSON>
       写入参数值，内容为 ParameterValues JSON，例如
@@ -850,33 +1522,167 @@ const PIPELINE_HELP: &str = r#"流水线（pipeline）——C0-C6 分阶段推�
 用法：
   adm4 pipeline run <项目存档id> [--from C0] [--to C6] [--scripted-file <应答文件>]
       基于最近冻结版本运行流水线（默认 C0→C6），遇人工门停下等待 confirm。
+      已成功的阶段直接跳过（断点续跑）；要重做已成功的阶段请用 pipeline rerun。
       结束后打印 C0-C6 各阶段状态：待运行/运行中/成功/失败/阻塞/等待人工确认。
+
+  adm4 pipeline rerun <项目存档id> <重跑起点阶段> [--to C6] [--scripted-file <应答文件>]
+      强制重跑：先把起点段**及其全部下游段**的运行状态与已落盘产物一并作废，
+      再从起点段正常向后跑到 --to（默认 C6）。
+      为什么连带下游：下游产物是按旧契约渲染的，只重跑中间段会产出
+      「新版 C2 + 旧版 C4」的错版文档集。
+      重置范围内已通过的人工门（C5/C6）确认一并作废、必须重新署名确认（R3），
+      作废明细逐条打印并进运行日志。区间/阶段名不合法时一份产物都不会被动。
 
   adm4 pipeline status <项目存档id>
       查询各阶段状态（只读）。
 
+  adm4 pipeline artifacts <项目存档id> [--version <N>] [--stage <阶段>] [--show-document]
+      查询阶段产物（只读）：逐段打印双格式产物（document.md / contract.json）的
+      齐备性、字节数与 sha256 摘要；--version 省略时用最近冻结版本。
+      --stage 只看一段；--show-document 附带打印 document.md 正文
+      （超大文档只打印前 256 KiB 并显式标注截断，摘要与字节数恒为全文真值）。
+      缺产物如实打印「缺产物（缺 …）」，不用空内容冒充文档；
+      与 status 一致，本命令是查询而非体检，缺产物不改变退出码。
+
   adm4 pipeline confirm <项目存档id> <阶段> <确认人> [备注]
       人工确认指定阶段的人工门（如 C5 风格方向、C6 Phase 1 签收），
-      确认后重新 run 可继续推进。"#;
+      确认后重新 run 可继续推进。
 
-const AI_HELP: &str = r#"AI 配置（ai）
+说明：
+  - 「停止运行」是段边界粒度的协作式取消，面向长时运行的图形界面
+    （AppServices::pipeline_run_with_cancel）。CLI 是单次前台运行，不提供取消入口。"#;
+
+const SDK_HELP: &str = r#"SDK 知识库（sdk）——资源登记 + 三态审批流
+
+审批状态机是分叉终态而非线性链：待审核 ──批准──▶ 已批准（终态）
+                                      └──拒绝──▶ 已拒绝（终态）
+只有「待审核」可裁决；裁决即终态，重复裁决被服务层拒绝（非零退出码）。
+知识库是**全局**的（跨项目共享，落 <数据根>/config/sdk_knowledge.json），不属于任何单个存档。
+本期落地登记与审批；「已批准资源才可进入构建」的取用关卡属 Phase 2。
+
+用法：
+  adm4 sdk list
+      审批队列快照：总条数 + 三态计数，逐条列出 id / 状态 / 名称 / 类别 / 目标引擎 / 平台 / 来源，
+      已裁决的附审批署名与结论。
+      本命令是查询：队列为空是结论不是失败，退出码恒 0。
+
+  adm4 sdk add <资源名> <URL或来源> [--category <类别>] [--purpose <取用目的>]
+      登记一条待审 SDK 资源，打印新记录 id。资源名与 URL 非空必填（由服务层校验）；
+      --category 省略时服务层落默认类别 custom。
+
+  adm4 sdk approve <记录id> --reviewer <评审人> --note <审核结论>
+      批准一条待审记录。署名与结论双必填（R3 评审工作量证明）。
+
+  adm4 sdk reject <记录id> --reviewer <评审人> --note <拒绝理由>
+      拒绝一条待审记录。署名与理由双必填（R3）。
+
+说明：
+  - 记录不存在、已是终态、缺署名或缺结论，一律由服务层拒绝，CLI 如实打印错误并非零退出。"#;
+
+const CHANGE_HELP: &str = r#"补充开发变更流（change）——冻结之后的设计变更走追加，不在冻结产物上原地改
+
+状态机（线性主链 + 任意非终态可拒绝）：
+  已起草 ──set-impact──▶ 已影响分析 ──advance──▶ 已排期 ──advance──▶ 已应用（终态）
+     └──────────────────────┴──────── advance --to rejected ────┴──────▶ 已拒绝（终态）
+跳级（如从「已影响分析」直接到「已应用」）被服务层拒绝；终态不可再推进。
+清单落项目内 content/change_requests.json，纳入存档指纹。
+
+用法：
+  adm4 change list <项目存档id>
+      按登记顺序列出全部变更请求：id / 状态 / 标题 / 申请人 / 目标冻结版本 / 受影响段，
+      附最近推进署名与「下一步可推到哪个状态令牌」（由状态机自己给出）。
+      本命令是查询：清单为空退出码恒 0。
+
+  adm4 change add <项目存档id> <标题> --by <申请人署名> [--description <说明>] [--version <目标冻结版本>]
+      登记一条变更请求（落「已起草」）。标题与申请人非空必填（服务层校验）；
+      --version 省略为 0（未绑定冻结版本）。
+
+  adm4 change set-impact <项目存档id> <变更请求id> --segments C2,C3
+      记录影响分析并推到「已影响分析」。段必须是 C0..C6 的非空子集（大小写与重复由服务层
+      规范化，非法段被拒）；仅「已起草」/「已影响分析」（复评）可设，其余状态被拒。
+      回执打印的是服务层落盘后的规范化结果，不是你的入参。
+
+  adm4 change advance <项目存档id> <变更请求id> --to <状态令牌> --actor <署名> --note <推进结论>
+      推进状态。令牌取值：drafted / impact_analyzed / scheduled / applied / rejected。
+      署名与结论双必填（R3）；只允许线性下一步或分叉到 rejected。
+
+说明：
+  - 「增量重跑受影响段」不在本组：受影响段的首尾映射为 pipeline rerun <id> <起点段> --to <终点段>，
+    因为 rerun 会连带作废该段及全部下游的产物与人工门署名——这正是变更流需要的语义
+    （pipeline run 对已成功段无条件跳过，用它重跑一段都不会真的重跑）。"#;
+
+const DELIVER_HELP: &str = r#"文档集交付（deliver）——清点某冻结版本的 C0-C6 产物，汇成带 sha256 的交付清单
+
+用法：
+  adm4 deliver status <项目存档id> [--version <N>]
+      只读重算清点，不落盘：逐段给出齐备性、document.md 字节数、双格式 sha256 摘要，
+      并汇总「N/7 段齐备」与缺失段清单。--version 省略时用最近冻结版本。
+
+  adm4 deliver package <项目存档id> [--version <N>]
+      清点 + 落盘 content/deliverable/v{N}/manifest.json，刷新存档指纹并进运行日志。
+
+说明：
+  - 缺段不报错也不静默：manifest 显式标 complete=false 并逐条列出缺失段（R2/R6 口径），
+    退出码仍为 0——「清单不完整」是如实结论，不是命令失败。要判门禁请看 pipeline status。
+  - 流水线目录整体不存在（从未跑过）= 七段全缺，同样如实报告。
+  - .adm4proj 整包导出/导入是另一件事，走 project export / project import。
+  - 游戏构建 / Unity 工程导出 / 运行时验证 / 发布包属 Phase 2（P0-P5），本期不提供。"#;
+
+const AI_HELP: &str = r#"AI 配置（ai）——doctor 查配置（零网络），invoke-check 真打一次
 
 用法：
   adm4 ai doctor
-      检查 config/app.json 配置的 AI Provider 及密钥可解析性：
-      [OK] 已配置且可用 / [BLOCKED] 未配置或密钥不可解析。
-      命中 [BLOCKED] 即以非零退出码结束（脚本可直接判退出码）；本命令只诊断不修复。"#;
+      **只查配置**（零网络）：config/app.json 里的 ai_provider 在不在、api_key_ref 能否解析出密钥。
+      [OK] 已配置且密钥可解析 / [BLOCKED] 未配置或密钥不可解析。
+      注意它查不出什么：base_url 写错、密钥已失效、模型名不存在，本命令一律报 [OK]——
+      要判定这些必须真发一次请求，请用 invoke-check。
+      命中 [BLOCKED] 即以非零退出码结束（脚本可直接判退出码）；本命令只诊断不修复。
 
-const TEMPLATE_HELP: &str = r#"逆向模板产线（template）——五步状态机只进不跳：Draft→Mapped→CrossChecked→HumanReviewed→Certified
+  adm4 ai invoke-check [--scripted-file <应答文件>]
+      **真发一次最小请求**（会走网络、会消耗额度）并如实报告结果：
+      [OK] 打印 Provider/模型/应答字符数/耗时/应答摘要；
+      [FAIL] 打印原始失败原因（不改写、不重试兜底，R7）并以非零退出码结束。
+      Provider 返回空文本也判失败：调用链通但产出不可用，报「可用」等于误报。
+      --scripted-file 是与其它 AI 命令同款的确定性测试开关（零网络，回放脚本应答）。
+
+  adm4 ai secret-set <密钥名> (--value <值> | --stdin)
+      写入一条 named secret 到 <数据根>/config/secrets.json，供配置里 named:<密钥名> 引用。
+      推荐 --stdin（值从标准输入读，不进 shell 历史、不出现在进程列表里）；
+      --value 直接给值，方便脚本，但会留在 shell 历史里。
+      密钥值不落运行日志、不进存档与导出包、不进任何报告；回执只说名字与字符数。
+
+  adm4 ai secret-list
+      列出已登记的 named secret **名字**（不打印值）。"#;
+
+const TEMPLATE_HELP: &str = r#"模板（template）——两种来源，一个认证终点
+
+  · 逆向外部游戏：五步状态机只进不跳 Draft→Mapped→CrossChecked→HumanReviewed→Certified
+  · 本项目导出（另存模板）：save-as 直接落 HumanReviewed（无外部语料，不走 S1-S3），再 certify
 
 用法：
   adm4 template list <包id>
       列出该包**可取用**的模板：本包模板 + 通用层模板（genre_pack=universal，跨包可预填）。
-      每行给出「所属包/模板id  游戏名  状态  深度  答卷条数」；通用层模板带标记。
+      每行给出「所属包/模板id  游戏名  来源  状态  深度  答卷条数」；通用层模板带标记。
 
   adm4 template new-draft <包id> <模板id> --game <逆向目标游戏名> [--alias <别名>]... [--depth L4|L5|L6]
-      S0 新建模板草稿。--game 必填：游戏名与别名在认证时自动登记进换皮词表（R5）。
+      S0 新建模板草稿（逆向来源）。--game 必填：游戏名与别名在认证时自动登记进换皮词表（R5）。
       --alias 可重复传入多个别名；--depth 为逆向目标深度档，默认 L4。
+
+  adm4 template save-as <项目存档id> <模板id> --reviewer <评审人> --note <审核结论> [--game <模板展示名>] [--alias <别名>]...
+      另存模板（项目 → 模板）：把当前项目**已确认**的决策点选择导出为一份模板，
+      多选点的全部已选选项、主选标记与参数值一并导出，选择理由落在答卷备注上。
+      未确认的点一律不进模板（把没定的东西当定论传播出去比缺失更糟），跳过数逐条打印。
+      不走 S1 检索 / S2 映射 / S3 交叉核验：本项目导出没有外部语料，凭空造证据链就是造假；
+      它的依据是「每一条都在源项目里被用户确认过」+ --reviewer/--note 的人工审核署名（R3）。
+      因此落地即 HumanReviewed，仍须 template certify 认证后方可预填。
+      --game 省略时用项目名作模板展示名。本项目导出的模板**照常登记换皮词表**
+      （certify 时登记）：源项目的名字对别的项目就是参考名，不登记等于「B 抄 A 无人拦」。
+      源项目自己不会因此被拦——扫描时按当前项目名整词豁免，但豁免的门槛很窄：
+      该词在全库模板中的登记来源必须**只有**本存档导出的模板。因此不豁免 --alias 给的别名、
+      不做子串豁免；而当项目名恰好等于某个逆向外部游戏名（或某个品类包的参考游戏名）时，
+      那个名字对本项目**照旧生效**，源项目会被自己的名字拦下（请改项目名或改那份模板）。
+      落盘前整份模板过换皮扫描（R5）：项目里残留的参考游戏名（典型是预填后未改写的理由）
+      会在此被拦下，请先用 authoring set-rationale 改写再另存。
 
   adm4 template search-corpus <包id> <模板id> --corpus <语料目录> --question <决策问题> --keywords <关键词1,关键词2,...>
       S1 本地语料检索（零网络）：在 <语料目录>/<游戏名>/*.json 快照内做关键词匹配。
@@ -893,9 +1699,16 @@ const TEMPLATE_HELP: &str = r#"逆向模板产线（template）——五步状�
 
   adm4 template review <包id> <模板id> --reviewer <评审人> --note <审核结论>
       S4 人工审核：署名与结论必填（R3 评审工作量证明）（CrossChecked→HumanReviewed）。
+      仅逆向来源走本步；本项目导出的模板在 save-as 时已完成人工审核。
 
   adm4 template certify <包id> <模板id>
-      S5 认证入库（HumanReviewed→Certified）：自动登记换皮词表；只有 Certified 模板可预填/对照。
+      S5 认证入库（HumanReviewed→Certified）：登记换皮词表（game_name + aliases，不分来源）。
+      逆向来源必须带 S2 映射哈希与 S3 两会话核验证据，缺证据即拒（R3，一条都不放松）；
+      本项目导出来源不查这两项（它不走 S1-S3），改查人工审核署名与结论；
+      批量迁移来源（二版内置库迁入的模板）查迁移登记（批次/工具版本/源引用 + 答卷指纹）。
+
+      取用（预填 / 对照）除状态位外**同样查这份证据**：手工往 references/ 里塞一份
+      status=certified 的 JSON 拿不到预填资格（认证流程不能只靠一个字段撑着）。
 
   adm4 template compare <项目存档id> <模板id>
       只读对照：认证模板答卷 vs 项目当前选择，输出 JSON（entries 含
@@ -929,3 +1742,94 @@ AI 只提案，确认/拒绝是用户手势（AI 永不代提交）；CLI 不提
   adm4 interview progress <项目存档id>
       查询分层进度（只读），输出 JSON：current_level 为当前层（null=全部完成），
       levels 为各层「已确认/适用」计数。"#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `--to` 的令牌解析：认全部五个令牌，未知令牌报错且错误里带可用取值。
+    ///
+    /// 本命令组只解析不判定——跳级、终态、缺署名都由服务层拒绝，因此这里刻意也把
+    /// 「解析成功但服务层会拒」的组合（如 applied）算作解析通过。
+    #[test]
+    fn change_status_token_parsing_covers_all_tokens_and_names_the_legal_set() {
+        for (token, expected) in [
+            ("drafted", ChangeStatus::Drafted),
+            ("impact_analyzed", ChangeStatus::ImpactAnalyzed),
+            (" scheduled ", ChangeStatus::Scheduled),
+            ("applied", ChangeStatus::Applied),
+            ("rejected", ChangeStatus::Rejected),
+        ] {
+            assert_eq!(parse_change_status(token).unwrap(), expected, "{token}");
+        }
+        let error = parse_change_status("Applied").expect_err("令牌区分大小写，不做猜测");
+        assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::InvalidInput);
+        assert!(
+            error.message.contains("impact_analyzed"),
+            "{}",
+            error.message
+        );
+        assert!(parse_change_status("").is_err());
+    }
+
+    /// 清单切分：半角与全角逗号都认，去空白丢空项，**不**判定取值合法性。
+    #[test]
+    fn split_list_accepts_both_comma_forms_and_never_validates() {
+        assert_eq!(split_list("C2,C3"), vec!["C2", "C3"]);
+        assert_eq!(split_list(" c1 ，, C2 ,"), vec!["c1", "C2"]);
+        assert!(split_list("  ").is_empty(), "空清单原样交给服务层去拒");
+        // 非法段照样透传：合法性是服务层的判定，CLI 抄一遍就成了双份规则。
+        assert_eq!(split_list("C9,Z1"), vec!["C9", "Z1"]);
+    }
+
+    /// 可选整数 flag：缺省用默认值，给了非法值必须报错（不静默回落到默认值）。
+    #[test]
+    fn u32_flag_defaults_when_absent_and_fails_loud_when_malformed() {
+        assert_eq!(parse_u32_flag(None, "--version", 0).unwrap(), 0);
+        assert_eq!(parse_u32_flag(Some(" 3 "), "--version", 0).unwrap(), 3);
+        let error = parse_u32_flag(Some("v2"), "--version", 0).expect_err("非法值不许兜底");
+        assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::InvalidInput);
+        assert!(error.message.contains("--version"), "{}", error.message);
+        assert!(parse_u32_flag(Some("-1"), "--version", 0).is_err());
+    }
+
+    /// 变更清单渲染：`focus` 只挑一条，终态行不再给「下一步」。
+    #[test]
+    fn change_rows_render_focus_and_terminal_states() {
+        let request =
+            |id: &str, status: ChangeStatus, segments: Vec<String>| adm4_app::ChangeRequest {
+                id: id.into(),
+                title: "新增精英怪波次".into(),
+                description: String::new(),
+                requested_by: "策划A".into(),
+                created_at: "2026-08-31T00:00:00Z".into(),
+                status,
+                affected_segments: segments,
+                target_frozen_version: 1,
+                last_actor: String::new(),
+                last_note: String::new(),
+                updated_at: String::new(),
+            };
+        let rows = vec![
+            request("chg-1", ChangeStatus::Drafted, Vec::new()),
+            request("chg-2", ChangeStatus::Applied, vec!["C2".into()]),
+        ];
+        // 渲染器不返回字符串（直接 println），这里钉住的是它用到的状态机投影本身：
+        // 终态没有下一步，非终态有，且令牌与展示名成对出现。
+        assert_eq!(rows[0].status.next(), Some(ChangeStatus::ImpactAnalyzed));
+        assert_eq!(rows[1].status.next(), None);
+        print_change_rows(&rows, Some("chg-2"));
+        print_change_rows(&rows, None);
+    }
+
+    /// 摘要短显：空摘要如实说「无」，带前缀的哈希只显前 12 位。
+    #[test]
+    fn short_hash_reports_absence_instead_of_faking_a_digest() {
+        assert_eq!(short_hash(""), "（无摘要）");
+        assert_eq!(
+            short_hash("sha256:0123456789abcdef0123"),
+            "sha256:0123456789ab…"
+        );
+        assert_eq!(short_hash("nocolon"), "nocolon");
+    }
+}

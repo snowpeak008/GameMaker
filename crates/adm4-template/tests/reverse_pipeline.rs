@@ -8,7 +8,7 @@ use adm4_foundation::Adm4ErrorKind;
 use adm4_template::{
     CROSSCHECK_PURPOSE, Certification, CertificationStatus, Confidence, CrossCheckService,
     CrossCheckVerdict, EvidenceQuery, EvidenceSearchChannel, FileCorpusChannel, MAPPING_PURPOSE,
-    MappingService, SourceType, Template, TemplateLibrary, load_skin_wordlist,
+    MappingService, SourceType, Template, TemplateLibrary, TemplateOrigin, load_skin_wordlist,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -106,6 +106,7 @@ fn draft_template() -> Template {
         depth_reached: DesignLevel::L4,
         answers: vec![],
         certification: Certification::default(),
+        origin: TemplateOrigin::Reverse,
         mapping_hash: String::new(),
         crosscheck_proof: None,
     }
@@ -542,15 +543,30 @@ fn universal_templates_are_listed_and_resolvable_from_any_pack() {
     let library = TemplateLibrary::new(&space);
 
     // 本包一份（Certified）+ 通用层一份（Certified）+ 通用层一份草稿。
+    //
+    // F4d：取用关卡除状态位外还查证据（`require_certification_evidence`），
+    // 因此这两份 Certified 夹具补上逆向来源该有的 S2/S3 机器证据——本测试要验证的是
+    // 「跨包解析」，不是「无证据也能预填」，断言一条未改。
+    let certified_evidence = |template: &mut adm4_template::Template| {
+        template.certification.status = CertificationStatus::Certified;
+        template.mapping_hash = "sha256:mapping".into();
+        template.crosscheck_proof = Some(adm4_template::CrossCheckProof {
+            mapping_hash: "sha256:mapping".into(),
+            crosscheck_hash: "sha256:crosscheck".into(),
+            checked_count: template.answers.len(),
+            checked_at: "2026-08-31T00:00:00Z".into(),
+        });
+    };
+
     let mut own = draft_template();
-    own.certification.status = CertificationStatus::Certified;
+    certified_evidence(&mut own);
     library.save_draft(&own).unwrap();
 
     let mut universal = draft_template();
     universal.template_id = "builtin_universal_ok".into();
     universal.game_name = "虚构通用甲".into();
     universal.genre_pack = "universal".into();
-    universal.certification.status = CertificationStatus::Certified;
+    certified_evidence(&mut universal);
     library.save_draft(&universal).unwrap();
 
     let mut universal_draft = draft_template();
@@ -605,6 +621,164 @@ fn universal_templates_are_listed_and_resolvable_from_any_pack() {
         .approved_for_prefill("lane_test", "builtin_universal_draft")
         .unwrap_err();
     assert_eq!(blocked.kind, Adm4ErrorKind::Blocked);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+// ---------------------------------------------------------------------------
+// 负例 5（F4b）：逆向来源缺 S2/S3 机器证据，即便状态是 HumanReviewed 也不许认证
+// ---------------------------------------------------------------------------
+
+/// 「另存模板」放宽了本项目导出来源的证据要求，逆向来源**一条都不许放松**。
+///
+/// 造出「状态已到 HumanReviewed 但没有证据」的模板有两条现实路径：手改落盘 json、
+/// 以及 S2 重跑后 S3 没跟上（核验证据里的 mapping_hash 与当前映射哈希不一致）。
+/// 两条都必须在 S5 被拦下——否则「已认证」三个字失去机器可核的依据。
+#[test]
+fn certify_rejects_reverse_template_without_crosscheck_evidence() {
+    let root = temp_root("reverse_no_evidence");
+    let library = TemplateLibrary::new(root.join("design_space"));
+    let wordlist_path = root.join("design_space").join("skin_wordlist.json");
+
+    let mut reviewed = draft_template();
+    reviewed.certification = Certification {
+        status: CertificationStatus::HumanReviewed,
+        reviewed_by: "评审员甲".into(),
+        reviewed_at: "2026-08-31T00:00:00Z".into(),
+        review_note: "手改状态字段伪造的审核".into(),
+    };
+    assert_eq!(reviewed.origin, TemplateOrigin::Reverse);
+
+    // 1. 完全没有证据。
+    let error = library
+        .certify(&mut reviewed, &wordlist_path)
+        .expect_err("逆向来源缺证据必须被拒");
+    assert_eq!(error.kind, Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("映射会话哈希"), "{}", error.message);
+    assert_eq!(
+        reviewed.certification.status,
+        CertificationStatus::HumanReviewed,
+        "被拒时模板状态一字不改"
+    );
+    assert!(!wordlist_path.exists(), "被拒时词表不许被污染");
+
+    // 2. 只有 S2 哈希、没有 S3 证据。
+    reviewed.mapping_hash = "sha256:mapping".into();
+    let error = library
+        .certify(&mut reviewed, &wordlist_path)
+        .expect_err("缺 S3 两会话证据必须被拒");
+    assert_eq!(error.kind, Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("交叉核验证据"), "{}", error.message);
+
+    // 3. S3 证据存在但对应的是上一版映射（映射重跑而核验没跟上）。
+    reviewed.crosscheck_proof = Some(adm4_template::CrossCheckProof {
+        mapping_hash: "sha256:previous".into(),
+        crosscheck_hash: "sha256:crosscheck".into(),
+        checked_count: 2,
+        checked_at: "2026-08-31T00:00:00Z".into(),
+    });
+    let error = library
+        .certify(&mut reviewed, &wordlist_path)
+        .expect_err("证据与当前映射哈希不对应必须被拒");
+    assert_eq!(error.kind, Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("不对应"), "{}", error.message);
+    assert!(!wordlist_path.exists());
+
+    // 4. 证据补齐后放行（说明拦的是缺证据，不是把逆向来源整体锁死）。
+    reviewed.crosscheck_proof = Some(adm4_template::CrossCheckProof {
+        mapping_hash: "sha256:mapping".into(),
+        crosscheck_hash: "sha256:crosscheck".into(),
+        checked_count: 2,
+        checked_at: "2026-08-31T00:00:00Z".into(),
+    });
+    library
+        .certify(&mut reviewed, &wordlist_path)
+        .expect("证据齐备应认证成功");
+    assert!(reviewed.is_certified());
+    let words = load_skin_wordlist(&wordlist_path).unwrap().words;
+    assert!(words.contains(&"galaxy_guard".to_string()));
+
+    fs::remove_dir_all(&root).ok();
+}
+
+// ---------------------------------------------------------------------------
+// 负例 6（F4d）：认证证据旁路 —— 手工塞入的伪认证模板不得获得预填资格
+// ---------------------------------------------------------------------------
+
+/// `certify` 上的证据关卡管不到「不走 certify、直接把 JSON 落进 references/」这条路。
+/// 迁移工具就是这么写的 25 份内置模板，手工伪造同理。所以取用侧必须自己再查一遍证据：
+/// 有据可查的认证放行（批量迁移登记 / S2-S3 机器证据 / 人工审核署名），伪认证被拒。
+#[test]
+fn prefill_rejects_forged_certified_template_without_evidence() {
+    let root = temp_root("forged_certified");
+    let space = root.join("design_space");
+    let library = TemplateLibrary::new(&space);
+
+    // ① 手工伪造：状态写成 certified，什么证据都没有（连 origin 键都没有 → 按逆向解读）。
+    let forged_json = r#"{
+      "template_id": "tpl_forged",
+      "game_name": "伪造甲",
+      "genre_pack": "lane_test",
+      "pack_version": "1.0.0",
+      "depth_reached": "L4",
+      "certification": {"status": "certified", "reviewed_by": "我自己", "reviewed_at": "2026-08-31T00:00:00Z", "review_note": "手改的"},
+      "answers": [
+        {"decision_id": "t.combat", "option_id": "counter_combat", "evidence": []}
+      ]
+    }"#;
+    let references = space.join("lane_test").join("references");
+    fs::create_dir_all(&references).unwrap();
+    fs::write(references.join("tpl_forged.json"), forged_json).unwrap();
+
+    let stored = library.get("lane_test", "tpl_forged").unwrap();
+    assert!(
+        stored.is_certified(),
+        "状态位确实是 Certified（这正是漏洞形态）"
+    );
+    let error = library
+        .approved_for_prefill("lane_test", "tpl_forged")
+        .expect_err("无证据的伪认证模板不得取用");
+    assert_eq!(error.kind, Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("机器证据"), "{}", error.message);
+
+    // ② 批量迁移登记齐备且指纹对得上 → 照旧可取用（25 份内置模板走的就是这条）。
+    let mut migrated = library.get("lane_test", "tpl_forged").unwrap();
+    migrated.template_id = "tpl_migrated".into();
+    migrated.origin = TemplateOrigin::BulkMigration {
+        batch_id: "v2-builtin-2026-08-29".into(),
+        tool_version: "v2_migration/1.1.0".into(),
+        source_ref: "knowledge/design_data/project_templates/x.json".into(),
+        answers_digest: migrated.answers_digest(),
+        migrated_at: "2026-08-29T00:00:00Z".into(),
+    };
+    library.save_draft(&migrated).unwrap();
+    assert_eq!(
+        library
+            .approved_for_prefill("lane_test", "tpl_migrated")
+            .expect("登记可核对的批量迁移模板应可取用")
+            .template_id,
+        "tpl_migrated"
+    );
+
+    // ③ 篡改答卷（多加一条）而不更新登记 → 指纹失配，登记不再背书。
+    let mut tampered = library.get("lane_test", "tpl_migrated").unwrap();
+    tampered.template_id = "tpl_tampered".into();
+    tampered.answers.push(adm4_template::TemplateAnswer {
+        decision_id: "t.deploy".into(),
+        option_id: "grid_deploy".into(),
+        parameters: ParameterValues::default(),
+        evidence: Vec::new(),
+        notes: String::new(),
+        crosscheck_agreed: None,
+        additional_options: Vec::new(),
+        primary_option: None,
+    });
+    library.save_draft(&tampered).unwrap();
+    let error = library
+        .approved_for_prefill("lane_test", "tpl_tampered")
+        .expect_err("答卷被改而登记未更新 → 指纹失配");
+    assert_eq!(error.kind, Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("指纹"), "{}", error.message);
 
     fs::remove_dir_all(&root).ok();
 }

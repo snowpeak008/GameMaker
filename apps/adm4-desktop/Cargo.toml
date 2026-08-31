@@ -7,6 +7,9 @@ license.workspace = true
 
 [dependencies]
 adm4-foundation = { workspace = true }
+# AI Provider 配置面板需要 HttpProviderConfig / provider_presets 这两个配置形态
+# （config/app.json 的 ai_provider 字段就是 HttpProviderConfig）；AI 调用本身仍只走 adm4-app 门面。
+adm4-ai = { workspace = true }
 adm4-contracts = { workspace = true }
 adm4-decision = { workspace = true }
 adm4-authoring = { workspace = true }

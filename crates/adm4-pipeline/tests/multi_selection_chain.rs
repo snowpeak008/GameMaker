@@ -186,6 +186,7 @@ fn space() -> DesignSpace {
             pack_version: "0.1.0".into(),
             display_name: "多选测试包".into(),
             reference_games: vec!["虚构甲".into(), "虚构乙".into(), "虚构丙".into()],
+            profile_points: Vec::new(),
             cardinality_expectations: Default::default(),
             consistency_rules: Vec::new(),
             nodes: Vec::new(),

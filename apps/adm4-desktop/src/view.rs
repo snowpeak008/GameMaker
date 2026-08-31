@@ -5,12 +5,24 @@
 //! 之所以单独成模块：装配逻辑（领域卡片要含 0 点域、徽章取值、导出快照排版）
 //! 是本任务里唯一有分支的逻辑，必须能被单元测试钉住，而 Slint 回调不便测试。
 
-use crate::{CheckRow, DomainCard, LogItem, NodeCard, OptionRow, ProfileRow, StageItem, TextRow};
-use adm4_app::{DecisionPointView, ProjectProfile, RunLogEntry, WorkbenchOverview};
+use crate::{
+    ChangeRow, CheckRow, DeliverRow, DomainCard, LogItem, NodeCard, OptionRow, ProfileRow, SdkRow,
+    StageItem, TextRow,
+};
+use adm4_ai::HttpProviderConfig;
+use adm4_app::{
+    AiDoctorReport, AiInvokeCheckReport, ChangeRequest, ChangeStatus, DecisionPointView,
+    DeliverableManifest, ProjectDoctorReport, ProjectProfile, RunLogEntry, SdkReviewStatus,
+    SdkSnapshot, StageArtifactView, TemplateExportReport, WorkbenchOverview,
+};
+use adm4_authoring::WorkbenchResetReport;
 use adm4_decision::{
     DesignDomain, OrganizationProgress, SelectionMode, UNASSIGNED_DOMAIN_ID, UNASSIGNED_NODE_ID,
 };
-use adm4_pipeline::{PipelineRunState, StageStatus, design_compile_registry, phase2_registry};
+use adm4_pipeline::{
+    PipelineRunState, StageRecord, StageResetReport, StageStatus, design_compile_registry,
+    phase2_registry,
+};
 use slint::{SharedString, VecModel};
 
 /// 左栏领域卡片：**全部**领域（含 0 决策点的域）+ 进度 join。
@@ -565,10 +577,15 @@ pub fn validation_rows(overview: &WorkbenchOverview) -> Vec<TextRow> {
 }
 
 /// 流水线全版图：C0-C6（实跑，状态来自 runner）+ P0-P5（Phase 2 占位，不断头）。
+///
+/// 每行按 `docs/design/06` §4 要求带齐「状态 / 耗时 / 产物入口」：耗时来自
+/// `StageRecord::duration_seconds`，产物入口与重跑按钮的可用性一律由后端状态推出
+/// （从未开始执行的段没有产物可看、也没有产物需要作废，因此两个按钮都不出）。
 pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
     let mut rows: Vec<StageItem> = design_compile_registry()
         .into_iter()
         .map(|stage| {
+            let record = run_state.and_then(|state| state.stages.get(&stage.id));
             let (status, waiting) = match run_state.map(|state| state.stage_status(&stage.id)) {
                 None => ("待运行（先完成设计冻结）".to_string(), false),
                 Some(StageStatus::Pending) => ("待运行".to_string(), false),
@@ -584,13 +601,20 @@ pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
                     (format!("等待人工确认（{gate}）"), true)
                 }
             };
+            let running = matches!(record.map(|item| &item.status), Some(StageStatus::Running));
+            // 「跑过」= 后端给这段留了非 Pending 的记录；没跑过就没有产物入口与重跑入口。
+            let touched = record.is_some_and(|item| !matches!(item.status, StageStatus::Pending));
             StageItem {
                 id: stage.id.into(),
                 name: stage.name.into(),
                 status: status.into(),
                 summary: stage.summary.into(),
                 segment: "C 段".into(),
+                duration: duration_text(record.and_then(StageRecord::duration_seconds)).into(),
                 waiting,
+                running,
+                can_rerun: touched,
+                can_inspect: touched,
                 placeholder: false,
             }
         })
@@ -601,10 +625,418 @@ pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
         status: "Phase 2 占位（数据模型已立，执行器另行立项）".into(),
         summary: stage.summary.into(),
         segment: "P 段".into(),
+        duration: "耗时 —".into(),
         waiting: false,
+        running: false,
+        can_rerun: false,
+        can_inspect: false,
         placeholder: true,
     }));
     rows
+}
+
+/// 范围运行下拉的可选段（C0-C6）：registry 是唯一真相源，段名不在 UI 里硬编码。
+pub fn stage_ids() -> Vec<SharedString> {
+    design_compile_registry()
+        .into_iter()
+        .map(|stage| SharedString::from(stage.id))
+        .collect()
+}
+
+/// 阶段耗时文案：缺任一时刻（旧存档 / 运行中 / 从未开始）就如实说「未在案」，
+/// 不拿 0 秒冒充一次瞬时完成的运行（R2）。
+pub fn duration_text(seconds: Option<i64>) -> String {
+    match seconds {
+        None => "耗时 —（未在案）".to_string(),
+        Some(total) => format!("耗时 {}", human_duration(total)),
+    }
+}
+
+fn human_duration(total: i64) -> String {
+    let hours = total / 3600;
+    let minutes = (total % 3600) / 60;
+    let seconds = total % 60;
+    if hours > 0 {
+        format!("{hours}h{minutes:02}m{seconds:02}s")
+    } else if minutes > 0 {
+        format!("{minutes}m{seconds:02}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+/// 运行中/停止按钮旁的状态提示。
+///
+/// 取消是**段边界粒度**的协作式取消：点「停止」后当前段的 AI 调用仍会跑完，
+/// 文案必须说清这一点，否则用户会以为点完立刻断开（然后误判为卡死）。
+pub fn pipeline_run_hint(running: bool, from: &str, to: &str) -> String {
+    if running {
+        format!(
+            "正在运行 {from} → {to}：点「停止运行」会在「当前阶段结束后」停止（当前段的 AI 调用仍会跑完），已完成段的产物保留，下次可断点续跑。"
+        )
+    } else {
+        "选择起止段后点「运行选定范围」；已成功的段会被跳过（断点续跑），要重做某段请用该段的「重跑」。".to_string()
+    }
+}
+
+/// 强制重跑的二次确认警示语：把「连带作废什么」逐条摆到用户眼前再让他点确认。
+pub fn rerun_warning(stage_id: &str, downstream: &[String]) -> String {
+    let scope = if downstream.is_empty() {
+        stage_id.to_string()
+    } else {
+        format!("{stage_id} → {}", downstream.join("、"))
+    };
+    format!(
+        "危险操作：强制重跑 {stage_id}\n将连带作废这些段的产物与运行状态：{scope}\n这些段里已通过的人工门（C5 风格 / C6 签收）署名一并作废，需要重新确认（R3：旧署名不为新产物背书）。\n确认要继续吗？"
+    )
+}
+
+/// 强制重跑回执：重置了哪些段、清空了哪些产物、作废了谁的署名——逐条列出。
+pub fn reset_report_rows(report: &StageResetReport) -> Vec<TextRow> {
+    // 表头用报告自带的一行摘要（与状态栏、CLI、运行日志同一份口径，不再各拼一遍）。
+    let mut rows = vec![header_row(format!(
+        "强制重跑回执 · 目标段 {} · {}",
+        report.target,
+        report.summary()
+    ))];
+    rows.push(info_row(
+        format!("重置阶段 {} 个", report.reset_stages.len()),
+        if report.reset_stages.is_empty() {
+            "（无）".to_string()
+        } else {
+            report.reset_stages.join("、")
+        },
+        "bad",
+    ));
+    rows.push(info_row(
+        format!("清空产物 {} 段", report.cleared_artifacts.len()),
+        if report.cleared_artifacts.is_empty() {
+            "（这些段此前没有落盘产物）".to_string()
+        } else {
+            report.cleared_artifacts.join("、")
+        },
+        "info",
+    ));
+    if report.revoked_confirmations.is_empty() {
+        rows.push(info_row(
+            "无人工门署名被作废",
+            "重置范围内没有已通过的人工确认",
+            "info",
+        ));
+    }
+    for revoked in &report.revoked_confirmations {
+        rows.push(info_row(
+            format!("人工确认已作废 · {}", revoked.stage_id),
+            format!(
+                "原署名 {}（{}）不再有效，重跑到该段后需重新确认",
+                revoked.actor, revoked.at
+            ),
+            "bad",
+        ));
+    }
+    rows
+}
+
+/// 阶段产物详情标题（含缺失产物的显式提示）。
+pub fn artifact_title(artifact: &StageArtifactView) -> String {
+    if artifact.complete {
+        format!(
+            "阶段产物 · {} · 冻结版 v{}（contract.json + document.md 齐备）",
+            artifact.stage_id, artifact.frozen_version
+        )
+    } else {
+        format!(
+            "阶段产物 · {} · 冻结版 v{}（缺 {}）",
+            artifact.stage_id,
+            artifact.frozen_version,
+            artifact.missing.join("、")
+        )
+    }
+}
+
+/// 阶段产物逐文件行：路径 + sha256 + 字节数；缺文件如实标缺（不显示成空白详情）。
+pub fn artifact_rows(artifact: &StageArtifactView) -> Vec<TextRow> {
+    [&artifact.document, &artifact.contract]
+        .into_iter()
+        .map(|file| {
+            if file.present {
+                info_row(
+                    format!(
+                        "✔ {} · {} 字节 · sha256 {}",
+                        file.file_name,
+                        file.bytes,
+                        short_sha(&file.sha256)
+                    ),
+                    file.path.clone(),
+                    "ok",
+                )
+            } else {
+                info_row(
+                    format!("✘ {} 未生成", file.file_name),
+                    format!("预期路径：{}", file.path),
+                    "bad",
+                )
+            }
+        })
+        .collect()
+}
+
+/// `document.md` 预览正文；文件缺失时给出说明而不是空白（空白会被当成「文档是空的」）。
+pub fn artifact_document(artifact: &StageArtifactView) -> String {
+    match &artifact.document_text {
+        Some(text) => text.clone(),
+        None => format!(
+            "（{} 未生成：该段尚未产出渲染文档，先运行或重跑 {}）",
+            adm4_app::DOCUMENT_FILE,
+            artifact.stage_id
+        ),
+    }
+}
+
+/// 预览提示条：截断时必须显式说「你看到的不是全文」。
+pub fn artifact_hint(artifact: &StageArtifactView) -> String {
+    let mut parts = Vec::new();
+    if artifact.document_truncated {
+        parts.push(format!(
+            "预览已截断：只显示前 {} KiB，非全文；sha256 与字节数是整份文件的真值，核对请打开上方路径",
+            artifact.preview_limit_bytes / 1024
+        ));
+    }
+    if !artifact.complete {
+        parts.push(format!("缺产物：{}", artifact.missing.join("、")));
+    }
+    parts.join(" · ")
+}
+
+/// 存档体检结果（`project_doctor`）：healthy 与否一眼可辨，problems 逐条可见。
+pub fn doctor_rows(report: &ProjectDoctorReport) -> Vec<TextRow> {
+    let mut rows = vec![header_row(format!("存档体检 · {}", report.archive_id))];
+    if report.healthy {
+        rows.push(info_row(
+            "✔ 健康：未发现问题",
+            "manifest 可读，且内容指纹与实际内容一致",
+            "ok",
+        ));
+        return rows;
+    }
+    rows.push(info_row(
+        format!("✘ 发现 {} 个问题", report.problems.len()),
+        "逐条见下（体检只诊断不修复）",
+        "bad",
+    ));
+    for (index, problem) in report.problems.iter().enumerate() {
+        rows.push(info_row(
+            format!("[问题 {}]", index + 1),
+            problem.clone(),
+            "bad",
+        ));
+    }
+    rows
+}
+
+/// AI 体检结果：不可用就如实显示不可用，并原样呈现后端给的原因（R7：不许画成成功）。
+pub fn ai_doctor_rows(report: &AiDoctorReport) -> Vec<TextRow> {
+    let mut rows = vec![header_row("AI 体检（只诊断不修复，零网络请求）")];
+    if report.available {
+        rows.push(info_row(
+            format!("✔ 可用 · Provider {}", report.provider_id),
+            report.detail.clone(),
+            "ok",
+        ));
+        rows.push(info_row(
+            "提示",
+            "体检只校验配置与密钥可解析性，不代表远端服务一定连得上——请跑「实调用检查」",
+            "info",
+        ));
+    } else {
+        rows.push(info_row("✘ 不可用", report.detail.clone(), "bad"));
+        rows.push(info_row(
+            "影响范围",
+            "AI 访谈 / 冻结门红队 / C1-C5 流水线段会直接 blocked（无模板兜底，R7）",
+            "bad",
+        ));
+    }
+    rows
+}
+
+/// AI 实调用检查结果：成功给可核对的事实（模型/字符数/耗时），失败原样呈现原因。
+///
+/// 与 [`ai_doctor_rows`] 分开呈现，因为两者结论可以相反且都对：配置齐备（doctor 可用）
+/// 而 base_url 写错（invoke-check 失败）正是最常见的情形。把它们混在一张表里，
+/// 用户会以为其中一个是过期数据。
+pub fn ai_invoke_rows(report: &AiInvokeCheckReport) -> Vec<TextRow> {
+    let mut rows = vec![header_row("AI 实调用检查（真发一次最小请求，走网络）")];
+    if report.succeeded {
+        rows.push(info_row(
+            format!(
+                "✔ 打通 · Provider {} · 模型 {}",
+                report.provider_id, report.model
+            ),
+            format!(
+                "应答 {} 字符，耗时 {} ms（{}）",
+                report.response_chars, report.elapsed_ms, report.at
+            ),
+            "ok",
+        ));
+        rows.push(info_row("应答摘要", report.detail.clone(), "info"));
+    } else {
+        rows.push(info_row(
+            if report.provider_id.is_empty() {
+                "✘ 未发出请求".to_string()
+            } else {
+                format!("✘ 调用失败 · Provider {}", report.provider_id)
+            },
+            report.detail.clone(),
+            "bad",
+        ));
+        rows.push(info_row(
+            "如实说明",
+            format!(
+                "失败原因原样来自后端，不重试、不降级、不改写（R7）；耗时 {} ms",
+                report.elapsed_ms
+            ),
+            "bad",
+        ));
+    }
+    rows
+}
+
+/// 实调用检查的一行状态栏文案。
+pub fn ai_invoke_status_text(report: &AiInvokeCheckReport) -> String {
+    if report.succeeded {
+        format!("AI 实调用检查通过：{}", report.summary())
+    } else {
+        format!("AI 实调用检查失败：{}", report.summary())
+    }
+}
+
+/// 已登记 named secret 的名字一行（**只列名字，不列值**）。
+pub fn secret_names_text(names: &[String]) -> String {
+    if names.is_empty() {
+        return "config/secrets.json 尚无 named secret（配置里用 named:<名字> 引用它们）"
+            .to_string();
+    }
+    format!(
+        "已登记 named secret {} 条：{}（只列名字，值不展示）",
+        names.len(),
+        names
+            .iter()
+            .map(|name| format!("named:{name}"))
+            .collect::<Vec<_>>()
+            .join("、")
+    )
+}
+
+/// 底栏与面板顶部的一行 AI 状态。
+pub fn ai_status_text(report: &AiDoctorReport) -> String {
+    if report.available {
+        format!("AI：可用（{}）", report.provider_id)
+    } else {
+        format!("AI：不可用 — {}", report.detail)
+    }
+}
+
+/// AI 配置面板的当前配置摘要（读 `config/app.json`）。
+pub fn provider_summary(config: Option<&HttpProviderConfig>) -> String {
+    match config {
+        None => "config/app.json 尚未配置 ai_provider：AI 访谈 / 红队 / C1-C5 全部会被 blocked"
+            .to_string(),
+        Some(config) => format!(
+            "当前配置：{} · {} · 模型 {} · 密钥引用 {} · 超时 {}s",
+            config.provider_id,
+            config.base_url,
+            config.model,
+            config.api_key_ref,
+            config.timeout_secs
+        ),
+    }
+}
+
+/// AI 配置表单的初值（`None` = 未配置，全部留空由用户填或套用 preset）。
+pub struct ProviderForm {
+    pub provider_id: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_ref: String,
+    pub timeout_secs: String,
+}
+
+pub fn provider_form(config: Option<&HttpProviderConfig>) -> ProviderForm {
+    match config {
+        None => ProviderForm {
+            provider_id: String::new(),
+            base_url: String::new(),
+            model: String::new(),
+            api_key_ref: String::new(),
+            timeout_secs: String::new(),
+        },
+        Some(config) => ProviderForm {
+            provider_id: config.provider_id.clone(),
+            base_url: config.base_url.clone(),
+            model: config.model.clone(),
+            api_key_ref: config.api_key_ref.clone(),
+            timeout_secs: config.timeout_secs.to_string(),
+        },
+    }
+}
+
+/// 表单必填项缺失检查（只看「填没填」，值是否有效由后端 `build_provider` 判定）。
+///
+/// 与既有的「请先填写导出路径」同类：这是输入完整性，不是业务规则——
+/// 密钥引用的格式、base_url 能否连通，一概不在 UI 里判断。
+pub fn missing_provider_fields(
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+    api_key_ref: &str,
+    timeout_secs: &str,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    for (value, label) in [
+        (provider_id, "Provider id"),
+        (base_url, "Base URL"),
+        (model, "模型名"),
+        (api_key_ref, "密钥引用（env:NAME 或 named:NAME）"),
+        (timeout_secs, "超时秒数"),
+    ] {
+        if value.trim().is_empty() {
+            missing.push(label);
+        }
+    }
+    missing
+}
+
+/// 另存模板回执：导出条数与**跳过的未确认点数**同样显眼（后者最容易被误当成整卷定稿）。
+pub fn template_export_text(report: &TemplateExportReport) -> String {
+    format!(
+        "已另存模板 {}/{}（{}）\n{}\n跳过未确认决策点 {} 个 · 失效选项 {} 条\n注意：另存出来的模板落在「已审核」状态，还需在本面板走 S5「认证入库」才能预填到别的项目。",
+        report.genre_pack,
+        report.template_id,
+        report.game_name,
+        report.summary(),
+        report.skipped_unconfirmed,
+        report.skipped_unknown.len()
+    )
+}
+
+/// 工作台重置的二次确认警示语（破坏性操作，必须先说清清空什么、保留什么）。
+pub fn reset_workbench_warning() -> String {
+    "危险操作：重置设计工作台\n将清空当前项目的全部决策点选择（含参数值、理由、多选与主选标记）、不适用豁免、节点设计说明与风险说明。\n已冻结版本（frozen/v{N}）与流水线产物（pipeline/v{N}）不受影响，项目本身也不会被删除。\n操作人与理由必填并进审计日志（R3）。确认要继续吗？".to_string()
+}
+
+/// 工作台重置回执：清空计数逐项列出 + 明示未受影响的范围。
+pub fn reset_workbench_text(report: &WorkbenchResetReport) -> String {
+    let head = if report.is_noop() {
+        "重置完成：该项目本来就没有任何创作内容可清空"
+    } else {
+        "重置完成"
+    };
+    format!(
+        "{head}（署名 {} · {}）\n{}\n已冻结版本与流水线产物不受影响。",
+        report.actor,
+        report.at,
+        report.summary()
+    )
 }
 
 /// 流水线视图的映射注记：二版 Step00-14 与四版 C 段/P 段的对应关系。
@@ -614,7 +1046,7 @@ pub fn pipeline_note() -> String {
      · Step07 美术风格人工确认 → C5 风格段人工门（本视图「人工确认」按钮）\n\
      · Step08-10（程序计划/美术计划/资源对齐）→ C6 开发计划与签收\n\
      · Step11-14（程序执行/美术生产/场景组装/集成验证）→ P0-P5（Phase 2，本视图占位可见，不断头）\n\
-     阶段详情/重跑/范围运行的完整交互由 T12 在本视图内补齐。"
+     本视图可操作：范围运行（选起止段）/ 停止运行（段边界生效）/ 单段强制重跑（二次确认后连带作废下游）/ 阶段详情（状态·耗时·产物入口）。"
         .to_string()
 }
 
@@ -832,6 +1264,185 @@ pub fn table_model(buffer: &[Vec<String>]) -> Vec<slint::ModelRc<SharedString>> 
             ))
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// T12 三视图行模型装配（SDK 审批队列 / 补充开发变更 / 文档集交付）
+// ---------------------------------------------------------------------------
+
+/// SDK 审批队列行模型。
+pub fn sdk_rows(snapshot: &SdkSnapshot) -> Vec<SdkRow> {
+    snapshot
+        .records
+        .iter()
+        .map(|record| {
+            let (status_kind, signed) = match record.status {
+                SdkReviewStatus::Pending => ("warn", "待审核".to_string()),
+                SdkReviewStatus::Approved => (
+                    "good",
+                    format!(
+                        "批准 · 评审 {} · {} · {}",
+                        record.reviewer, record.review_note, record.reviewed_at
+                    ),
+                ),
+                SdkReviewStatus::Rejected => (
+                    "bad",
+                    format!(
+                        "拒绝 · 评审 {} · {} · {}",
+                        record.reviewer, record.review_note, record.reviewed_at
+                    ),
+                ),
+            };
+            SdkRow {
+                id: record.id.clone().into(),
+                name: record.sdk_name.clone().into(),
+                url: record.url.clone().into(),
+                category: record.category.clone().into(),
+                purpose: record.purpose.clone().into(),
+                status: record.status.label_zh().into(),
+                status_kind: status_kind.into(),
+                signed: signed.into(),
+                pending: matches!(record.status, SdkReviewStatus::Pending),
+            }
+        })
+        .collect()
+}
+
+/// SDK 计数条文本（顶部三态计数）。
+pub fn sdk_counts(snapshot: &SdkSnapshot) -> String {
+    format!(
+        "待审 {} · 已批准 {} · 已拒绝 {}",
+        snapshot.pending_count, snapshot.approved_count, snapshot.rejected_count
+    )
+}
+
+/// 补充开发变更请求行模型。
+///
+/// 按钮可用性由后端状态机推出（GUI 不判规则）：`Drafted`/`ImpactAnalyzed` 可影响分析，
+/// `ImpactAnalyzed`/`Scheduled` 可推进；终态两个按钮都不出。
+pub fn change_rows(requests: &[ChangeRequest]) -> Vec<ChangeRow> {
+    requests
+        .iter()
+        .map(|req| {
+            let status_kind = match req.status {
+                ChangeStatus::Applied => "good",
+                ChangeStatus::Rejected => "bad",
+                _ => "",
+            };
+            let can_impact = matches!(
+                req.status,
+                ChangeStatus::Drafted | ChangeStatus::ImpactAnalyzed
+            );
+            let can_advance = matches!(
+                req.status,
+                ChangeStatus::ImpactAnalyzed | ChangeStatus::Scheduled
+            );
+            let next = req.status.next();
+            let signed = if req.last_actor.is_empty() {
+                "尚未推进".to_string()
+            } else {
+                format!(
+                    "推进署名 {} · {} · {}",
+                    req.last_actor, req.last_note, req.updated_at
+                )
+            };
+            let segments = if req.affected_segments.is_empty() {
+                "（未分析）".to_string()
+            } else {
+                req.affected_segments.join(",")
+            };
+            ChangeRow {
+                id: req.id.clone().into(),
+                title: req.title.clone().into(),
+                requester: req.requested_by.clone().into(),
+                status: req.status.label_zh().into(),
+                status_kind: status_kind.into(),
+                segments: segments.into(),
+                signed: signed.into(),
+                next_token: next.map(|status| status.as_token()).unwrap_or("").into(),
+                next_label: next
+                    .map(|status| format!("推进→{}", status.label_zh()))
+                    .unwrap_or_default()
+                    .into(),
+                can_impact,
+                can_advance,
+            }
+        })
+        .collect()
+}
+
+/// 变更请求汇总条文本。
+pub fn change_summary(requests: &[ChangeRequest]) -> String {
+    if requests.is_empty() {
+        return "尚无变更请求".to_string();
+    }
+    let applied = requests
+        .iter()
+        .filter(|req| matches!(req.status, ChangeStatus::Applied))
+        .count();
+    let rejected = requests
+        .iter()
+        .filter(|req| matches!(req.status, ChangeStatus::Rejected))
+        .count();
+    let open = requests.len() - applied - rejected;
+    format!(
+        "共 {} 项 · 进行中 {} · 已应用 {} · 已拒绝 {}",
+        requests.len(),
+        open,
+        applied,
+        rejected
+    )
+}
+
+/// 文档集交付逐段行模型（C0-C6）。
+pub fn deliverable_rows(manifest: &DeliverableManifest) -> Vec<DeliverRow> {
+    manifest
+        .segments
+        .iter()
+        .map(|segment| {
+            let detail = if segment.present {
+                format!(
+                    "doc {} · {}B · contract {}",
+                    short_sha(&segment.document_sha256),
+                    segment.document_bytes,
+                    short_sha(&segment.contract_sha256)
+                )
+            } else {
+                "未生成（先运行流水线该段）".to_string()
+            };
+            DeliverRow {
+                stage: segment.stage_id.clone().into(),
+                present: segment.present,
+                detail: detail.into(),
+            }
+        })
+        .collect()
+}
+
+/// 交付清单汇总条文本。
+pub fn deliverable_summary(manifest: &DeliverableManifest) -> String {
+    if manifest.complete {
+        format!(
+            "v{} · 完整：7/7 段齐备 · 生成于 {}",
+            manifest.frozen_version, manifest.generated_at
+        )
+    } else {
+        format!(
+            "v{} · 缺段：{} · 生成于 {}",
+            manifest.frozen_version,
+            manifest.missing_segments.join(","),
+            manifest.generated_at
+        )
+    }
+}
+
+/// sha256 短展示（前 12 位；空串照原样）。
+fn short_sha(sha: &str) -> String {
+    if sha.len() > 12 {
+        sha[..12].to_string()
+    } else {
+        sha.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -1261,5 +1872,516 @@ mod tests {
         let selected = level_brief(Some(&point("ld.input", "active", true)), "表结构");
         assert!(selected.contains("ld.input"));
         assert!(selected.contains("表结构"));
+    }
+
+    // ---- T12 三视图行模型 ----
+
+    fn change_req(status: ChangeStatus, segments: &[&str]) -> ChangeRequest {
+        ChangeRequest {
+            id: "chg-1".into(),
+            title: "加精英怪".into(),
+            description: String::new(),
+            requested_by: "策划".into(),
+            created_at: "t0".into(),
+            status,
+            affected_segments: segments.iter().map(|s| s.to_string()).collect(),
+            target_frozen_version: 0,
+            last_actor: String::new(),
+            last_note: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn change_rows_gate_buttons_by_status() {
+        let drafted = change_rows(&[change_req(ChangeStatus::Drafted, &[])]);
+        assert!(drafted[0].can_impact && !drafted[0].can_advance);
+
+        let analyzed = change_rows(&[change_req(ChangeStatus::ImpactAnalyzed, &["C2", "C3"])]);
+        assert!(analyzed[0].can_impact && analyzed[0].can_advance);
+        assert_eq!(analyzed[0].next_token.as_str(), "scheduled");
+        assert_eq!(analyzed[0].segments.as_str(), "C2,C3");
+
+        let scheduled = change_rows(&[change_req(ChangeStatus::Scheduled, &["C0"])]);
+        assert!(!scheduled[0].can_impact && scheduled[0].can_advance);
+        assert_eq!(scheduled[0].next_token.as_str(), "applied");
+
+        let applied = change_rows(&[change_req(ChangeStatus::Applied, &["C0"])]);
+        assert!(!applied[0].can_impact && !applied[0].can_advance);
+        assert_eq!(applied[0].status_kind.as_str(), "good");
+
+        let rejected = change_rows(&[change_req(ChangeStatus::Rejected, &[])]);
+        assert_eq!(rejected[0].status_kind.as_str(), "bad");
+    }
+
+    #[test]
+    fn deliverable_rows_and_summary_reflect_completeness() {
+        use adm4_app::DeliverableSegment;
+        let seg = |stage: &str, present: bool| DeliverableSegment {
+            stage_id: stage.into(),
+            present,
+            document_sha256: if present {
+                "abcdef0123456789".into()
+            } else {
+                String::new()
+            },
+            contract_sha256: if present {
+                "fedcba9876543210".into()
+            } else {
+                String::new()
+            },
+            document_bytes: if present { 128 } else { 0 },
+        };
+        let manifest = DeliverableManifest {
+            archive_id: "a".into(),
+            frozen_version: 2,
+            generated_at: "t".into(),
+            complete: false,
+            missing_segments: vec!["C6".into()],
+            segments: vec![seg("C0", true), seg("C6", false)],
+        };
+        let rows = deliverable_rows(&manifest);
+        assert!(rows[0].present && rows[0].detail.as_str().contains("abcdef012345"));
+        assert!(!rows[1].present && rows[1].detail.as_str().contains("未生成"));
+        assert!(deliverable_summary(&manifest).contains("缺段：C6"));
+    }
+
+    #[test]
+    fn sdk_rows_mark_pending_and_signed() {
+        use adm4_app::SdkRecord;
+        let record = |id: &str, status: SdkReviewStatus, reviewer: &str| SdkRecord {
+            id: id.into(),
+            sdk_name: "DOTween".into(),
+            url: "u".into(),
+            category: "anim".into(),
+            target_engines: "Unity".into(),
+            target_platforms: "windows-desktop".into(),
+            purpose: "p".into(),
+            status,
+            reviewer: reviewer.into(),
+            reviewed_at: if reviewer.is_empty() { "" } else { "t" }.into(),
+            review_note: if reviewer.is_empty() { "" } else { "ok" }.into(),
+            created_at: "t".into(),
+        };
+        let snapshot = SdkSnapshot {
+            records: vec![
+                record("s1", SdkReviewStatus::Pending, ""),
+                record("s2", SdkReviewStatus::Approved, "评审员"),
+            ],
+            pending_count: 1,
+            approved_count: 1,
+            rejected_count: 0,
+        };
+        let rows = sdk_rows(&snapshot);
+        assert!(rows[0].pending && rows[0].status_kind.as_str() == "warn");
+        assert!(!rows[1].pending && rows[1].status_kind.as_str() == "good");
+        assert!(rows[1].signed.as_str().contains("批准"));
+        assert!(sdk_counts(&snapshot).contains("待审 1"));
+    }
+
+    // ---- F4c 装配：流水线控制 / 阶段详情 / 体检 / AI 配置 / 另存模板 / 重置 ----
+
+    fn stage_record(
+        stage: &str,
+        status: StageStatus,
+        started: &str,
+        finished: &str,
+    ) -> StageRecord {
+        StageRecord {
+            stage_id: stage.into(),
+            status,
+            contract_hash: String::new(),
+            started_at: started.into(),
+            finished_at: finished.into(),
+            human_confirmation: None,
+        }
+    }
+
+    fn run_state(records: Vec<StageRecord>) -> PipelineRunState {
+        PipelineRunState {
+            frozen_hash: "hash".into(),
+            stages: records
+                .into_iter()
+                .map(|record| (record.stage_id.clone(), record))
+                .collect(),
+        }
+    }
+
+    /// 耗时：两端时刻齐备才有值；缺一（旧存档 / 运行中）就说「未在案」，不显示 0 秒。
+    #[test]
+    fn duration_text_reports_unknown_instead_of_zero() {
+        assert!(duration_text(None).contains("未在案"));
+        assert_eq!(duration_text(Some(0)), "耗时 0s");
+        assert_eq!(duration_text(Some(45)), "耗时 45s");
+        assert_eq!(duration_text(Some(63)), "耗时 1m03s");
+        assert_eq!(duration_text(Some(3723)), "耗时 1h02m03s");
+    }
+
+    /// 阶段行：耗时/运行中/产物入口/重跑按钮全部由后端状态推出，UI 不自行判定。
+    #[test]
+    fn stage_rows_carry_duration_and_gate_buttons_by_backend_status() {
+        // 未冻结（无运行状态）：没有任何段可看产物或重跑。
+        let fresh = stage_rows(None);
+        assert!(fresh.iter().all(|row| !row.can_rerun && !row.can_inspect));
+        assert!(fresh[0].duration.as_str().contains("未在案"));
+
+        let state = run_state(vec![
+            stage_record(
+                "C0",
+                StageStatus::Succeeded,
+                "2026-08-31T10:00:00Z",
+                "2026-08-31T10:00:12Z",
+            ),
+            stage_record("C1", StageStatus::Running, "2026-08-31T10:00:12Z", ""),
+            stage_record("C2", StageStatus::Pending, "", ""),
+        ]);
+        let rows = stage_rows(Some(&state));
+        let row = |id: &str| {
+            rows.iter()
+                .find(|row| row.id == id)
+                .unwrap_or_else(|| panic!("缺少阶段 {id}"))
+        };
+
+        let c0 = row("C0");
+        assert_eq!(c0.status.as_str(), "成功");
+        assert_eq!(c0.duration.as_str(), "耗时 12s");
+        assert!(c0.can_rerun && c0.can_inspect, "跑过的段要给重跑与产物入口");
+        assert!(!c0.running);
+
+        let c1 = row("C1");
+        assert!(c1.running, "Running 状态要能在行上显示成运行中");
+        assert_eq!(c1.status.as_str(), "运行中");
+        assert!(
+            c1.duration.as_str().contains("未在案"),
+            "运行中没有结束时刻"
+        );
+        assert!(c1.can_rerun && c1.can_inspect);
+
+        let c2 = row("C2");
+        assert!(
+            !c2.can_rerun && !c2.can_inspect,
+            "Pending 段没跑过：既无产物可看也无产物需作废"
+        );
+
+        // C3-C6 无记录 = 未跑过；P 段永远不给这两个按钮。
+        assert!(!row("C6").can_rerun);
+        let phase2 = row("P0");
+        assert!(phase2.placeholder && !phase2.can_rerun && !phase2.can_inspect);
+    }
+
+    #[test]
+    fn stage_ids_follow_the_registry() {
+        let ids: Vec<String> = stage_ids().into_iter().map(|id| id.to_string()).collect();
+        assert_eq!(ids, vec!["C0", "C1", "C2", "C3", "C4", "C5", "C6"]);
+    }
+
+    /// 「停止」的文案必须说清是段边界粒度，不能写成「立即中止」。
+    #[test]
+    fn pipeline_run_hint_explains_stage_boundary_cancellation() {
+        let running = pipeline_run_hint(true, "C0", "C6");
+        assert!(running.contains("当前阶段结束后"), "{running}");
+        assert!(!running.contains("立即"), "{running}");
+        assert!(pipeline_run_hint(false, "C0", "C6").contains("断点续跑"));
+    }
+
+    /// 重跑警示必须点名下游段与人工门署名作废。
+    #[test]
+    fn rerun_warning_names_downstream_and_signature_revocation() {
+        let text = rerun_warning("C2", &["C3".into(), "C4".into(), "C5".into(), "C6".into()]);
+        assert!(text.contains("强制重跑 C2"), "{text}");
+        assert!(text.contains("C3、C4、C5、C6"), "{text}");
+        assert!(text.contains("人工门"), "{text}");
+        assert!(text.contains("作废"), "{text}");
+
+        // 末段无下游时也要照样给出确认语，不能变成空白提示。
+        let last = rerun_warning("C6", &[]);
+        assert!(last.contains("C6") && last.contains("确认"), "{last}");
+    }
+
+    #[test]
+    fn reset_report_rows_list_every_revoked_confirmation() {
+        use adm4_pipeline::RevokedConfirmation;
+        let report = StageResetReport {
+            target: "C2".into(),
+            reset_stages: vec!["C2".into(), "C5".into()],
+            revoked_confirmations: vec![RevokedConfirmation {
+                stage_id: "C5".into(),
+                actor: "主美".into(),
+                at: "2026-08-30T09:00:00Z".into(),
+            }],
+            cleared_artifacts: vec!["C2".into()],
+        };
+        let rows = reset_report_rows(&report);
+        assert_eq!(rows[0].kind, "header");
+        assert!(rows.iter().any(|row| row.text.contains("C2、C5")));
+        assert!(
+            rows.iter()
+                .any(|row| row.title.contains("C5") && row.text.contains("主美")),
+            "作废署名要逐条可见"
+        );
+
+        // 没有署名被作废时，也要有一条明确的「无」而不是空列表。
+        let empty = StageResetReport {
+            target: "C6".into(),
+            reset_stages: vec!["C6".into()],
+            revoked_confirmations: Vec::new(),
+            cleared_artifacts: Vec::new(),
+        };
+        assert!(
+            reset_report_rows(&empty)
+                .iter()
+                .any(|row| row.title.contains("无人工门署名被作废"))
+        );
+    }
+
+    fn artifact_file(name: &str, present: bool) -> adm4_app::ArtifactFileView {
+        adm4_app::ArtifactFileView {
+            file_name: name.into(),
+            present,
+            path: format!("D:\\data\\C2\\{name}"),
+            sha256: if present {
+                "0123456789abcdef0123".into()
+            } else {
+                String::new()
+            },
+            bytes: if present { 2048 } else { 0 },
+        }
+    }
+
+    fn artifact(complete: bool, truncated: bool) -> StageArtifactView {
+        StageArtifactView {
+            archive_id: "arc".into(),
+            frozen_version: 2,
+            stage_id: "C2".into(),
+            complete,
+            missing: if complete {
+                Vec::new()
+            } else {
+                vec!["document.md".into()]
+            },
+            document: artifact_file("document.md", complete),
+            contract: artifact_file("contract.json", true),
+            document_text: complete.then(|| "# C2 玩法文档".to_string()),
+            document_truncated: truncated,
+            preview_limit_bytes: 256 * 1024,
+        }
+    }
+
+    #[test]
+    fn artifact_view_exposes_paths_digests_and_missing_state() {
+        let complete = artifact(true, false);
+        assert!(artifact_title(&complete).contains("齐备"));
+        let rows = artifact_rows(&complete);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].kind, "ok");
+        assert!(
+            rows[0].title.contains("sha256 0123456789ab"),
+            "{}",
+            rows[0].title
+        );
+        assert!(rows[0].text.contains("document.md"));
+        assert_eq!(artifact_document(&complete), "# C2 玩法文档");
+        assert!(artifact_hint(&complete).is_empty());
+
+        let missing = artifact(false, false);
+        assert!(artifact_title(&missing).contains("缺 document.md"));
+        assert_eq!(artifact_rows(&missing)[0].kind, "bad");
+        assert!(
+            artifact_document(&missing).contains("未生成"),
+            "缺文件不能渲染成空白正文"
+        );
+        assert!(artifact_hint(&missing).contains("缺产物"));
+    }
+
+    /// 截断预览必须显式说「非全文」，否则会被拿去当完整产物核对。
+    #[test]
+    fn artifact_hint_flags_truncated_preview_as_not_full_text() {
+        let hint = artifact_hint(&artifact(true, true));
+        assert!(hint.contains("非全文"), "{hint}");
+        assert!(hint.contains("256 KiB"), "{hint}");
+    }
+
+    #[test]
+    fn doctor_rows_make_health_obvious() {
+        let healthy = doctor_rows(&ProjectDoctorReport {
+            archive_id: "arc-1".into(),
+            healthy: true,
+            problems: Vec::new(),
+        });
+        assert!(healthy[1].kind == "ok" && healthy[1].title.contains("健康"));
+
+        let broken = doctor_rows(&ProjectDoctorReport {
+            archive_id: "arc-1".into(),
+            healthy: false,
+            problems: vec!["内容指纹不一致".into(), "manifest 不可读".into()],
+        });
+        assert!(broken[1].title.contains("2 个问题") && broken[1].kind == "bad");
+        assert!(broken.iter().any(|row| row.text.contains("内容指纹不一致")));
+        assert!(broken.iter().filter(|row| row.kind == "bad").count() >= 3);
+    }
+
+    /// R7：AI 不可用必须显示成不可用，并原样带出后端给的原因。
+    #[test]
+    fn ai_doctor_rows_never_paint_failure_as_success() {
+        let blocked = AiDoctorReport {
+            available: false,
+            provider_id: String::new(),
+            detail: "未配置 AI Provider（config/app.json 的 ai_provider）".into(),
+        };
+        let rows = ai_doctor_rows(&blocked);
+        assert!(rows.iter().any(|row| row.title.contains("不可用")));
+        assert!(
+            rows.iter()
+                .any(|row| row.text.contains("未配置 AI Provider"))
+        );
+        assert!(rows.iter().all(|row| row.kind != "ok"));
+        assert!(ai_status_text(&blocked).starts_with("AI：不可用"));
+
+        let ready = AiDoctorReport {
+            available: true,
+            provider_id: "openai".into(),
+            detail: "已配置且密钥可解析".into(),
+        };
+        let rows = ai_doctor_rows(&ready);
+        assert!(
+            rows.iter()
+                .any(|row| row.kind == "ok" && row.title.contains("openai"))
+        );
+        assert_eq!(ai_status_text(&ready), "AI：可用（openai）");
+    }
+
+    /// R7：实调用失败必须画成失败并原样带出原因；成功则给可核对的事实。
+    #[test]
+    fn ai_invoke_rows_report_failure_verbatim() {
+        let failed = AiInvokeCheckReport {
+            succeeded: false,
+            provider_id: "openai".into(),
+            model: String::new(),
+            response_chars: 0,
+            elapsed_ms: 1234,
+            detail: "ai provider returned status 401: invalid api key".into(),
+            at: "2026-08-31T00:00:00Z".into(),
+        };
+        let rows = ai_invoke_rows(&failed);
+        assert!(rows.iter().all(|row| row.kind != "ok"));
+        assert!(rows.iter().any(|row| row.text.contains("status 401")));
+        assert!(ai_invoke_status_text(&failed).starts_with("AI 实调用检查失败"));
+
+        let ok = AiInvokeCheckReport {
+            succeeded: true,
+            provider_id: "openai".into(),
+            model: "gpt-4o-mini".into(),
+            response_chars: 2,
+            elapsed_ms: 380,
+            detail: "OK".into(),
+            at: "2026-08-31T00:00:00Z".into(),
+        };
+        let rows = ai_invoke_rows(&ok);
+        assert!(
+            rows.iter()
+                .any(|row| row.kind == "ok" && row.title.contains("gpt-4o-mini"))
+        );
+        assert!(rows.iter().any(|row| row.text.contains("380 ms")));
+        assert!(ai_invoke_status_text(&ok).contains("实调用成功"));
+    }
+
+    /// 密钥面板只列名字，绝不列值。
+    #[test]
+    fn secret_names_text_lists_names_only() {
+        assert!(secret_names_text(&[]).contains("尚无 named secret"));
+        let text = secret_names_text(&["my_key".to_string(), "other".to_string()]);
+        assert!(text.contains("named:my_key") && text.contains("named:other"));
+        assert!(text.contains("值不展示"));
+    }
+
+    #[test]
+    fn provider_form_round_trips_config_and_flags_missing_fields() {
+        assert!(provider_summary(None).contains("尚未配置"));
+        let empty = provider_form(None);
+        assert!(empty.provider_id.is_empty() && empty.timeout_secs.is_empty());
+
+        let config = HttpProviderConfig {
+            provider_id: "deepseek".into(),
+            base_url: "https://api.deepseek.com/v1".into(),
+            model: "deepseek-chat".into(),
+            api_key_ref: "env:DEEPSEEK_API_KEY".into(),
+            timeout_secs: 90,
+        };
+        let form = provider_form(Some(&config));
+        assert_eq!(form.provider_id, "deepseek");
+        assert_eq!(form.timeout_secs, "90");
+        assert!(provider_summary(Some(&config)).contains("env:DEEPSEEK_API_KEY"));
+
+        assert!(
+            missing_provider_fields(
+                &form.provider_id,
+                &form.base_url,
+                &form.model,
+                &form.api_key_ref,
+                &form.timeout_secs
+            )
+            .is_empty()
+        );
+        let missing = missing_provider_fields("openai", " ", "", "env:K", "120");
+        assert_eq!(missing, vec!["Base URL", "模型名"]);
+    }
+
+    #[test]
+    fn template_export_text_shows_exported_and_skipped_counts() {
+        let report = TemplateExportReport {
+            template_id: "tpl_from_project".into(),
+            genre_pack: "lane_defense".into(),
+            game_name: "验证项目".into(),
+            source_archive_id: "arc".into(),
+            source_project_name: "验证项目".into(),
+            depth_reached: DesignLevel::L5,
+            status: "HumanReviewed".into(),
+            reviewed_by: "主策划".into(),
+            exported_points: 2571,
+            exported_additional_options: 7,
+            exported_primary_marks: 3,
+            skipped_unconfirmed: 14,
+            skipped_unknown: vec!["ld.wave/legacy".into()],
+        };
+        let text = template_export_text(&report);
+        assert!(text.contains("2571"), "{text}");
+        assert!(text.contains("跳过未确认决策点 14 个"), "{text}");
+        assert!(text.contains("失效选项 1 条"), "{text}");
+        assert!(text.contains("认证入库"), "另存后还需 S5 认证才能预填");
+    }
+
+    #[test]
+    fn workbench_reset_texts_state_scope_and_counts() {
+        let warning = reset_workbench_warning();
+        assert!(warning.contains("清空"), "{warning}");
+        assert!(warning.contains("已冻结版本"), "{warning}");
+        assert!(warning.contains("必填"), "{warning}");
+
+        let report = WorkbenchResetReport {
+            cleared_selections: 120,
+            cleared_primary_marks: 4,
+            cleared_parameter_values: 9,
+            cleared_exemptions: 3,
+            cleared_node_design_notes: 2,
+            cleared_node_risk_notes: 1,
+            actor: "主策划".into(),
+            at: "2026-08-31T12:00:00Z".into(),
+        };
+        let text = reset_workbench_text(&report);
+        assert!(text.contains("120"), "{text}");
+        assert!(text.contains("主策划"), "{text}");
+        assert!(text.contains("已冻结版本与流水线产物不受影响"), "{text}");
+
+        let noop = WorkbenchResetReport {
+            cleared_selections: 0,
+            cleared_primary_marks: 0,
+            cleared_parameter_values: 0,
+            cleared_exemptions: 0,
+            cleared_node_design_notes: 0,
+            cleared_node_risk_notes: 0,
+            actor: "主策划".into(),
+            at: "t".into(),
+        };
+        assert!(reset_workbench_text(&noop).contains("本来就没有任何创作内容"));
     }
 }

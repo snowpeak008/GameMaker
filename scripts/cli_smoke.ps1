@@ -423,6 +423,50 @@ Assert-NotContains $out '阻塞' '流水线终态'
 Assert-NotContains $out '等待' '流水线终态'
 
 # ---------------------------------------------------------------------------
+# 8c. F4a 流水线控制：阶段产物查询 + 强制重跑（连带下游失效 + 人工门重新署名）
+#
+# 重跑起点选 C5（确定性段，重置范围只有 C5/C6），因此本段只额外跑两个无 AI 的阶段，
+# 对冒烟总时长的影响可忽略；既有断言一条未改。
+# ---------------------------------------------------------------------------
+$out = Invoke-Adm4 'F4a：阶段产物查询（全绿后七段应齐备）' @('pipeline', 'artifacts', $ArchiveId)
+foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
+    Assert-Contains $out "${stage}: 齐备" "产物清点 $stage"
+}
+Assert-Contains $out 'sha256:' '产物摘要'
+Assert-Contains $out 'contract.json' '机器契约文件名'
+Assert-NotContains $out '缺产物' '全绿后不应有缺产物'
+
+$out = Invoke-Adm4 'F4a：单段产物 + document.md 预览' @('pipeline', 'artifacts', $ArchiveId, '--stage', 'C2', '--show-document')
+Assert-Contains $out 'C2: 齐备' '单段产物齐备'
+Assert-Contains $out '玩法设计文档' 'C2 渲染文档正文可读'
+
+Invoke-Adm4 'F4a 负例：未知阶段 id 查询必须非零退出（不许伪装成「该段没跑」）' @('pipeline', 'artifacts', $ArchiveId, '--stage', 'C9') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4a：强制重跑 C5（应连带重置 C6 并作废两处人工门）' @('pipeline', 'rerun', $ArchiveId, 'C5', '--scripted-file', $AiAllPath)
+Assert-Contains $out '重置 2 段：C5 / C6' '重跑的下游重置范围'
+Assert-Contains $out '作废人工门确认 2 处' '重置范围内的人工门一并作废'
+Assert-Contains $out '冒烟评审员' '作废条目带原署名（可追溯）'
+Assert-Contains $out 'C5: 等待人工确认' '重跑后 C5 回到人工门'
+Assert-Contains $out 'C6: 待运行' '重跑后 C6 回到未运行'
+Assert-NotContains $out '失败' '重跑不得产生失败态'
+
+$out = Invoke-Adm4 'F4a：重跑后下游产物应已作废且如实报缺' @('pipeline', 'artifacts', $ArchiveId, '--stage', 'C6')
+Assert-Contains $out '缺产物' '下游产物随重跑失效'
+Assert-Contains $out 'document.md' '缺失文件名如实列出'
+
+Invoke-Adm4 'F4a：重跑后必须重新署名确认 C5' @('pipeline', 'confirm', $ArchiveId, 'C5', '复审评审员', '重跑后重新确认风格') | Out-Null
+$out = Invoke-Adm4 'F4a：续跑到 C6 人工签收' @('pipeline', 'run', $ArchiveId, '--scripted-file', $AiAllPath)
+Assert-Contains $out 'C6: 等待人工确认' '重跑后 C6 人工门'
+$out = Invoke-Adm4 'F4a：重新签收 C6' @('pipeline', 'confirm', $ArchiveId, 'C6', '复审评审员', '重跑后重新签收')
+Assert-Contains $out 'C6: 成功' '重新签收后 C6 成功'
+
+$out = Invoke-Adm4 'F4a：重跑并重签后七段重新齐备' @('pipeline', 'artifacts', $ArchiveId)
+Assert-NotContains $out '缺产物' '重跑后产物应重新齐备'
+foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
+    Assert-Contains $out "${stage}: 齐备" "重跑后产物清点 $stage"
+}
+
+# ---------------------------------------------------------------------------
 # 8b. F3 模型缺口：通用层模板跨包可见/可预填、非必做点不进分母、项目重命名
 #
 # 用独立的一次性项目做，不触碰上面已冻结并跑完 C0-C6 的 $ArchiveId。
@@ -465,9 +509,314 @@ Assert-Contains $out '晨星台地防线' '重命名后列表名称'
 Assert-NotContains $out '通用模板跨包验证' '旧名称应消失'
 
 # ---------------------------------------------------------------------------
+# 8d. F4b 创作侧能力：另存模板（项目 → 模板）+ 工作台重置 + 体检（判定已上提到服务层）
+#
+# 全部复用上面已存在的两个项目，不新建冻结/流水线场景，对冒烟总时长影响可忽略；
+# 既有断言一条未改。
+# ---------------------------------------------------------------------------
+
+# 负例：$UniversalArchive 的 2585 条全是「预填未确认」，另存模板必须被拒（空答卷没有意义）。
+# 拒绝原因走 stderr（与其它负例同款），此处只判退出码。
+Invoke-Adm4 'F4b 负例：项目无任何已确认决策点时另存模板必须被拒（错误信息见上方 stderr）' @('template', 'save-as', $UniversalArchive, 'tpl_should_not_exist', '--reviewer', '评审员甲', '--note', '试图把未确认的预填当定稿另存') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4b：从已冻结项目另存模板（只导出已确认的点）' @('template', 'save-as', $ArchiveId, 'tpl_frostfall', '--reviewer', '评审员甲', '--note', '逐条复核已确认选择，可作为本作定稿模板')
+Assert-Contains $out '已另存模板' '另存模板回执'
+Assert-Contains $out '跳过未确认 0 个' '本项目全部点已确认'
+Assert-Contains $out 'HumanReviewed' '另存即落人工审核态（不走 S1-S3）'
+Assert-Contains $out 'template certify' '另存后仍需认证才能预填'
+
+$out = Invoke-Adm4 'F4b：模板列表应标注两种来源' @('template', 'list', 'lane_defense')
+Assert-Contains $out '来源 本项目导出' '另存模板的来源标记'
+Assert-Contains $out '来源 逆向外部游戏' '逆向模板的来源标记'
+
+$out = Invoke-Adm4 'F4b：新建接收另存模板的项目' @('project', 'new', '另存模板回灌验证', '--pack', 'lane_defense', '--depth', 'L4')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析另存模板回灌项目的存档 id' }
+$ReuseArchive = $match.Groups[1].Value
+
+Invoke-Adm4 'F4b 负例：另存模板未认证同样不可预填' @('project', 'prefill', $ReuseArchive, 'tpl_frostfall') -ExpectFailure | Out-Null
+
+# F4d 修红线：本项目导出**照常**登记换皮词表（源项目名对别的项目就是参考名）。
+# 曾经「不登记」是为了让源项目自己过得了换皮门，代价是 B 项目抄 A 无人拦；
+# 现在登记照做，源项目自身的放行改由扫描侧按当前项目名豁免。
+$out = Invoke-Adm4 'F4d：另存模板认证入库（本项目导出照常登记换皮词表）' @('template', 'certify', 'lane_defense', 'tpl_frostfall')
+Assert-Contains $out 'Certified' '另存模板认证状态'
+Assert-Contains $out '换皮词 1 个' '源项目名进词表（否则别的项目抄它没人拦）'
+
+# F4d 钉子 ①：源项目自己的名字已在词表里，源项目自己照旧可另存（另存前整份模板过换皮扫描，
+# 而模板的 game_name 与 origin.source_project_name 就是项目名——没有豁免这一步必被拦）。
+$out = Invoke-Adm4 'F4d 钉子①：自身名字在词表里，源项目仍可另存（豁免只放行当前项目名）' @('template', 'save-as', $ArchiveId, 'tpl_frostfall_again', '--reviewer', '评审员甲', '--note', '自身名字已在词表里，本项目仍应可导出')
+Assert-Contains $out '已另存模板' '源项目不被自己的名字拦住'
+
+$out = Invoke-Adm4 'F4b：另存模板预填到新项目' @('project', 'prefill', $ReuseArchive, 'tpl_frostfall')
+Assert-Contains $out '预填：写入' '另存模板可预填'
+
+# F4d 钉子 ②：换到别的项目，A 的项目名照旧被换皮门拦（预填理由里带 A 的名字）。
+$out = Invoke-Adm4 'F4d 钉子②：B 项目带着 A 的项目名必须被换皮门拦下' @('freeze', 'check', $ReuseArchive) -ExpectFailure
+Assert-Contains $out 'reference_name_hit' '跨项目换皮拦截'
+Assert-Contains $out '霜落峡谷防卫计划' '拦下的正是源项目名'
+
+# F4d 认证证据旁路：手工往 references/ 里塞一份 status=certified、无任何证据的 JSON，
+# 预填必须被拒（状态位不再等于取用资格）。
+$ForgedTemplate = Join-Path $SpaceRoot 'lane_defense\references\tpl_forged_smoke.json'
+Write-Utf8NoBom $ForgedTemplate @'
+{
+  "template_id": "tpl_forged_smoke",
+  "game_name": "伪造甲",
+  "genre_pack": "lane_defense",
+  "pack_version": "0.1.0",
+  "depth_reached": "L4",
+  "certification": {"status": "certified", "reviewed_by": "我自己", "reviewed_at": "2026-08-31T00:00:00Z", "review_note": "手改的"},
+  "answers": [{"decision_id": "u.platform", "option_id": "pc_single", "evidence": []}]
+}
+'@
+$out = Invoke-Adm4 'F4d：模板列表应能看到这份伪认证模板（状态位确实是已认证）' @('template', 'list', 'lane_defense')
+Assert-Contains $out 'tpl_forged_smoke' '伪认证模板在库内'
+Invoke-Adm4 'F4d 负例：无证据的伪认证模板预填必须被拒（错误信息见上方 stderr）' @('project', 'prefill', $ReuseArchive, 'tpl_forged_smoke') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4d 负例：伪认证模板对照同样被拒（不留只读侧门）' @('template', 'compare', $ReuseArchive, 'tpl_forged_smoke') -ExpectFailure | Out-Null
+$out = Invoke-Adm4 'F4b：预填条目仍需逐条确认（一条都不算已完成）' @('authoring', 'status', $ReuseArchive)
+Assert-Contains $out '完成度 0/' '预填不等于确认'
+
+Invoke-Adm4 'F4b 负例：工作台重置缺 --actor 必须被拒（R3）' @('project', 'reset', $ReuseArchive, '--note', '缺署名') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4b 负例：工作台重置缺 --note 必须被拒（R3）' @('project', 'reset', $ReuseArchive, '--actor', '主策划') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4b：重置已冻结项目的工作台' @('project', 'reset', $ArchiveId, '--actor', '主策划', '--note', '品类方向推翻，创作重来')
+Assert-Contains $out '工作台已重置' '重置回执'
+Assert-Contains $out '清空' '重置清空计数'
+
+$out = Invoke-Adm4 'F4b：重置后创作态回到未作答' @('authoring', 'status', $ArchiveId)
+Assert-Contains $out '完成度 0/' '重置后完成度归零'
+
+$out = Invoke-Adm4 'F4b：重置后已冻结版本的流水线产物仍齐备' @('pipeline', 'artifacts', $ArchiveId)
+Assert-NotContains $out '缺产物' '重置不得抹掉已冻结版本的产物'
+foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
+    Assert-Contains $out "${stage}: 齐备" "重置后产物清点 $stage"
+}
+
+$out = Invoke-Adm4 'F4b：重置后流水线状态仍全绿' @('pipeline', 'status', $ArchiveId)
+foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
+    Assert-Contains $out "${stage}: 成功" "重置后流水线状态 $stage"
+}
+
+$out = Invoke-Adm4 'F4b：重置后存档体检仍一致（判定已上提到服务层）' @('project', 'doctor', $ArchiveId)
+Assert-Contains $out '[OK] 存档一致' '体检结论'
+
+Invoke-Adm4 'F4b 负例：不存在的存档体检必须非零退出' @('project', 'doctor', 'archive-not-there') -ExpectFailure | Out-Null
+
+# ---------------------------------------------------------------------------
+# 8e. F4d AI 配置能力：密钥写入（脱敏）+ doctor / invoke-check 的语义区分
+#
+# 全程零网络：invoke-check 的正例走 --scripted-file（与其它 AI 命令同款测试开关），
+# 负例在「未配置 Provider」下压根不发请求；doctor 本身就是零网络的配置检查。
+# 放在最后，避免给前面的步骤留下一份已配置的 Provider。
+# ---------------------------------------------------------------------------
+$out = Invoke-Adm4 'F4d 负例：未配置 Provider 时实调用检查必须非零退出' @('ai', 'invoke-check') -ExpectFailure
+Assert-Contains $out '[FAIL]' '实调用检查失败标记'
+Assert-Contains $out '未能构建 Provider' '未配置时压根不发请求'
+
+$InvokeScriptPath = Join-Path $AiDir 'ai_invoke.json'
+Write-Utf8NoBom $InvokeScriptPath '{"ai_invoke_check":["OK"]}'
+$out = Invoke-Adm4 'F4d：实调用检查成功路径（脚本应答，零网络）' @('ai', 'invoke-check', '--scripted-file', $InvokeScriptPath)
+Assert-Contains $out '[OK]' '实调用检查成功标记'
+Assert-Contains $out '实调用成功' '实调用回执'
+
+$SmokeSecret = 'sk-smoke-DO-NOT-LOG-f4d'
+$out = Invoke-Adm4 'F4d：写入 named secret（回执不得含密钥值）' @('ai', 'secret-set', 'smoke_key', '--value', $SmokeSecret)
+Assert-Contains $out 'smoke_key' '密钥名回执'
+Assert-NotContains $out $SmokeSecret '密钥值绝不回显（脱敏）'
+
+$LogPath = Join-Path $DataRoot 'logs\run_log.jsonl'
+$logText = Get-Content -LiteralPath $LogPath -Raw -Encoding UTF8
+if ($logText.Contains($SmokeSecret)) { Fail 'F4d：运行日志不得包含密钥值' }
+if (-not $logText.Contains('smoke_key')) { Fail 'F4d：运行日志应记下密钥名（可审计）' }
+
+$out = Invoke-Adm4 'F4d：secret-list 只列名字' @('ai', 'secret-list')
+Assert-Contains $out 'named:smoke_key' '密钥名清单'
+Assert-NotContains $out $SmokeSecret '清单不得列出密钥值'
+
+# 配上引用该密钥的 Provider（不发请求）→ ai doctor 转为 [OK]，并提示它查不出连通性。
+$AppConfig = @{
+    design_space_root = $SpaceRoot
+    ai_provider       = @{
+        provider_id  = 'smoke_local'
+        base_url     = 'http://127.0.0.1:9/v1'
+        model        = 'smoke-model'
+        api_key_ref  = 'named:smoke_key'
+        timeout_secs = 5
+    }
+}
+Write-Utf8NoBom (Join-Path $DataRoot 'config\app.json') ($AppConfig | ConvertTo-Json -Depth 5)
+$out = Invoke-Adm4 'F4d：ai doctor 应报可用（配置齐备 + 密钥可解析，零网络）' @('ai', 'doctor')
+Assert-Contains $out '[OK]' 'ai doctor 可用'
+Assert-Contains $out 'invoke-check' 'doctor 必须说清它查不出连通性'
+
+Invoke-Adm4 'F4d 负例：未知 ai 子命令必须非零退出' @('ai', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# ---------------------------------------------------------------------------
+# 8f. F4e CLI 补齐：SDK 三态审批 / 补充开发变更流 / 文档集交付清点 / 多选点与主选
+#
+# 这四组能力此前只有 GUI 入口，回归只能靠单测。本段把它们拉进冒烟：
+# 全部复用上面已存在的两个项目，零 AI 调用（这四组命令都不碰 Provider），
+# 对冒烟总时长影响可忽略；既有断言一条未改。
+#
+# CLI 只做转发与呈现，因此每组都同时走正例与「服务层拒绝」的负例——
+# 负例证明规则确实在服务层，而不是被 CLI 抄了一份或干脆漏掉。
+# ---------------------------------------------------------------------------
+
+# --- SDK 三态审批流：待审核 → 批准 / 拒绝（均为终态），重复裁决被拒 ---
+$out = Invoke-Adm4 'F4e：SDK 队列初始为空（查询命令不因空队列改变退出码）' @('sdk', 'list')
+Assert-Contains $out 'SDK 审批队列共 0 条' 'SDK 空队列计数'
+
+$out = Invoke-Adm4 'F4e：登记待审 SDK 资源（补间动画）' @('sdk', 'add', 'DOTween', 'https://dotween.demigiant.com', '--category', 'animation', '--purpose', '补间动画')
+$match = [regex]::Match($out, 'sdk_[\d_]+')
+if (-not $match.Success) { Fail '未能从输出解析 SDK 记录 id' }
+$SdkApproveId = $match.Value
+Assert-Contains $out '状态 待审核' 'SDK 登记后落待审'
+
+$out = Invoke-Adm4 'F4e：再登记一条待审 SDK 资源（待拒绝）' @('sdk', 'add', 'ClosedSourceKit', 'https://vendor.example/kit', '--purpose', '第三方闭源工具')
+$match = [regex]::Match($out, 'sdk_[\d_]+')
+if (-not $match.Success) { Fail '未能解析第二条 SDK 记录 id' }
+$SdkRejectId = $match.Value
+if ($SdkRejectId -eq $SdkApproveId) { Fail 'F4e：两次登记应得到不同的 SDK 记录 id' }
+
+Invoke-Adm4 'F4e 负例：SDK 资源名为空必须被拒' @('sdk', 'add', '   ', 'https://x.example') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：SDK 审批缺 --reviewer 必须被拒（R3）' @('sdk', 'approve', $SdkApproveId, '--note', '缺署名') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：SDK 审批缺 --note 必须被拒（R3）' @('sdk', 'approve', $SdkApproveId, '--reviewer', '策划甲') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：不存在的 SDK 记录审批必须非零退出' @('sdk', 'approve', 'sdk_not_there', '--reviewer', '策划甲', '--note', '结论') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：批准第一条（署名 + 结论双必填）' @('sdk', 'approve', $SdkApproveId, '--reviewer', '策划甲', '--note', '许可范围内可用')
+Assert-Contains $out '已批准' 'SDK 批准回执'
+$out = Invoke-Adm4 'F4e：拒绝第二条' @('sdk', 'reject', $SdkRejectId, '--reviewer', '法务乙', '--note', '许可证不兼容')
+Assert-Contains $out '已拒绝' 'SDK 拒绝回执'
+
+Invoke-Adm4 'F4e 负例：重复审批已批准记录必须被拒（裁决即终态）' @('sdk', 'approve', $SdkApproveId, '--reviewer', '策划甲', '--note', '想再批一次') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：改判已拒绝记录同样被拒' @('sdk', 'approve', $SdkRejectId, '--reviewer', '策划甲', '--note', '想改判') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：SDK 队列三态计数应为 0/1/1' @('sdk', 'list')
+Assert-Contains $out '待审核 0 / 已批准 1 / 已拒绝 1' 'SDK 三态计数'
+Assert-Contains $out '[已批准]' 'SDK 已批准行'
+Assert-Contains $out '[已拒绝]' 'SDK 已拒绝行'
+Assert-Contains $out '审批署名 策划甲' 'SDK 审批署名可见（R3）'
+Assert-Contains $out '许可证不兼容' 'SDK 拒绝理由可见'
+Assert-Contains $out '类别 animation' 'SDK 显式类别'
+Assert-Contains $out '类别 custom' 'SDK 类别缺省由服务层落 custom'
+
+Invoke-Adm4 'F4e 负例：未知 sdk 子命令必须非零退出' @('sdk', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# --- 补充开发变更流：起草 → 影响分析 → 排期 → 已应用；跳级与终态推进被拒 ---
+$out = Invoke-Adm4 'F4e：变更清单初始为空（查询命令不因空清单改变退出码）' @('change', 'list', $ReuseArchive)
+Assert-Contains $out '变更请求共 0 条' '变更空清单计数'
+
+Invoke-Adm4 'F4e 负例：变更登记缺 --by 署名必须被拒' @('change', 'add', $ReuseArchive, '新增精英怪波次') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：变更标题为空必须被拒' @('change', 'add', $ReuseArchive, '   ', '--by', '策划甲') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：登记一条变更请求' @('change', 'add', $ReuseArchive, '新增精英怪波次', '--by', '策划甲', '--description', '第 8 关加入精英单位', '--version', '1')
+$match = [regex]::Match($out, 'chg_[\d_]+')
+if (-not $match.Success) { Fail '未能解析变更请求 id' }
+$ChangeId = $match.Value
+Assert-Contains $out '[已起草]' '变更初始状态'
+Assert-Contains $out '尚未做影响分析' '未做影响分析时如实说明'
+Assert-Contains $out '--to impact_analyzed' '下一步由状态机给出'
+
+Invoke-Adm4 'F4e 负例：跳级推进（已起草 → 已排期）必须被拒' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'scheduled', '--actor', '主程乙', '--note', '想跳过影响分析') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：非法受影响段（C9）必须被拒' @('change', 'set-impact', $ReuseArchive, $ChangeId, '--segments', 'C9') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：受影响段为空必须被拒' @('change', 'set-impact', $ReuseArchive, $ChangeId, '--segments', ' , ') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：影响分析（大小写与重复由服务层规范化）' @('change', 'set-impact', $ReuseArchive, $ChangeId, '--segments', 'c3,C2,c2')
+Assert-Contains $out '[已影响分析]' '影响分析后状态'
+Assert-Contains $out '受影响段 C3/C2' '受影响段以服务层规范化结果为准（大写 + 去重 + 保序）'
+
+Invoke-Adm4 'F4e 负例：跳级推进（已影响分析 → 已应用）必须被拒' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'applied', '--actor', '主程乙', '--note', '想跳过排期') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：未知状态令牌必须被拒（不猜大小写）' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'Applied', '--actor', '主程乙', '--note', '大小写不对') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：推进缺 --note 结论必须被拒（R3）' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'scheduled', '--actor', '主程乙') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：线性推进到已排期' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'scheduled', '--actor', '主程乙', '--note', '排入 v2 迭代')
+Assert-Contains $out '[已排期]' '排期后状态'
+$out = Invoke-Adm4 'F4e：线性推进到已应用（终态）' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'applied', '--actor', '主程乙', '--note', '已按 C2..C3 重跑受影响段')
+Assert-Contains $out '[已应用]' '应用后状态'
+Assert-Contains $out '终态，不可再推进' '终态不再给下一步'
+
+Invoke-Adm4 'F4e 负例：终态不可再推进' @('change', 'advance', $ReuseArchive, $ChangeId, '--to', 'rejected', '--actor', '主程乙', '--note', '想反悔') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：终态不可再做影响分析' @('change', 'set-impact', $ReuseArchive, $ChangeId, '--segments', 'C1') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：不存在的变更请求推进必须非零退出' @('change', 'advance', $ReuseArchive, 'chg_not_there', '--to', 'scheduled', '--actor', '主程乙', '--note', '结论') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'F4e：变更清单应留下完整署名轨迹' @('change', 'list', $ReuseArchive)
+Assert-Contains $out '变更请求共 1 条' '变更清单条数'
+Assert-Contains $out '最近推进署名 主程乙' '推进署名可追溯（R3）'
+Assert-Contains $out '第 8 关加入精英单位' '变更说明可见'
+
+Invoke-Adm4 'F4e 负例：未知 change 子命令必须非零退出' @('change', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# --- 文档集交付清点：完整版落盘 + 缺段版如实报缺（清单不完整不改变退出码） ---
+$out = Invoke-Adm4 'F4e：交付清点（已跑完 C0-C6 的项目应七段齐备）' @('deliver', 'status', $ArchiveId)
+Assert-Contains $out '完整性：完整（7/7 段齐备）' '交付清点完整性'
+Assert-Contains $out 'sha256:' '交付清单带产物摘要'
+Assert-Contains $out 'contract.json' '双格式产物都清点'
+Assert-NotContains $out '缺段' '全绿项目不应报缺段'
+
+$out = Invoke-Adm4 'F4e：交付打包落盘 manifest' @('deliver', 'package', $ArchiveId)
+Assert-Contains $out '交付清单已落盘' '打包回执'
+Assert-Contains $out '完整性：完整（7/7 段齐备）' '打包后完整性'
+$ManifestFile = Get-ChildItem -LiteralPath $DataRoot -Recurse -Filter 'manifest.json' -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like '*deliverable*v1*' } | Select-Object -First 1
+if (-not $ManifestFile) { Fail 'F4e：deliver package 应落盘 content/deliverable/v1/manifest.json' }
+$manifest = Get-Content -LiteralPath $ManifestFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $manifest.complete) { Fail 'F4e：落盘的交付清单应标 complete=true' }
+if ($manifest.segments.Count -ne 7) { Fail "F4e：交付清单应恒含 7 段，实际 $($manifest.segments.Count)" }
+
+# 缺段版：$ReuseArchive 从未冻结、从未跑流水线 → 指定 --version 1 时七段全缺，
+# 清点如实报缺且**退出码仍为 0**（「清单不完整」是结论，不是命令失败）。
+$out = Invoke-Adm4 'F4e：缺段项目的交付清点（如实报缺，退出码仍为 0）' @('deliver', 'status', $ReuseArchive, '--version', '1')
+Assert-Contains $out '完整性：缺段（0/7 段齐备）' '缺段清点'
+Assert-Contains $out '缺失段 7 个：C0 / C1 / C2 / C3 / C4 / C5 / C6' '缺失段逐条列出'
+
+Invoke-Adm4 'F4e 负例：--version 非整数必须被拒' @('deliver', 'status', $ArchiveId, '--version', 'v1') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：从未冻结的项目省略 --version 必须非零退出（没有版本可清点，不猜）' @('deliver', 'status', $ReuseArchive) -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：不存在的存档交付清点必须非零退出' @('deliver', 'status', 'archive-not-there', '--version', '1') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：未知 deliver 子命令必须非零退出' @('deliver', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# --- 多选点与主选：加选项 → 缺主选的可见拦截 → 设主 → 移除选项 ---
+# 用二版「风格定位·感受目标」（L3、baseline 恒适用、multi + allow_primary、五个选项）。
+# 该点在 $ArchiveId 上被本冒烟豁免了，因此换到 $ReuseArchive 上做。
+$ArtStylePoint = 'v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target'
+
+Invoke-Adm4 'F4e 负例：尚无任何已选选项时追加选项必须被拒' @('authoring', 'add-option', $ReuseArchive, $ArtStylePoint, 'immersive_mood') -ExpectFailure | Out-Null
+
+Invoke-Adm4 'F4e：先选定第一个选项' @('authoring', 'select', $ReuseArchive, $ArtStylePoint, 'clear_readable') | Out-Null
+$out = Invoke-Adm4 'F4e：多选点追加第二个已选选项' @('authoring', 'add-option', $ReuseArchive, $ArtStylePoint, 'immersive_mood')
+Assert-Contains $out '追加已选选项 immersive_mood' '追加选项回执'
+
+Invoke-Adm4 'F4e 负例：重复追加同一选项必须被拒' @('authoring', 'add-option', $ReuseArchive, $ArtStylePoint, 'immersive_mood') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：单选点追加选项必须被拒' @('authoring', 'add-option', $ReuseArchive, 'u.platform', 'pc_single') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：主选必须先进入已选集合' @('authoring', 'set-primary', $ReuseArchive, $ArtStylePoint, 'strong_impact') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：单选点不接受主选标记' @('authoring', 'set-primary', $ReuseArchive, 'u.platform', 'pc_single') -ExpectFailure | Out-Null
+
+# 追加选项作废了该点的确认（多选点的确认覆盖整组选项），重新确认后「缺主选」才是唯一待填项。
+Invoke-Adm4 'F4e：重新确认该多选点' @('authoring', 'confirm', $ReuseArchive, $ArtStylePoint) | Out-Null
+$out = Invoke-Adm4 'F4e：缺主选的可见拦截（判定在服务层完备度，CLI 只过滤呈现）' @('authoring', 'status', $ReuseArchive, '--decision', $ArtStylePoint)
+Assert-Contains $out '未指定主选' '缺主选进待填清单'
+Assert-Contains $out '待填 1 项' '缺主选是该点唯一待填项'
+
+$out = Invoke-Adm4 'F4e：设定主选' @('authoring', 'set-primary', $ReuseArchive, $ArtStylePoint, 'immersive_mood')
+Assert-Contains $out '主选标记为 immersive_mood' '设主回执'
+$out = Invoke-Adm4 'F4e：设主后该点待填清空' @('authoring', 'status', $ReuseArchive, '--decision', $ArtStylePoint)
+Assert-Contains $out '待填 0 项' '设主后无待填'
+Assert-NotContains $out '未指定主选' '缺主选拦截已解除'
+
+$out = Invoke-Adm4 'F4e：移除多选点的一个已选选项' @('authoring', 'remove-option', $ReuseArchive, $ArtStylePoint, 'clear_readable')
+Assert-Contains $out '移除已选选项 clear_readable' '移除选项回执'
+Invoke-Adm4 'F4e 负例：只剩一个已选选项时移除必须被拒（整点撤销是另一件事）' @('authoring', 'remove-option', $ReuseArchive, $ArtStylePoint, 'immersive_mood') -ExpectFailure | Out-Null
+Invoke-Adm4 'F4e 负例：移除未选中的选项必须非零退出' @('authoring', 'remove-option', $ReuseArchive, $ArtStylePoint, 'premium_quality') -ExpectFailure | Out-Null
+
+# 全量 authoring status 的既有输出形态不变（--decision 只是可选过滤）。
+$out = Invoke-Adm4 'F4e：全量完成度概览不受 --decision 影响' @('authoring', 'status', $ReuseArchive)
+Assert-Contains $out '完成度' '全量完成度概览'
+Assert-NotContains $out '待填 0 项' '不给 --decision 时不打印单点小结'
+
+# ---------------------------------------------------------------------------
 # 9. 收尾
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
 exit 0

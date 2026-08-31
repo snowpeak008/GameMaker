@@ -220,6 +220,7 @@ dependencies = [
 name = "adm4-desktop"
 version = "0.1.0"
 dependencies = [
+ "adm4-ai",
  "adm4-app",
  "adm4-authoring",
  "adm4-contracts",

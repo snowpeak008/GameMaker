@@ -3,6 +3,22 @@
   "pack_version": "0.1.0",
   "display_name": "战棋·网格战术（示例数值：正式内容待逆向产线校准）",
   "reference_games": ["Fire Emblem", "Into the Breach", "Advance Wars", "Triangle Strategy"],
+  "profile_points": [
+    "u.genre",
+    "u.platform",
+    "v2.target_player_decision.wan_jia_hua_xiang.age_band",
+    "u.business_model",
+    "v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target",
+    "u.target_scale",
+    "u.operation_model",
+    "u.experience",
+    "u.platform_scope",
+    "u.social_model",
+    "u.session_band",
+    "u.content_rating",
+    "u.region_scope",
+    "u.dimension"
+  ],
   "cardinality_expectations": {
     "unit_types": { "min": 6, "max": 30 },
     "class_types": { "min": 4, "max": 12 },

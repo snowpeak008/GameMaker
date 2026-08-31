@@ -5,6 +5,7 @@
   "genre_pack": "universal",
   "pack_version": "0.1.0",
   "depth_reached": "L4",
+  "origin": {"origin":"bulk_migration","batch_id":"v2-builtin-2026-08-29","tool_version":"v2_migration/1.1.0","source_ref":"knowledge/design_data/project_templates/builtin_midcore_skullgirls.json","answers_digest":"sha256:819454c425dfdaed8935062b419106da1d2595a09ec2db1948953130461ec5fc","migrated_at":"2026-08-29T00:00:00Z"},
   "certification": {"status":"certified","reviewed_by":"W6-T10 二版知识库批量迁移","reviewed_at":"2026-08-29T00:00:00Z","review_note":"v2 内置模板批量迁移：来源 knowledge/design_data/project_templates/builtin_midcore_skullgirls.json（走批量导入通道，未跑逆向五步 AI 双会话，故 mapping_hash / crosscheck_proof 留空）"},
   "mapping_hash": "",
   "crosscheck_proof": null,

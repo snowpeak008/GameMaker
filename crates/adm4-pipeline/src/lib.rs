@@ -10,12 +10,17 @@ mod c3_content;
 mod c4_capabilities;
 mod c5_style;
 mod c6_plan;
+mod cancel;
 mod framework;
 mod runner;
 
 pub use c0_compile::compile_frozen_design;
+pub use cancel::CancelSignal;
 pub use framework::{
     ArtifactStore, PipelineRunState, StageKind, StageRecord, StageSpec, StageStatus,
     design_compile_registry, phase2_registry,
 };
-pub use runner::{PipelineRunner, RunnerContext};
+pub use runner::{
+    PipelineRerunOutcome, PipelineRunOutcome, PipelineRunner, RevokedConfirmation, RunnerContext,
+    StageResetReport,
+};

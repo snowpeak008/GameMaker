@@ -16,7 +16,7 @@ use adm4_decision::{
 use adm4_space::{DesignSpace, GenrePack};
 use adm4_template::{
     Certification, CertificationStatus, Confidence, Evidence, SourceType, Template, TemplateAnswer,
-    TemplateSelectedOption,
+    TemplateOrigin, TemplateSelectedOption,
 };
 
 fn option(id: &str) -> DecisionOption {
@@ -68,6 +68,7 @@ fn engine(pack_id: &str) -> AuthoringEngine {
             pack_version: "0.1.0".into(),
             display_name: "F3 测试包".into(),
             reference_games: vec!["虚构甲".into(), "虚构乙".into(), "虚构丙".into()],
+            profile_points: Vec::new(),
             cardinality_expectations: Default::default(),
             consistency_rules: Vec::new(),
             nodes: Vec::new(),
@@ -136,6 +137,7 @@ fn universal_template(answers: Vec<TemplateAnswer>) -> Template {
             reviewed_at: "2026-08-29T00:00:00Z".into(),
             review_note: "fixture".into(),
         },
+        origin: TemplateOrigin::Reverse,
         mapping_hash: String::new(),
         crosscheck_proof: None,
     }

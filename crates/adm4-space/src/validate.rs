@@ -50,6 +50,30 @@ pub fn validate_design_space(
         });
     }
 
+    // 2b. 画像取点清单：id 必须落在装配后的决策图上，且不得重复。
+    //     写错一个 id 就静默少一个画像字段，是最难发现的一类数据错——必须拦。
+    let mut seen_profile_points = std::collections::BTreeSet::new();
+    for decision_id in &space.pack.profile_points {
+        if space.graph.point(decision_id).is_none() {
+            violations.push(SpaceViolation {
+                code: "profile.unknown_point".into(),
+                message: format!(
+                    "品类包 {} 的画像取点清单引用了不存在的决策点 {decision_id}",
+                    space.pack.pack_id
+                ),
+            });
+        }
+        if !seen_profile_points.insert(decision_id.as_str()) {
+            violations.push(SpaceViolation {
+                code: "profile.duplicate_point".into(),
+                message: format!(
+                    "品类包 {} 的画像取点清单重复声明了决策点 {decision_id}",
+                    space.pack.pack_id
+                ),
+            });
+        }
+    }
+
     // 3. 品类包决策点层级 ∈ L3..=L6，genre_scope 必须指向本包。
     for point in &space.pack.decision_points {
         if point.level < DesignLevel::L3 {
@@ -310,6 +334,13 @@ mod tests {
         space_with_organization(rules, Vec::new(), Vec::new(), &[])
     }
 
+    /// 组装最小设计空间并注入画像取点清单。
+    fn space_with_profile_points(points: &[&str]) -> (DesignSpace, Vec<DecisionPoint>) {
+        let (mut space, universal) = space_with_rules(Vec::new());
+        space.pack.profile_points = points.iter().map(|id| (*id).to_string()).collect();
+        (space, universal)
+    }
+
     /// 组装最小设计空间，并可注入领域/节点声明与「决策点 → 节点」挂载。
     fn space_with_organization(
         rules: Vec<ConsistencyRule>,
@@ -344,6 +375,7 @@ mod tests {
             pack_version: "0.1.0".into(),
             display_name: "演示包".into(),
             reference_games: vec!["甲".into(), "乙".into(), "丙".into()],
+            profile_points: Vec::new(),
             cardinality_expectations: [("rows".to_string(), CardinalityRange { min: 1, max: 9 })]
                 .into_iter()
                 .collect(),
@@ -473,6 +505,42 @@ mod tests {
         // 未挂节点的决策点归入保留领域，仍可聚合。
         assert!(space.organization.domain(UNASSIGNED_DOMAIN_ID).is_some());
         assert!(space.organization.node(UNASSIGNED_NODE_ID).is_some());
+    }
+
+    /// 画像取点清单：id 齐全 → 无违规；写错/重复 → 逐条拦下（不静默忽略）。
+    #[test]
+    fn profile_points_must_reference_existing_decisions_without_duplicates() {
+        // 正例：清单可以混装通用层点与品类包点，顺序任意。
+        let (space, universal) = space_with_profile_points(&["u.a", "demo.stages", "u.c"]);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
+        assert!(violations.is_empty(), "{violations:?}");
+
+        // 空清单（旧包）照旧无违规。
+        let (space, universal) = space_with_profile_points(&[]);
+        assert!(
+            validate_design_space(&space, &universal, &[], &[]).is_empty(),
+            "缺 profile_points 的旧包不该报违规"
+        );
+
+        // 负例：拼错的 id 必须被拦（否则画像卡静默少一个字段，最难发现）。
+        let (space, universal) = space_with_profile_points(&["u.a", "u.typo_here"]);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
+        let unknown = violations
+            .iter()
+            .find(|violation| violation.code == "profile.unknown_point")
+            .expect("不存在的画像取点必须报违规");
+        assert!(unknown.message.contains("u.typo_here"), "{unknown:?}");
+
+        // 负例：重复声明同一个点（画像卡会出现两行同样内容）。
+        let (space, universal) = space_with_profile_points(&["u.a", "u.b", "u.a"]);
+        let violations = validate_design_space(&space, &universal, &[], &[]);
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.code == "profile.duplicate_point"
+                    && violation.message.contains("u.a")),
+            "{violations:?}"
+        );
     }
 
     /// 节点引用未声明领域、决策点引用未声明节点 → 双双进违规清单。

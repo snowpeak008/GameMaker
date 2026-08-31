@@ -746,6 +746,7 @@ mod tests {
                 pack_version: "0.1.0".into(),
                 display_name: "测试包".into(),
                 reference_games: vec!["参考甲".into(), "参考乙".into(), "参考丙".into()],
+                profile_points: Vec::new(),
                 cardinality_expectations: [(
                     "test_rows".to_string(),
                     CardinalityRange { min: 1, max: 10 },

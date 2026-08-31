@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,15 @@ from collections import OrderedDict
 
 SPACE_VERSION = "0.1.0"
 MIGRATION_TAG = "W6-T10 二版知识库批量迁移"
+
+# 批量迁移登记（F4d）：写进每份模板的 origin，让「批量迁移落盘的 Certified」有据可查。
+#
+# 25 份内置模板不经 TemplateLibrary::certify（迁移工具直接写死 certified 落盘），
+# 因此不受认证证据关卡约束。四版把取用侧也改成查证据后，它们必须自带可核对的登记，
+# 否则整批失效；反之，手工塞进 references/ 的 certified JSON 因为没有登记而被拒。
+MIGRATION_BATCH_ID = "v2-builtin-2026-08-29"
+MIGRATION_TOOL_VERSION = "v2_migration/1.1.0"
+MIGRATED_AT = "2026-08-29T00:00:00Z"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -138,6 +148,41 @@ def write_text(path, text):
 
 def compact(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def answers_digest(answers):
+    """答卷结构指纹，形态必须与 Rust 侧 `Template::answers_digest` 逐字一致。
+
+    canonical：每条答卷一行，制表符分隔
+    `decision_id \t option_id \t 附加选项id(逗号连接，声明序) \t 主选id(无则空)`，行尾 \n；
+    再对整段 UTF-8 字节取 sha256，带 `sha256:` 前缀。
+
+    只覆盖「答了哪些点、选了哪些选项、谁是主选」这层结构：parameters/evidence 的
+    canonical 形态依赖 serde 的枚举表示，跨语言逐字节复现会变成隐式契约，一改序列化
+    就静默失配。所以这里给的是结构指纹（digest），能核对的范围到此为止，不多许诺。
+    """
+    hasher = hashlib.sha256()
+    for answer in answers:
+        additional = ",".join(
+            extra["option_id"] for extra in (answer.get("additional_options") or [])
+        )
+        primary = answer.get("primary_option") or ""
+        line = "%s\t%s\t%s\t%s\n" % (
+            answer["decision_id"], answer["option_id"], additional, primary)
+        hasher.update(line.encode("utf-8"))
+    return "sha256:" + hasher.hexdigest()
+
+
+def build_origin(source_ref, answers):
+    """批量迁移登记块（Template.origin 的 bulk_migration 变体，内部 tag = origin）。"""
+    return OrderedDict([
+        ("origin", "bulk_migration"),
+        ("batch_id", MIGRATION_BATCH_ID),
+        ("tool_version", MIGRATION_TOOL_VERSION),
+        ("source_ref", source_ref),
+        ("answers_digest", answers_digest(answers)),
+        ("migrated_at", MIGRATED_AT),
+    ])
 
 
 def write_rows(path, header_keys, rows_key, rows):
@@ -544,6 +589,9 @@ def build_templates(points_by_id, order, domains, shared):
             ("genre_pack", "universal"),
             ("pack_version", SPACE_VERSION),
             ("depth_reached", depth),
+            # F4d：批量迁移登记（可核对），取用侧据此放行「不走 certify 的 Certified」。
+            ("origin", build_origin(
+                "knowledge/design_data/project_templates/%s" % name, answers)),
             ("certification", OrderedDict([
                 ("status", "certified"),
                 ("reviewed_by", MIGRATION_TAG),
@@ -633,10 +681,66 @@ def patch_pack(pack_id):
 
 
 # ---------------------------------------------------------------------------
+# 补登记模式（--stamp-origin）：只给已落盘的模板补/刷 origin 块
+# ---------------------------------------------------------------------------
+
+def stamp_origin():
+    """给 universal/references/*.json 补上批量迁移登记（幂等，不依赖二版源数据）。
+
+    为什么单独一个模式而不要求整体重跑：全量迁移会重写 4.7MB 清单并就地改 pack.json，
+    只为补一个 origin 键去动那些文件，风险与收益不成比例。登记块由与生成路径**同一个**
+    `build_origin` 产出，指纹按文件里的答卷现算，因此两条路径不会给出不同的登记。
+
+    幂等：已有 origin 行则整行替换（内容相同则文件字节不变），没有则插在
+    depth_reached 之后；重跑结果逐字节一致。
+    """
+    out_dir = os.path.join(UNIVERSAL, "references")
+    if not os.path.isdir(out_dir):
+        raise SystemExit("未找到模板目录：%s" % out_dir)
+    stamped, unchanged = 0, 0
+    for name in sorted(os.listdir(out_dir)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(out_dir, name)
+        with open(path, "r", encoding="utf-8") as handle:
+            text = handle.read()
+        data = json.loads(text, object_pairs_hook=OrderedDict)
+        source_ref = "knowledge/design_data/project_templates/%s.json" % data["template_id"]
+        line = '  "origin": %s,' % compact(build_origin(source_ref, data.get("answers") or []))
+
+        lines = text.split("\n")
+        existing = [index for index, item in enumerate(lines)
+                    if item.startswith('  "origin":')]
+        if existing:
+            if lines[existing[0]] == line:
+                unchanged += 1
+                continue
+            lines[existing[0]] = line
+        else:
+            anchor = [index for index, item in enumerate(lines)
+                      if item.startswith('  "depth_reached":')]
+            if not anchor:
+                raise SystemExit("%s 未找到 depth_reached 锚点" % path)
+            lines.insert(anchor[0] + 1, line)
+        write_text(path, "\n".join(lines))
+        stamped += 1
+    print(json.dumps(OrderedDict([
+        ("mode", "stamp-origin"),
+        ("batch_id", MIGRATION_BATCH_ID),
+        ("tool_version", MIGRATION_TOOL_VERSION),
+        ("stamped", stamped),
+        ("already_up_to_date", unchanged),
+    ]), ensure_ascii=False, indent=2))
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
 def main():
+    if "--stamp-origin" in sys.argv[1:]:
+        return stamp_origin()
     order, domains, shared = load_v2()
     gameplay_options = read_json(os.path.join(V2, "gameplay_system_options.json"))
 

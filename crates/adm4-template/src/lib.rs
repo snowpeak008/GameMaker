@@ -23,9 +23,11 @@ pub use crosscheck::{
 pub use evidence::{
     EvidenceCandidate, EvidenceQuery, EvidenceSearchChannel, ManualEvidenceChannel,
 };
-pub use library::{SkinWordlist, TemplateLibrary, load_skin_wordlist, save_skin_wordlist};
+pub use library::{
+    SkinWordRegistration, SkinWordlist, TemplateLibrary, load_skin_wordlist, save_skin_wordlist,
+};
 pub use mapping::{MAPPING_PURPOSE, MappingService};
 pub use model::{
     Certification, CertificationStatus, Confidence, CrossCheckProof, Evidence, SourceType,
-    Template, TemplateAnswer, TemplateSelectedOption, TemplateSelectedOptionRef,
+    Template, TemplateAnswer, TemplateOrigin, TemplateSelectedOption, TemplateSelectedOptionRef,
 };

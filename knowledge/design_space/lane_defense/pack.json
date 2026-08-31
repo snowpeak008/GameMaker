@@ -3,6 +3,22 @@
   "pack_version": "0.2.0",
   "display_name": "通道塔防（示例包：正式内容待逆向产线校准）",
   "reference_games": ["Plants vs Zombies", "Kingdom Rush", "Bloons TD 6"],
+  "profile_points": [
+    "u.genre",
+    "u.platform",
+    "v2.target_player_decision.wan_jia_hua_xiang.age_band",
+    "u.business_model",
+    "v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target",
+    "u.target_scale",
+    "u.operation_model",
+    "u.experience",
+    "u.platform_scope",
+    "u.social_model",
+    "u.session_band",
+    "u.content_rating",
+    "u.region_scope",
+    "u.dimension"
+  ],
   "cardinality_expectations": {
     "guard_types": { "min": 4, "max": 8 },
     "enemy_types": { "min": 2, "max": 6 },
