@@ -1,4 +1,4 @@
-use adm4_ai::HttpProviderConfig;
+use adm4_ai::{HttpImageProviderConfig, HttpProviderConfig};
 use adm4_archive::DataRoot;
 use adm4_foundation::{Adm4Error, Adm4Result, read_json_file, write_json_file};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,13 @@ pub struct AppConfig {
     /// 激活的 AI Provider 配置（无则 AI 相关功能 blocked）。
     #[serde(default)]
     pub ai_provider: Option<HttpProviderConfig>,
+    /// 激活的**图像**Provider 配置（无则风格门的生成入口显式 blocked，不产占位图）。
+    ///
+    /// 与 `ai_provider` 分开配置而不是复用它：图像 API 的 base_url、模型名、超时量级
+    /// 与文本 API 都不一样（同一个厂商也是两个不同的 endpoint 与两套模型名）。
+    /// 合成一个字段会逼用户在文本可用时假装图像也可用——那正是 R7 关心的误报。
+    #[serde(default)]
+    pub image_provider: Option<HttpImageProviderConfig>,
 }
 
 fn default_design_space_root() -> String {
@@ -25,6 +32,7 @@ pub fn load_config(data_root: &DataRoot) -> Adm4Result<AppConfig> {
         return Ok(AppConfig {
             design_space_root: default_design_space_root(),
             ai_provider: None,
+            image_provider: None,
         });
     }
     read_json_file(&path)

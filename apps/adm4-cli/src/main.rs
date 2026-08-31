@@ -5,7 +5,7 @@
 //! 失败返回非零退出码 + 中文错误。AI 相关命令默认走配置的真实 Provider，
 //! `--scripted-file` 为冒烟/离线测试开关（确定性脚本应答，零网络）。
 
-use adm4_ai::{AiProvider, ScriptedProvider};
+use adm4_ai::{AiProvider, ImageProvider, ScriptedImageProvider, ScriptedProvider};
 use adm4_app::{AppServices, ChangeStatus, InterviewTurnDto};
 use adm4_authoring::InterviewProposal;
 use adm4_decision::ParameterValues;
@@ -430,6 +430,10 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             let remaining: Vec<&str> = rest.collect();
             build_command(&services, sub, &remaining)
         }
+        (Some("style"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            style_command(&services, sub, &remaining)
+        }
         (Some("sdk"), sub) => {
             let remaining: Vec<&str> = rest.collect();
             sdk_command(&services, sub, &remaining)
@@ -497,6 +501,17 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             let archive_id = required(args.first().copied(), "archive_id")?;
             let from = flag_value(args, "--from").unwrap_or("P0");
             let to = flag_value(args, "--to").unwrap_or("P5");
+            // P2 资产生产消费「风格锚点集」这一外部输入（G1 制品注册表），
+            // 因此开跑前如实报一句它到位没有——否则跑到 P2 才知道风格没定。
+            let readiness = services.style_readiness(archive_id)?;
+            println!(
+                "风格锚点集（P2 外部输入）：{}",
+                if readiness.ready {
+                    format!("[OK] {}", readiness.detail)
+                } else {
+                    format!("[BLOCKED] {}", readiness.detail)
+                }
+            );
             let outcome = services.build_run_with_cancel(
                 archive_id,
                 from,
@@ -560,6 +575,348 @@ fn join_or_none(items: &[String]) -> String {
     } else {
         items.join("、")
     }
+}
+
+// ---------------------------------------------------------------------------
+// style 子命令组：设计阶段美术风格锚点门（册 08 §2，选项 A）
+//
+// 四个动作对应门的四个状态迁移：生成方向 → 改词重生成 → 署名确认锁定 → 查状态。
+// CLI 严格只做转发与呈现：署名/结论必填、无图不许确认、未确认阻断下游、锚点历史不可变
+// 一律由 `AppServices` 与 `StyleGate` 判定，这里只把服务层的错误如实打出来。
+// ---------------------------------------------------------------------------
+
+fn style_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("generate") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let count = parse_usize_flag(
+                flag_value(args, "--count"),
+                "--count",
+                adm4_app::MAX_DIRECTIONS,
+            )?;
+            let force = args.contains(&"--force");
+            let images = choose_image_provider(services, args)?;
+            let options = services.style_options(count, force)?;
+            let session = services.style_generate_with(archive_id, images.as_ref(), &options)?;
+            println!(
+                "风格方向已生成：{} 个方向 · 预览 {}x{} · 第 {} 轮记录（图像通道 {}）",
+                session.directions.len(),
+                session.preview_width,
+                session.preview_height,
+                session.rounds.len(),
+                images.id()
+            );
+            println!("真源锚点 {} 条：", session.source_anchors.len());
+            for line in &session.source_summary {
+                println!("  {line}");
+            }
+            print_style_directions(&session);
+            println!(
+                "下一步：看图（大图在 content/style/ 下）→ 不满意就 style regenerate 改词 → 满意后 style confirm 署名锁定"
+            );
+            Ok(())
+        }
+        Some("regenerate") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let style_id = required(args.get(1).copied(), "风格方向 id")?;
+            // 三态语义：给 --prompt 就换提示词；给 --clear-prompt 就回到派生提示词；
+            // 都不给就用当前提示词重出一张（同一句话，另一次采样）。
+            let clear = args.contains(&"--clear-prompt");
+            let prompt = match (flag_value(args, "--prompt"), clear) {
+                (Some(_), true) => {
+                    return Err(Adm4Error::invalid_input(
+                        "--prompt 与 --clear-prompt 互斥：要么换提示词，要么回到派生提示词",
+                    ));
+                }
+                (Some(prompt), false) => prompt.to_string(),
+                (None, true) => String::new(),
+                (None, false) => current_prompt_override(services, archive_id, style_id)?,
+            };
+            let images = choose_image_provider(services, args)?;
+            let session =
+                services.style_regenerate_with(archive_id, style_id, &prompt, images.as_ref())?;
+            let direction = session
+                .direction(style_id)
+                .ok_or_else(|| Adm4Error::internal(format!("重生成后读不回方向 {style_id}")))?;
+            println!(
+                "方向 {style_id} 已重生成（第 {} 轮，图像通道 {}）",
+                session.rounds.len(),
+                images.id()
+            );
+            println!(
+                "生效提示词（{}）：{}",
+                if direction.prompt_override.is_empty() {
+                    "派生自真源"
+                } else {
+                    "用户改词"
+                },
+                direction.effective_prompt()
+            );
+            print_style_directions(&session);
+            Ok(())
+        }
+        Some("confirm") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let style_id = required(args.get(1).copied(), "风格方向 id")?;
+            // 署名与结论都走显式 flag：位置参数容易在脚本里错位成「用理由当署名」。
+            let actor = required(flag_value(args, "--actor"), "--actor（确认人署名，R3）")?;
+            let note = required(flag_value(args, "--note"), "--note（确认结论，R3）")?;
+            let outcome = services.style_confirm(archive_id, style_id, actor, note)?;
+            let anchor_set = &outcome.anchor_set;
+            println!(
+                "风格锚点已锁定：v{} · 方向 {}（{}）· 署名 {} 于 {}",
+                anchor_set.anchor_version,
+                anchor_set.selected_style_id,
+                anchor_set.selected_title,
+                anchor_set.confirmation.actor,
+                anchor_set.confirmation.at
+            );
+            if let Some(superseded) = outcome.superseded_version {
+                println!(
+                    "  取代 v{superseded}：旧版不改不删，仍是可回溯的历史事实（D4 不可变历史）"
+                );
+            }
+            print_style_lock(anchor_set, &outcome.application_contract);
+            println!("下游（P2 资产生产）已可开跑：风格锚点集这一外部输入到位（build run 会复核）");
+            Ok(())
+        }
+        Some("status") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let status = services.style_status(archive_id)?;
+            println!("项目 {archive_id} 风格门状态");
+            println!(
+                "  项目：{}（品类包 {}）",
+                if status.project_name.is_empty() {
+                    "（未生成过风格方向）"
+                } else {
+                    status.project_name.as_str()
+                },
+                status.genre_pack
+            );
+            if status.session_present {
+                println!(
+                    "  工作态：{} 个方向 · {} 轮生成记录{}",
+                    status.directions.len(),
+                    status.round_count,
+                    if status.latest_round_id.is_empty() {
+                        String::new()
+                    } else {
+                        format!("（最近 {}）", status.latest_round_id)
+                    }
+                );
+                println!(
+                    "  真源 revision：当前 {} / 工作态 {}{}",
+                    status.current_revision,
+                    status.session_revision,
+                    if status.session_stale {
+                        " ← 设计已变，建议 style generate --force 重新派生（提示不阻断）"
+                    } else {
+                        ""
+                    }
+                );
+                print_style_direction_rows(&status.directions);
+            } else {
+                println!("  工作态：尚未生成风格方向（style generate <archive_id>）");
+            }
+            println!(
+                "  锚点历史：{}",
+                if status.anchor_versions.is_empty() {
+                    "（无已锁版本）".to_string()
+                } else {
+                    status
+                        .anchor_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(" / ")
+                }
+            );
+            // 「未确认」是结论不是失败：退出码保持 0（与 deliver status 缺段同款语义）。
+            if status.readiness.ready {
+                println!("  就绪：[OK] {}", status.readiness.detail);
+                if status.anchor_stale {
+                    println!(
+                        "  提醒：锚点锚的是 revision {}，当前设计已到 {}——风格落后于设计（提示不阻断，可重新选择另立新版）",
+                        status.session_revision, status.current_revision
+                    );
+                }
+                let version = status.readiness.anchor_version;
+                print_style_lock(
+                    &services.style_anchor_set(archive_id, version)?,
+                    &services.style_application_contract(archive_id, version)?,
+                );
+            } else {
+                println!("  就绪：[BLOCKED] {}", status.readiness.detail);
+                println!("  下游影响：P2 资产生产被阻断（风格锚点集是它声明消费的外部输入）");
+            }
+            Ok(())
+        }
+        other => {
+            println!("{STYLE_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 style 子命令：{other:?}（可用：generate/regenerate/confirm/status）"
+            )))
+        }
+    }
+}
+
+/// 方向清单（生成/重生成的回执）。
+fn print_style_directions(session: &adm4_app::StyleSession) {
+    println!("方向清单（{} 个）：", session.directions.len());
+    for direction in &session.directions {
+        let fit = session
+            .fit
+            .entry(&direction.style_id)
+            .map(|entry| entry.risk.label_zh())
+            .unwrap_or("未判定");
+        println!(
+            "  {}{}  {}  适配 {}",
+            if direction.recommended {
+                "[推荐] "
+            } else {
+                ""
+            },
+            direction.style_id,
+            direction.title,
+            fit
+        );
+        println!(
+            "      提示词（{}）：{}",
+            if direction.prompt_override.is_empty() {
+                "派生自真源"
+            } else {
+                "用户改词"
+            },
+            direction.prompt_summary(adm4_app::PROMPT_SUMMARY_CHARS)
+        );
+        match &direction.preview {
+            Some(preview) => println!(
+                "      预览图：{}  {}",
+                preview.image_path,
+                short_hash(&preview.image_sha256)
+            ),
+            None => println!("      预览图：缺（尚未出图或上一轮生成失败）"),
+        }
+    }
+}
+
+/// 方向状态行（status 的回执，数据来自只读投影）。
+fn print_style_direction_rows(rows: &[adm4_app::StyleDirectionStatus]) {
+    println!("  方向清单（{} 个）：", rows.len());
+    for row in rows {
+        println!(
+            "    {}{}{}  {}  适配 {}",
+            if row.is_selected { "[已确认] " } else { "" },
+            if row.recommended { "[推荐] " } else { "" },
+            row.style_id,
+            row.title,
+            row.fit_risk.label_zh()
+        );
+        println!(
+            "        提示词（{}）：{}",
+            if row.prompt_overridden {
+                "用户改词"
+            } else {
+                "派生自真源"
+            },
+            row.prompt_summary
+        );
+        if row.image_path.is_empty() {
+            println!("        预览图：缺");
+        } else {
+            println!(
+                "        预览图：{}  {}",
+                row.image_path,
+                short_hash(&row.image_sha256)
+            );
+        }
+        if !row.last_failure.is_empty() {
+            println!("        最近失败：{}", row.last_failure);
+        }
+        println!("        适配依据：{}", row.fit_reason);
+    }
+}
+
+/// 已锁定的锚点集 + 应用契约（下游要照它消费，所以字段要打全）。
+fn print_style_lock(
+    anchor_set: &adm4_app::StyleAnchorSet,
+    contract: &adm4_app::StyleApplicationContract,
+) {
+    println!("  已锁定锚点 v{}：", anchor_set.anchor_version);
+    println!(
+        "    方向 {}（{}，预设 {}）",
+        anchor_set.selected_style_id, anchor_set.selected_title, anchor_set.preset_key
+    );
+    println!(
+        "    最终提示词（{}）：{}",
+        if anchor_set.prompt_overridden {
+            "用户改词"
+        } else {
+            "派生自真源"
+        },
+        anchor_set.final_prompt
+    );
+    println!("    palette：{}", anchor_set.palette.join(" / "));
+    println!(
+        "    真源 revision {} · 锚点 {} 条",
+        anchor_set.source_revision,
+        anchor_set.source_anchors.len()
+    );
+    for anchor in &anchor_set.anchors {
+        println!(
+            "    锚图 {}（{}）：{}  {}  {} 字节",
+            anchor.anchor_id,
+            anchor.role,
+            anchor.image_path,
+            short_hash(&anchor.image_sha256),
+            anchor.image_bytes
+        );
+    }
+    println!(
+        "    应用契约：锚点哈希 {} · 分用途约束 {} 条",
+        short_hash(&contract.source_anchor_hash),
+        contract.style_constraints.len()
+    );
+    for constraint in &contract.style_constraints {
+        println!(
+            "      {}：{}｜对比 {}｜透明边距 {}",
+            constraint.usage.label_zh(),
+            constraint.readability,
+            constraint.contrast,
+            constraint.transparent_margin
+        );
+        if !constraint.forbidden.is_empty() {
+            println!("        禁止：{}", constraint.forbidden.join("、"));
+        }
+    }
+    for rule in &contract.application_rules {
+        println!("      规则：{rule}");
+    }
+}
+
+/// 当前方向已生效的改词（`style regenerate` 不给 `--prompt` 时原样沿用）。
+fn current_prompt_override(
+    services: &AppServices,
+    archive_id: &str,
+    style_id: &str,
+) -> Adm4Result<String> {
+    let session = services.style_session(archive_id)?.ok_or_else(|| {
+        Adm4Error::not_found(
+            "本项目还没有风格工作态：请先 style generate <archive_id> 生成风格方向",
+        )
+    })?;
+    let direction = session.direction(style_id).ok_or_else(|| {
+        Adm4Error::not_found(format!(
+            "风格方向 {style_id} 不在当前候选里（可用：{}）",
+            session
+                .directions
+                .iter()
+                .map(|item| item.style_id.as_str())
+                .collect::<Vec<_>>()
+                .join(" / ")
+        ))
+    })?;
+    Ok(direction.prompt_override.clone())
 }
 
 // ---------------------------------------------------------------------------
@@ -1111,6 +1468,66 @@ fn choose_provider(
     }
 }
 
+/// 图像通道选择：默认走配置的真实图像 Provider（未配置 → AiUnavailable，说清缺什么配置）。
+///
+/// `--scripted-image` / `--scripted-image-file <路径>` 是与文本通道 `--scripted-file` 同款的
+/// 确定性测试开关（零网络）：`ScriptedImageProvider` 按提示词算出一张可显示的占位 PNG，
+/// 同输入永远同字节。它的 provider id 是 `scripted_image`，会随生成记录落盘，
+/// 因此存档里绝不会把占位图误当成真实生成结果（R7）。
+///
+/// 脚本文件是**可选**的（占位图不需要脚本内容）；给了文件时只认一个键：
+/// `{"fail": "<原因>"}` —— 用来演练「图像生成失败原样上抛」这条路径。
+fn choose_image_provider(
+    services: &AppServices,
+    args: &[&str],
+) -> Adm4Result<Box<dyn ImageProvider>> {
+    let scripted_file = flag_value(args, "--scripted-image-file");
+    if !args.contains(&"--scripted-image") && scripted_file.is_none() {
+        return services.build_image_provider();
+    }
+    let provider = ScriptedImageProvider::new();
+    if let Some(path) = scripted_file {
+        let text = std::fs::read_to_string(path)
+            .map_err(|error| Adm4Error::io(format!("读取图像脚本文件 {path} 失败：{error}")))?;
+        let script: BTreeMap<String, serde_json::Value> = serde_json::from_str(&text)
+            .map_err(|error| {
+                Adm4Error::invalid_input(format!(
+                    "图像脚本文件 {path} 非法（需 JSON 对象，目前只认 {{\"fail\": \"<原因>\"}}）：{error}"
+                ))
+            })?;
+        for (key, value) in script {
+            match key.as_str() {
+                "fail" => {
+                    let reason = value.as_str().ok_or_else(|| {
+                        Adm4Error::invalid_input(format!(
+                            "图像脚本文件 {path} 的 fail 必须是字符串（失败原因）"
+                        ))
+                    })?;
+                    provider.fail_with(reason);
+                }
+                // 认不出的键直接报错：静默忽略会让人以为脚本生效了（R2）。
+                other => {
+                    return Err(Adm4Error::invalid_input(format!(
+                        "图像脚本文件 {path} 含未知键「{other}」（目前只认 fail）"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(Box::new(provider))
+}
+
+/// 解析可选的 usize flag；缺省用 `default`，给了但不是非负整数则报错（不静默回落）。
+fn parse_usize_flag(value: Option<&str>, flag: &str, default: usize) -> Adm4Result<usize> {
+    match value {
+        None => Ok(default),
+        Some(text) => text
+            .trim()
+            .parse::<usize>()
+            .map_err(|error| Adm4Error::invalid_input(format!("{flag} 必须是非负整数：{error}"))),
+    }
+}
+
 /// 从脚本应答文件构建 `ScriptedProvider`（零网络的确定性回放）。
 fn scripted_provider_from_file(path: &str) -> Adm4Result<Box<dyn AiProvider>> {
     let text = std::fs::read_to_string(path)
@@ -1490,6 +1907,7 @@ fn print_help(args: &[String]) {
         Some("freeze") => println!("{FREEZE_HELP}"),
         Some("pipeline") => println!("{PIPELINE_HELP}"),
         Some("build") => println!("{BUILD_HELP}"),
+        Some("style") => println!("{STYLE_HELP}"),
         Some("sdk") => println!("{SDK_HELP}"),
         Some("change") => println!("{CHANGE_HELP}"),
         Some("deliver") => println!("{DELIVER_HELP}"),
@@ -1502,7 +1920,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注]（Phase 2 构建产线）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注]（Phase 2 构建产线）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -1690,7 +2108,58 @@ const BUILD_HELP: &str = r#"构建产线（build）——Phase 2 的 P0-P5，语
 说明：
   - 构建产物落在存档的 build/v{N} 下，与 Phase 1 的 pipeline/v{N} 互不干扰，各有各的运行状态。
   - 「停止运行」是段边界粒度的协作式取消，面向图形界面（AppServices::build_run_with_cancel）；
-    CLI 是单次前台运行，不提供取消入口（与 pipeline 组同）。"#;
+    CLI 是单次前台运行，不提供取消入口（与 pipeline 组同）。
+  - build run 开跑前会打印「风格锚点集（P2 外部输入）」一行：P2 资产生产消费设计阶段
+    锁定的风格锚点，没确认就会在 P2 被阻断——先跑 style confirm 再来跑构建。"#;
+
+const STYLE_HELP: &str = r#"美术风格锚点门（style）——设计阶段看真图定风格（册 08 §2，选项 A）
+
+这道门在**冻结之前**：风格是主观口味，只有人看着真图才定得下来；等资产批量生产完
+才发现风格错，返工代价最大。锁定的产物是 Phase 2 资产生产的唯一风格依据。
+
+前置：
+  - 项目里已有**已确认**的画像决策点（品类/平台/体验/美术风格定位等）。
+    提示词由这些真源事实派生，一条都没有时直接报错（R4：无锚不许凭空编风格）。
+  - config/app.json 里配了 image_provider 段（图像通道），否则生成入口显式 blocked。
+    段的字段：provider_id / base_url / model / api_key_ref，可选 size（如 1024x1024）
+    与 timeout_secs。它与文本通道的 ai_provider **分开配**：同一厂商的图像与文本是
+    两个 endpoint、两套模型名，合成一个字段会让文本能用时假装图像也能用（R7 误报）。
+
+用法：
+  adm4 style generate <项目存档id> [--count N] [--force] [--scripted-image | --scripted-image-file <路径>]
+      派生 3-5 个风格方向（提示词锚定真源）并逐个生成预览图，落 content/style/。
+      --count 省略为 5（合法区间 3-5）；预览尺寸取 image_provider 的 size。
+      不带 --force 时是**断点续跑**：只给还没出图的方向补图，已出图的不重复调用图像通道
+      （也就不重复花钱）。真源 revision 变了会自动重新派生方向。
+      --force 推翻现有方向重新派生并清掉全部旧预览（已锁定的历史版本一概不动）。
+      任一方向生成失败：本轮记录先落盘（可停可续），然后原始失败原因原样上抛且非零退出
+      （R7：不产占位图冒充真图）。
+
+  adm4 style regenerate <项目存档id> <风格方向id> [--prompt <新提示词> | --clear-prompt] [--scripted-image...]
+      对某个方向改词重出图（次数不限，每轮都留记录）。
+      --prompt 换提示词；--clear-prompt 清掉改词回到锚定真源的派生提示词；
+      两个都不给 = 用当前提示词再出一张。二者互斥。
+      提示词命中换皮词表（参考游戏名）一律被拒（R5）——请改写成你自己的风格描述。
+
+  adm4 style confirm <项目存档id> <风格方向id> --actor <署名> --note <确认结论>
+      attended 确认并锁定：写 style/anchors/v{N}/ 四件产物
+      （anchor_set.json / application_contract.json / style_confirmation.json / style_fit.json）。
+      --actor 与 --note 双必填（R3：这道门禁止自动通过）；选中的方向必须已有预览图
+      （没图不许确认——风格门的意义就是看真图）。
+      重选风格就是再确认一次 → v{N+1}；**旧版本不改不删**（D4 不可变历史）。
+
+  adm4 style status <项目存档id>
+      只读投影：真源 revision 对照、方向清单（推荐标记/适配结论/提示词摘要/预览图指纹/
+      最近失败原因）、锚点历史版本、就绪结论，已锁定时连带打印锚点集与应用契约全字段。
+      本命令是查询：「未确认」是结论不是失败，退出码恒 0（要判门禁看 [BLOCKED] 行）。
+
+说明：
+  - 风格-原型适配报告（style_fit）**提示不阻断**：信息密度代价高的方向（概念绘画/
+    电影写实）标「需注意」，选不选是你的口味。
+  - --scripted-image / --scripted-image-file 是零网络的确定性测试开关（占位 PNG 按提示词
+    算出，同输入同字节）。它的 provider id 是 scripted_image 且随生成记录落盘，
+    因此存档里绝不会把占位图误当成真实生成结果。脚本文件可选，只认 {"fail": "<原因>"}
+    一个键，用来演练生成失败的原样上抛路径。"#;
 
 const SDK_HELP: &str = r#"SDK 知识库（sdk）——资源登记 + 三态审批流
 

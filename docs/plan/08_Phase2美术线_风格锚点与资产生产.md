@@ -41,12 +41,12 @@
 
 ### 2.4 确认锁定（产物）
 - `style_confirmation`：`{status:approved, mode:manual, selected_style_id, selected_title, selected_image_path, notes}`；**禁止 auto_accept**（attended 强制，v3 `confirm_style_anchors_attended` 拒绝自动通过，接红线 R3 署名）；
-- **`style_anchor_set`**：确认的方向 + 代表资产锚点（少量，如 4 个），作为后续一致性比对基准；
+- **`style_anchor_set`**：确认的方向 + 代表资产锚点（少量，如 4 个），作为后续一致性比对基准；（G2 实现裁决：代表资产清单来自 C3 `asset_spec_set`，风格门在冻结前跑时 C3 尚不存在，故 G2 版锚点集只含选中方向锚图一张；**代表资产锚图由 G3 在 C3 已在案后以新锚点版本追加**，`anchors` 已是 Vec 结构可直接扩展）
 - **`style_application_contract`（仅确认后才写）**：`selected_style_id` + palette + 分用途 `style_constraints`（tile/icon/ui/background/effect 的可读性/对比度/透明边距策略）——**这是风格向资产生产传递约束的正式接口**，下游据此约束，不得改。
 
 ### 2.5 存储/命名/版本
 - 方案 id `STYLE-{NN}-{preset_key}`（如 `STYLE-01-readable_production`），预览图 `{style_id}.png`；
-- **优化【保留"重跑即覆盖"，补一条锚点历史】** py 是重跑覆盖、无多版本目录；V4 **保留覆盖模型**，但因风格锚点是长期基准，**给已确认的 `style_anchor_set` 留一条不可变历史**（`style/anchors/v{N}/`，同冻结版本号），便于回溯"这版游戏当时锁的什么风格"——这是"真内容优化"，不改交互。
+- **优化【保留"重跑即覆盖"，补一条锚点历史】** py 是重跑覆盖、无多版本目录；V4 **保留覆盖模型**，但因风格锚点是长期基准，**给已确认的 `style_anchor_set` 留一条不可变历史**（`style/anchors/v{N}/`，**N 为锚点自增版本，每次确认 +1**——G2 实现裁决：选项 A 把风格门放在冻结之前，此时冻结版本可能不存在，"同冻结版本号"的原口径不成立），便于回溯"这版游戏当时锁的什么风格"——这是"真内容优化"，不改交互。
 
 ---
 

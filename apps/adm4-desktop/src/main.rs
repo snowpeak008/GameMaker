@@ -103,6 +103,8 @@ fn main() -> Result<(), slint::PlatformError> {
         "事务自动保存：每次变更原子提交（无手动保存按钮）",
     ));
     refresh_ai_panel(&window, &services);
+    refresh_image_panel(&window, &services);
+    refresh_style(&window, &services, &state);
     report(&window, Ok("就绪：请在「存档管理」新建或载入项目"));
 
     hook_project_callbacks(&window, &services, &state);
@@ -114,6 +116,8 @@ fn main() -> Result<(), slint::PlatformError> {
     hook_reverse_callbacks(&window, &services, &state);
     hook_lifecycle_callbacks(&window, &services, &state);
     hook_ai_callbacks(&window, &services);
+    hook_image_provider_callbacks(&window, &services);
+    hook_style_callbacks(&window, &services, &state);
 
     // 运行期轮询：后端把 `StageStatus::Running` 与各段起止时刻写进 run_state.json，
     // 不定期回读的话，「运行中」与逐段耗时要等整轮跑完才看得见（等于没有进度）。
@@ -2847,6 +2851,8 @@ fn report<T: Into<String>>(window: &MainWindow, result: Adm4Result<T>) {
 fn refresh_all(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
     let Some(archive) = state.borrow().current_archive.clone() else {
         clear_workbench(window);
+        clear_style(window);
+        window.set_style_summary(SharedString::from(view::style_summary_without_project()));
         return;
     };
     match load_workbench_data(services, &archive) {
@@ -2854,6 +2860,8 @@ fn refresh_all(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<U
             apply_workbench(window, state, &data);
             refresh_decision_panel(window, services, state);
             apply_overview(window, &data.overview);
+            // 风格门的可用性随项目走（换项目后旧项目的方向卡片必须换掉）。
+            refresh_style_for(window, services, &archive);
         }
         Err(error) => report::<String>(window, Err(error)),
     }
@@ -3318,4 +3326,536 @@ fn apply_pipeline_rows(window: &MainWindow, services: &AppServices, archive: &st
         // 不把整块面板刷成「未冻结」——那会让运行中的流水线看起来消失了。
         Err(_) => {}
     }
+}
+
+// ---------------------------------------------------------------------------
+// G2 设计阶段风格锚点门：右栏「风格」页签
+//
+// GUI 无业务规则（D14）：按钮可用性一律由后端结果推出（图像通道体检 + 就绪查询），
+// 署名/结论必填、无图不许确认、未确认阻断下游全在服务层判，这里只转发与呈现。
+// ---------------------------------------------------------------------------
+
+fn hook_style_callbacks(
+    window: &MainWindow,
+    services: &Arc<AppServices>,
+    state: &Rc<RefCell<UiState>>,
+) {
+    let weak = window.as_weak();
+
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                refresh_style(&window, &services, &state);
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_generate(move |force| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let Some(archive) = state.borrow().current_archive.clone() else {
+                report::<String>(&window, Err(Adm4Error::not_found("请先载入项目")));
+                return;
+            };
+            spawn_style_job(&window, &services, StyleJob::Generate { archive, force });
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_select(move |style_id| {
+            if let Some(window) = weak.upgrade() {
+                window.set_style_selected(style_id);
+                // 选中即把该方向的**完整**提示词填进编辑框（卡片上是截断摘要，
+                // 拿摘要当初值一保存就把用户的提示词截短了）。
+                refresh_style(&window, &services, &state);
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_open_viewer(move |style_id| {
+            if let Some(window) = weak.upgrade() {
+                window.set_style_selected(style_id.clone());
+                refresh_style(&window, &services, &state);
+                open_style_viewer(&window, &services, &state, style_id.as_str());
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_regenerate(move |style_id, prompt| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let Some(archive) = state.borrow().current_archive.clone() else {
+                report::<String>(&window, Err(Adm4Error::not_found("请先载入项目")));
+                return;
+            };
+            spawn_style_job(
+                &window,
+                &services,
+                StyleJob::Regenerate {
+                    archive,
+                    style_id: style_id.to_string(),
+                    prompt: prompt.to_string(),
+                },
+            );
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_clear_prompt(move |style_id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let Some(archive) = state.borrow().current_archive.clone() else {
+                report::<String>(&window, Err(Adm4Error::not_found("请先载入项目")));
+                return;
+            };
+            // 空提示词 = 服务层的「清掉改词」语义，随即重出一张图。
+            spawn_style_job(
+                &window,
+                &services,
+                StyleJob::Regenerate {
+                    archive,
+                    style_id: style_id.to_string(),
+                    prompt: String::new(),
+                },
+            );
+        });
+    }
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_style_confirm(move |style_id, actor, note| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let Some(archive) = state.borrow().current_archive.clone() else {
+                report::<String>(&window, Err(Adm4Error::not_found("请先载入项目")));
+                return;
+            };
+            // 署名与结论**原样转发**：空值由服务层按 R3 拒绝，UI 不预判也不改写。
+            let result = services
+                .style_confirm(&archive, style_id.as_str(), actor.as_str(), note.as_str())
+                .map(|outcome| {
+                    format!(
+                        "风格锚点 v{} 已锁定：方向 {}（{}）· 署名 {}{}",
+                        outcome.anchor_set.anchor_version,
+                        outcome.anchor_set.selected_style_id,
+                        outcome.anchor_set.selected_title,
+                        outcome.anchor_set.confirmation.actor,
+                        match outcome.superseded_version {
+                            Some(previous) => format!("；取代 v{previous}（旧版不改不删）"),
+                            None => String::new(),
+                        }
+                    )
+                });
+            refresh_style(&window, &services, &state);
+            refresh_logs(&window, &services, "");
+            report(&window, result);
+        });
+    }
+}
+
+/// 一次后台风格图像作业（生成整批 / 单方向改词重生成）。
+enum StyleJob {
+    Generate {
+        archive: String,
+        force: bool,
+    },
+    Regenerate {
+        archive: String,
+        style_id: String,
+        prompt: String,
+    },
+}
+
+impl StyleJob {
+    fn archive(&self) -> &str {
+        match self {
+            Self::Generate { archive, .. } | Self::Regenerate { archive, .. } => archive,
+        }
+    }
+}
+
+/// 后台跑风格图像生成：图像 API 一次可能几十秒，绝不能在 UI 线程上等。
+///
+/// 与流水线作业同一套纪律：工作线程不碰任何 UI 句柄，回程一律
+/// `upgrade_in_event_loop`；「生成中」标志由主线程置、由回程清（成功与失败两条路都清）。
+/// 回程闭包必须 Send，因此它只带 `String` 与 `Arc<AppServices>`，刷新走
+/// [`refresh_style_for`]（按存档 id 刷，不碰 `Rc<RefCell<UiState>>`）。
+fn spawn_style_job(window: &MainWindow, services: &Arc<AppServices>, job: StyleJob) {
+    if window.get_style_running() {
+        report::<String>(
+            window,
+            Err(Adm4Error::conflict("风格图像正在生成：请等这一轮结束")),
+        );
+        return;
+    }
+    window.set_style_running(true);
+    report(
+        window,
+        Ok("已发起风格图像生成（后台进行，界面保持可用）".to_string()),
+    );
+
+    let services = services.clone();
+    let weak = window.as_weak();
+    let archive = job.archive().to_string();
+    std::thread::spawn(move || {
+        let outcome = run_style_job(&services, &job);
+        let _ = weak.upgrade_in_event_loop(move |window| {
+            window.set_style_running(false);
+            refresh_style_for(&window, &services, &archive);
+            refresh_logs(&window, &services, "");
+            report(&window, outcome);
+        });
+    });
+}
+
+fn run_style_job(services: &AppServices, job: &StyleJob) -> Adm4Result<String> {
+    match job {
+        StyleJob::Generate { archive, force } => {
+            let session = services.style_generate(archive, adm4_app::MAX_DIRECTIONS, *force)?;
+            Ok(format!(
+                "风格方向已就绪：{} 个方向 · 预览 {}x{} · 第 {} 轮记录（未确认前下游 P2 仍被阻断）",
+                session.directions.len(),
+                session.preview_width,
+                session.preview_height,
+                session.rounds.len()
+            ))
+        }
+        StyleJob::Regenerate {
+            archive,
+            style_id,
+            prompt,
+        } => {
+            let session = services.style_regenerate(archive, style_id, prompt)?;
+            let origin = session
+                .direction(style_id)
+                .map(|direction| {
+                    if direction.prompt_override.is_empty() {
+                        "已回到派生自真源的提示词"
+                    } else {
+                        "已按你的改词重出图"
+                    }
+                })
+                .unwrap_or("已重出图");
+            Ok(format!(
+                "方向 {style_id} {origin}（第 {} 轮记录）",
+                session.rounds.len()
+            ))
+        }
+    }
+}
+
+fn refresh_style(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
+    let Some(archive) = state.borrow().current_archive.clone() else {
+        let doctor = services.image_doctor();
+        apply_image_doctor(window, &doctor);
+        clear_style(window);
+        window.set_style_summary(SharedString::from(view::style_summary_without_project()));
+        return;
+    };
+    refresh_style_for(window, services, &archive);
+}
+
+/// 按存档 id 刷新「风格」页签（工作线程回程走这里：它拿不到 `Rc<RefCell<UiState>>`）。
+fn refresh_style_for(window: &MainWindow, services: &AppServices, archive: &str) {
+    let doctor = services.image_doctor();
+    apply_image_doctor(window, &doctor);
+    window.set_style_gate_hint(SharedString::from(view::style_gate_hint(&doctor, true)));
+    // 「能不能生成」由后端推出：图像通道可用 + 项目已打开。
+    window.set_style_can_generate(doctor.available);
+
+    let status = match services.style_status(archive) {
+        Ok(status) => status,
+        Err(error) => {
+            report::<String>(window, Err(error));
+            clear_style(window);
+            return;
+        }
+    };
+    let session = match services.style_session(archive) {
+        Ok(session) => session,
+        Err(error) => {
+            report::<String>(window, Err(error));
+            None
+        }
+    };
+
+    // 聚焦方向：沿用当前选中；它已不在候选里（刚推翻重派生过）则清空，不指着一个不存在的 id。
+    let mut focused = window.get_style_selected().to_string();
+    if !focused.is_empty() && !status.directions.iter().any(|row| row.style_id == focused) {
+        focused.clear();
+        window.set_style_selected(SharedString::default());
+    }
+    let focused = (!focused.is_empty()).then_some(focused);
+
+    let cards = view::style_cards(&status, focused.as_deref(), &|relative| {
+        load_style_image(services, archive, relative)
+    });
+    window.set_style_cards(ModelRc::new(VecModel::from(cards)));
+    window.set_style_summary(SharedString::from(view::style_summary(&status)));
+    window.set_style_readiness(SharedString::from(view::style_readiness_text(&status)));
+    window.set_style_ready(status.readiness.ready);
+
+    let direction = focused
+        .as_deref()
+        .and_then(|style_id| session.as_ref().and_then(|item| item.direction(style_id)));
+    window.set_style_prompt_origin(SharedString::from(view::style_prompt_origin(direction)));
+    window.set_style_prompt(SharedString::from(
+        direction
+            .map(|item| item.effective_prompt().to_string())
+            .unwrap_or_default(),
+    ));
+
+    // 已锁定摘要：只有服务层判定就绪时才读锚点集（未就绪时那两份产物可能压根不在）。
+    let lock_rows = if status.readiness.ready {
+        let version = status.readiness.anchor_version;
+        match (
+            services.style_anchor_set(archive, version),
+            services.style_application_contract(archive, version),
+        ) {
+            (Ok(anchor_set), Ok(contract)) => view::style_lock_rows(&anchor_set, &contract),
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    window.set_style_lock_rows(ModelRc::new(VecModel::from(lock_rows)));
+}
+
+/// 大图覆盖层：只有确实拿到图才打开覆盖层的图片区，否则如实显示「没有预览图」。
+fn open_style_viewer(
+    window: &MainWindow,
+    services: &AppServices,
+    state: &Rc<RefCell<UiState>>,
+    style_id: &str,
+) {
+    let Some(archive) = state.borrow().current_archive.clone() else {
+        return;
+    };
+    let Ok(status) = services.style_status(&archive) else {
+        return;
+    };
+    let Some(row) = status
+        .directions
+        .iter()
+        .find(|row| row.style_id == style_id)
+    else {
+        report::<String>(
+            window,
+            Err(Adm4Error::not_found(format!(
+                "风格方向 {style_id} 不在当前候选里"
+            ))),
+        );
+        return;
+    };
+    let prompt = services
+        .style_session(&archive)
+        .ok()
+        .flatten()
+        .and_then(|session| {
+            session
+                .direction(style_id)
+                .map(|direction| direction.effective_prompt().to_string())
+        })
+        .unwrap_or_default();
+    let (title, detail) = view::style_viewer_texts(row, &prompt);
+    let image = if row.image_path.is_empty() {
+        None
+    } else {
+        load_style_image(services, &archive, &row.image_path).ok()
+    };
+    window.set_style_viewer_has_image(image.is_some());
+    window.set_style_viewer_image(image.unwrap_or_default());
+    window.set_style_viewer_title(SharedString::from(title));
+    window.set_style_viewer_prompt(SharedString::from(detail));
+    window.set_style_viewer_open(true);
+}
+
+/// 相对路径 → 已加载的 `slint::Image`；失败原样带回原因（卡片上要写出来）。
+fn load_style_image(
+    services: &AppServices,
+    archive: &str,
+    relative: &str,
+) -> Result<slint::Image, String> {
+    let path = services
+        .style_image_path(archive, relative)
+        .map_err(|error| error.message)?;
+    slint::Image::load_from_path(&path)
+        .map_err(|_| format!("预览图 {relative} 加载失败（文件在但不是可读的图像）"))
+}
+
+fn apply_image_doctor(window: &MainWindow, doctor: &AiDoctorReport) {
+    window.set_image_available(doctor.available);
+    window.set_image_status(SharedString::from(view::image_status_text(doctor)));
+}
+
+fn clear_style(window: &MainWindow) {
+    window.set_style_cards(ModelRc::new(VecModel::<StyleCard>::from(Vec::new())));
+    window.set_style_lock_rows(ModelRc::new(VecModel::<TextRow>::from(Vec::new())));
+    window.set_style_readiness(SharedString::default());
+    window.set_style_ready(false);
+    window.set_style_can_generate(false);
+    window.set_style_gate_hint(SharedString::default());
+    window.set_style_prompt(SharedString::default());
+    window.set_style_prompt_origin(SharedString::default());
+    window.set_style_selected(SharedString::default());
+    window.set_style_viewer_open(false);
+    window.set_style_viewer_has_image(false);
+}
+
+/// 图像通道配置：保存 / 停用 / 套用 preset（与 AI 文本通道同一套热更新语义）。
+fn hook_image_provider_callbacks(window: &MainWindow, services: &Arc<AppServices>) {
+    let weak = window.as_weak();
+
+    {
+        let weak = weak.clone();
+        window.on_image_apply_preset(move |preset_id| {
+            if let Some(window) = weak.upgrade() {
+                match adm4_ai::image_provider_presets()
+                    .into_iter()
+                    .find(|preset| preset.provider_id == preset_id.as_str())
+                {
+                    Some(preset) => {
+                        apply_image_provider_form(&window, view::image_provider_form(Some(&preset)));
+                        report(
+                            &window,
+                            Ok(format!(
+                                "已套用图像 preset {preset_id} 到表单（尚未保存；密钥引用与尺寸请按实际改）"
+                            )),
+                        );
+                    }
+                    None => report::<String>(
+                        &window,
+                        Err(Adm4Error::not_found(format!("未知图像 preset {preset_id}"))),
+                    ),
+                }
+            }
+        });
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_image_save(
+            move |provider_id, base_url, model, key_ref, size, timeout| {
+                if let Some(window) = weak.upgrade() {
+                    let result = save_image_provider(
+                        &services,
+                        provider_id.as_str(),
+                        base_url.as_str(),
+                        model.as_str(),
+                        key_ref.as_str(),
+                        size.as_str(),
+                        timeout.as_str(),
+                    );
+                    // 失败时不刷表单：刷新会把用户刚敲的几行回读成磁盘上的旧值。
+                    if result.is_ok() {
+                        refresh_image_panel(&window, &services);
+                    }
+                    report(&window, result);
+                }
+            },
+        );
+    }
+    {
+        let services = services.clone();
+        let weak = weak.clone();
+        window.on_image_disable(move || {
+            if let Some(window) = weak.upgrade() {
+                let result = services.set_image_provider(None).map(|()| {
+                    "已清空 config/app.json 的 image_provider：风格门的生成入口将显式 blocked"
+                        .to_string()
+                });
+                refresh_image_panel(&window, &services);
+                report(&window, result);
+            }
+        });
+    }
+}
+
+/// UI 只做「必填项有没有填」的完整性检查；尺寸格式与密钥可解析性由后端判定并原样回显。
+fn save_image_provider(
+    services: &AppServices,
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+    api_key_ref: &str,
+    size: &str,
+    timeout_secs: &str,
+) -> Adm4Result<String> {
+    let missing = view::missing_image_provider_fields(
+        provider_id,
+        base_url,
+        model,
+        api_key_ref,
+        size,
+        timeout_secs,
+    );
+    if !missing.is_empty() {
+        return Err(Adm4Error::invalid_input(format!(
+            "以下必填项未填写：{}",
+            missing.join("、")
+        )));
+    }
+    let timeout_secs: u64 = timeout_secs.trim().parse().map_err(|_| {
+        Adm4Error::invalid_input(format!("超时秒数「{}」不是正整数", timeout_secs.trim()))
+    })?;
+    services.set_image_provider(Some(adm4_ai::HttpImageProviderConfig {
+        provider_id: provider_id.trim().to_string(),
+        base_url: base_url.trim().to_string(),
+        model: model.trim().to_string(),
+        api_key_ref: api_key_ref.trim().to_string(),
+        timeout_secs,
+        size: size.trim().to_string(),
+    }))?;
+    Ok(format!(
+        "已写入 config/app.json 的 image_provider 并即时生效（{}）；\
+         风格门的「生成方向」按钮随体检结论解锁",
+        provider_id.trim()
+    ))
+}
+
+fn refresh_image_panel(window: &MainWindow, services: &AppServices) {
+    window.set_image_presets(ModelRc::new(VecModel::from(
+        adm4_ai::image_provider_presets()
+            .into_iter()
+            .map(|preset| SharedString::from(preset.provider_id))
+            .collect::<Vec<_>>(),
+    )));
+    match services.config() {
+        Ok(config) => apply_image_provider_form(
+            window,
+            view::image_provider_form(config.image_provider.as_ref()),
+        ),
+        Err(error) => report::<String>(window, Err(error)),
+    }
+    apply_image_doctor(window, &services.image_doctor());
+}
+
+fn apply_image_provider_form(window: &MainWindow, form: view::ImageProviderForm) {
+    window.set_image_provider_id(SharedString::from(form.provider_id));
+    window.set_image_base_url(SharedString::from(form.base_url));
+    window.set_image_model(SharedString::from(form.model));
+    window.set_image_key_ref(SharedString::from(form.api_key_ref));
+    window.set_image_size(SharedString::from(form.size));
+    window.set_image_timeout(SharedString::from(form.timeout_secs));
 }

@@ -1,5 +1,6 @@
-﻿# ADM4 V4 CLI 冒烟脚本：无人值守走完 逆向五步 -> 模板预填 -> AI 访谈补齐 -> 冻结 -> C0-C6 全链。
-# 全程使用确定性脚本 AI（CLI 的 --scripted-file 测试开关），零网络、临时目录隔离；
+﻿# ADM4 V4 CLI 冒烟脚本：无人值守走完 逆向五步 -> 模板预填 -> AI 访谈补齐 -> 冻结 -> C0-C6 全链
+# -> Phase 2 诚实空版图 -> 设计阶段美术风格锚点门（生成/改词/确认/重选）。
+# 全程使用确定性脚本 AI（CLI 的 --scripted-file / --scripted-image 测试开关），零网络、临时目录隔离；
 # 任一步失败立即退出且退出码非 0。用法：
 #   powershell -ExecutionPolicy Bypass -File scripts\cli_smoke.ps1
 
@@ -508,6 +509,159 @@ foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
 }
 
 # ---------------------------------------------------------------------------
+# 8h. G2 设计阶段美术风格锚点门（册 08 §2，选项 A）
+#
+# 走完 未配图像通道诚实阻断 -> 生成方向（提示词锚定真源）-> 改词重生成 -> attended 署名确认
+# -> 锁定产物结构断言 -> 重选另立新版（旧版逐字节不变）-> 未确认阻断下游的负例。
+# 图像走 --scripted-image（零网络的确定性占位 PNG，provider id 落盘可辨），复用 $ArchiveId
+# （它的画像点已确认齐备）；既有断言一条未改。
+# ---------------------------------------------------------------------------
+
+# 负例：本冒烟不配置 image_provider，生成入口必须诚实阻断（不产占位图冒充真图，R7）。
+Invoke-Adm4 'G2 负例：未配置图像通道时 style generate 必须非零退出（错误见上方 stderr）' @('style', 'generate', $ArchiveId) -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：不存在的存档查风格状态必须非零退出' @('style', 'status', 'archive-not-there') -ExpectFailure | Out-Null
+
+# 未生成时 status 仍可查，且如实报出阻断码（查询不因未确认改变退出码）。
+$out = Invoke-Adm4 'G2：未生成时的风格门状态（阻断码在案，退出码仍为 0）' @('style', 'status', $ArchiveId)
+Assert-Contains $out '尚未生成风格方向' '未生成时的工作态提示'
+Assert-Contains $out 'STYLE_APPLICATION_CONTRACT_NOT_APPROVED' '册 08 §3 阻断码'
+Assert-Contains $out 'P2 资产生产被阻断' '未确认时下游可判定被阻断'
+Assert-Contains $out '（无已锁版本）' '锚点历史为空'
+
+# 生成 4 个方向（确定性占位图，零网络）。
+$out = Invoke-Adm4 'G2：生成风格方向（4 个，提示词锚定真源）' @('style', 'generate', $ArchiveId, '--count', '4', '--scripted-image')
+Assert-Contains $out '风格方向已生成：4 个方向' '方向数'
+Assert-Contains $out '图像通道 scripted_image' '占位图通道 id 可辨（不冒充真实生成）'
+Assert-Contains $out '真源锚点 4 条' '提示词锚定的已确认画像点数'
+Assert-Contains $out 'u.genre' '真源摘要指得出具体决策点'
+Assert-Contains $out 'STYLE-01-readable_production' '方向 id 命名（册 08 §2.5）'
+Assert-Contains $out 'STYLE-04-cinematic_realism' '第四个方向'
+Assert-Contains $out '[推荐]' '恰好标一个推荐方向'
+Assert-Contains $out 'previews/r0001/' '预览图落盘路径'
+Assert-NotContains $out '预览图：缺' '四个方向都应出图'
+
+# 断点续跑：全部已出图时不重复调用图像通道（不重复花钱）。
+$out = Invoke-Adm4 'G2：已齐备时再次 generate 不重复出图' @('style', 'generate', $ArchiveId, '--count', '4', '--scripted-image')
+Assert-Contains $out '第 1 轮记录' '没跑就不该多一轮记录'
+
+# 未确认时下游阻断在 build run 的回执里也看得见（P2 消费风格锚点集这一外部输入）。
+$out = Invoke-Adm4 'G2：未确认风格时 build run 应报外部输入未就绪' @('build', 'run', $ArchiveId)
+Assert-Contains $out '风格锚点集（P2 外部输入）：[BLOCKED]' 'build 侧的就绪复核'
+Assert-Contains $out 'STYLE_APPLICATION_CONTRACT_NOT_APPROVED' 'build 侧带阻断码'
+
+# 对话式改词重生成（次数不限，每轮留记录）。
+$out = Invoke-Adm4 'G2：改词重生成 STYLE-02' @('style', 'regenerate', $ArchiveId, 'STYLE-02-concept_painting', '--prompt', 'colder palette, dusk lighting, thicker outlines', '--scripted-image')
+Assert-Contains $out '第 2 轮' '轮次只追加'
+Assert-Contains $out '生效提示词（用户改词）' '改词生效'
+Assert-Contains $out 'colder palette, dusk lighting, thicker outlines' '改词原文'
+
+$out = Invoke-Adm4 'G2：清掉改词回到派生提示词' @('style', 'regenerate', $ArchiveId, 'STYLE-02-concept_painting', '--clear-prompt', '--scripted-image')
+Assert-Contains $out '生效提示词（派生自真源）' '清掉改词后回到派生提示词'
+
+$out = Invoke-Adm4 'G2：再改一次（次数不限）' @('style', 'regenerate', $ArchiveId, 'STYLE-02-concept_painting', '--prompt', 'moody dusk lighting, painterly', '--scripted-image')
+Assert-Contains $out '第 4 轮' '每轮都留记录'
+
+# 负例：提示词命中换皮词表（参考游戏名）必须被拒（R5，册 08 §5）。
+Invoke-Adm4 'G2 负例：提示词写参考游戏名必须被换皮门拦下（R5）' @('style', 'regenerate', $ArchiveId, 'STYLE-02-concept_painting', '--prompt', 'make it look exactly like Kingdom Rush', '--scripted-image') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：--prompt 与 --clear-prompt 互斥' @('style', 'regenerate', $ArchiveId, 'STYLE-02-concept_painting', '--prompt', 'x', '--clear-prompt', '--scripted-image') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：未知方向 id 重生成必须非零退出' @('style', 'regenerate', $ArchiveId, 'STYLE-99-nope', '--prompt', 'x', '--scripted-image') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：方向数超出 [3,5] 必须被拒' @('style', 'generate', $ArchiveId, '--count', '2', '--scripted-image') -ExpectFailure | Out-Null
+
+# 负例：attended 确认的署名与结论双必填（R3），未知方向同样被拒。
+Invoke-Adm4 'G2 负例：确认缺 --actor 署名必须被拒（R3）' @('style', 'confirm', $ArchiveId, 'STYLE-02-concept_painting', '--note', '缺署名') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：确认缺 --note 结论必须被拒（R3）' @('style', 'confirm', $ArchiveId, 'STYLE-02-concept_painting', '--actor', '主美甲') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：空白署名同样被拒' @('style', 'confirm', $ArchiveId, 'STYLE-02-concept_painting', '--actor', '   ', '--note', '匿名放行') -ExpectFailure | Out-Null
+Invoke-Adm4 'G2 负例：确认未知方向必须非零退出' @('style', 'confirm', $ArchiveId, 'STYLE-99-nope', '--actor', '主美甲', '--note', '结论') -ExpectFailure | Out-Null
+
+# 确认锁定 v1。
+$out = Invoke-Adm4 'G2：attended 确认并锁定风格锚点 v1' @('style', 'confirm', $ArchiveId, 'STYLE-02-concept_painting', '--actor', '主美甲', '--note', '四个方向都看过大图，选它兼顾可读性与氛围')
+Assert-Contains $out '风格锚点已锁定：v1' '锚点版本'
+Assert-Contains $out '署名 主美甲' '署名在案（R3）'
+Assert-Contains $out '最终提示词（用户改词）' '锁定的是改词后的提示词'
+Assert-Contains $out 'moody dusk lighting, painterly' '最终提示词原文'
+Assert-Contains $out 'anchors/v1/STYLE-02-concept_painting.png' '锚图落进不可变版本目录'
+Assert-Contains $out '分用途约束 5 条' '应用契约五类用途全覆盖'
+foreach ($usage in @('地块', '图标', '界面', '背景', '特效')) {
+    Assert-Contains $out $usage "应用契约用途 $usage"
+}
+Assert-Contains $out 'P2 资产生产' '确认后指出下游可开跑'
+
+# 锁定产物结构断言（下游 G3 要照它消费）。
+$AnchorSetFile = Get-ChildItem -LiteralPath $DataRoot -Recurse -Filter 'anchor_set.json' -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like '*style*anchors*v1*' } | Select-Object -First 1
+if (-not $AnchorSetFile) { Fail 'G2：应落盘 content/style/anchors/v1/anchor_set.json' }
+$AnchorV1Dir = $AnchorSetFile.Directory.FullName
+foreach ($file in @('anchor_set.json', 'application_contract.json', 'style_confirmation.json', 'style_fit.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $AnchorV1Dir $file))) { Fail "G2：锚点版本目录缺 $file" }
+}
+$anchorSet = Get-Content -LiteralPath $AnchorSetFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($anchorSet.anchor_version -ne 1) { Fail "G2：锚点集版本应为 1，实际 $($anchorSet.anchor_version)" }
+if ($anchorSet.selected_style_id -ne 'STYLE-02-concept_painting') { Fail 'G2：锚点集选中方向不符' }
+if (-not $anchorSet.prompt_overridden) { Fail 'G2：锚点集应标记提示词由用户改词得来' }
+if ($anchorSet.confirmation.status -ne 'approved') { Fail 'G2：确认状态应为 approved' }
+if ($anchorSet.confirmation.mode -ne 'manual') { Fail 'G2：确认方式必须是 manual（禁止 auto_accept）' }
+if (-not $anchorSet.confirmation.actor) { Fail 'G2：确认记录必须带署名（R3）' }
+if ($anchorSet.source_anchors.Count -ne 4) { Fail "G2：锚点集应记 4 条真源锚点，实际 $($anchorSet.source_anchors.Count)" }
+if ($anchorSet.anchors.Count -lt 1) { Fail 'G2：锚点集必须至少有一张锚图' }
+if (-not $anchorSet.anchors[0].image_sha256.StartsWith('sha256:')) { Fail 'G2：锚图必须带 sha256 指纹' }
+if (-not (Test-Path -LiteralPath (Join-Path $AnchorV1Dir 'STYLE-02-concept_painting.png'))) { Fail 'G2：锚图未落进版本目录' }
+
+$contract = Get-Content -LiteralPath (Join-Path $AnchorV1Dir 'application_contract.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $contract.source_anchor_hash.StartsWith('sha256:')) { Fail 'G2：应用契约必须锚定锚点集哈希（D22）' }
+if ($contract.style_constraints.Count -ne 5) { Fail "G2：应用契约应有 5 条分用途约束，实际 $($contract.style_constraints.Count)" }
+if ($contract.selected_style_id -ne $anchorSet.selected_style_id) { Fail 'G2：应用契约与锚点集的方向必须一致' }
+if ($contract.prompt_prefix -ne $anchorSet.final_prompt) { Fail 'G2：应用契约的 prompt_prefix 应等于锚点集最终提示词' }
+$fit = Get-Content -LiteralPath (Join-Path $AnchorV1Dir 'style_fit.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $fit.advisory_only) { Fail 'G2：适配报告必须标 advisory_only（提示不阻断）' }
+if ($fit.entries.Count -ne 4) { Fail "G2：适配报告应覆盖 4 个方向，实际 $($fit.entries.Count)" }
+
+# 就绪转绿：status 与 build run 两处都能看到。
+$out = Invoke-Adm4 'G2：确认后风格门就绪' @('style', 'status', $ArchiveId)
+Assert-Contains $out '就绪：[OK]' '就绪结论'
+Assert-Contains $out '锚点历史：v1' '锚点历史'
+Assert-Contains $out '[已确认]' '已确认方向标记'
+Assert-NotContains $out 'STYLE_APPLICATION_CONTRACT_NOT_APPROVED' '就绪后不应再有阻断码'
+
+$out = Invoke-Adm4 'G2：确认后 build run 应报外部输入已就绪' @('build', 'run', $ArchiveId)
+Assert-Contains $out '风格锚点集（P2 外部输入）：[OK]' 'build 侧就绪复核转绿'
+
+# 重选风格 = 另立新版；v1 逐字节不变（D4 不可变历史）。
+$V1Bytes = [System.IO.File]::ReadAllBytes($AnchorSetFile.FullName)
+$out = Invoke-Adm4 'G2：重新选择风格（另立 v2）' @('style', 'confirm', $ArchiveId, 'STYLE-01-readable_production', '--actor', '主美乙', '--note', '试玩后改走清晰量产，可读性优先')
+Assert-Contains $out '风格锚点已锁定：v2' '新版本'
+Assert-Contains $out '取代 v1' '取代关系'
+Assert-Contains $out '旧版不改不删' '不可变历史声明'
+$V1After = [System.IO.File]::ReadAllBytes($AnchorSetFile.FullName)
+if ($V1Bytes.Length -ne $V1After.Length) { Fail 'G2：v1 锚点集长度变了（不可变历史被破坏）' }
+for ($i = 0; $i -lt $V1Bytes.Length; $i++) {
+    if ($V1Bytes[$i] -ne $V1After[$i]) { Fail "G2：v1 锚点集第 $i 字节被改动（不可变历史被破坏）" }
+}
+$out = Invoke-Adm4 'G2：锚点历史应有两版，就绪指向最新一版' @('style', 'status', $ArchiveId)
+Assert-Contains $out '锚点历史：v1 / v2' '两版历史都在'
+Assert-Contains $out '已锁定锚点 v2' '就绪指向最新一版'
+Assert-Contains $out 'STYLE-01-readable_production' '最新一版选的方向'
+
+# R7：图像生成失败原样上抛（不产占位图冒充），且已锁定历史不受影响。
+$ImageFailPath = Join-Path $AiDir 'image_fail.json'
+Write-Utf8NoBom $ImageFailPath '{"fail":"冒烟演练：图像 API 返回 503（上游不可用）"}'
+Invoke-Adm4 'G2 负例：图像生成失败必须非零退出（原因见上方 stderr，不产占位图）' @('style', 'generate', $ArchiveId, '--count', '4', '--force', '--scripted-image-file', $ImageFailPath) -ExpectFailure | Out-Null
+$out = Invoke-Adm4 'G2：失败后记录在案、可续跑，且已锁定的两版历史不受影响' @('style', 'status', $ArchiveId)
+Assert-Contains $out '预览图：缺' '失败的方向如实标缺图'
+Assert-Contains $out '最近失败' '失败原因留痕（R7）'
+Assert-Contains $out '就绪：[OK]' '工作态失败不影响已锁定的锚点'
+Assert-Contains $out '锚点历史：v1 / v2' '历史仍是两版'
+Invoke-Adm4 'G2 负例：图像脚本文件含未知键必须被拒' @('style', 'generate', $ArchiveId, '--scripted-image-file', $AiAllPath) -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'G2：通道恢复后续跑补齐（只补缺图的方向）' @('style', 'generate', $ArchiveId, '--count', '4', '--scripted-image')
+Assert-NotContains $out '预览图：缺' '续跑后四个方向都应有图'
+
+Invoke-Adm4 'G2 负例：未知 style 子命令必须非零退出' @('style', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# 风格产物纳入存档指纹：一路写下来体检仍应一致。
+$out = Invoke-Adm4 'G2：风格产物写盘后存档体检仍一致' @('project', 'doctor', $ArchiveId)
+Assert-Contains $out '[OK] 存档一致' '体检结论'
+
+# ---------------------------------------------------------------------------
 # 8b. F3 模型缺口：通用层模板跨包可见/可预填、非必做点不进分母、项目重命名
 #
 # 用独立的一次性项目做，不触碰上面已冻结并跑完 C0-C6 的 $ArchiveId。
@@ -588,6 +742,20 @@ Assert-Contains $out '换皮词 1 个' '源项目名进词表（否则别的项�
 # 而模板的 game_name 与 origin.source_project_name 就是项目名——没有豁免这一步必被拦）。
 $out = Invoke-Adm4 'F4d 钉子①：自身名字在词表里，源项目仍可另存（豁免只放行当前项目名）' @('template', 'save-as', $ArchiveId, 'tpl_frostfall_again', '--reviewer', '评审员甲', '--note', '自身名字已在词表里，本项目仍应可导出')
 Assert-Contains $out '已另存模板' '源项目不被自己的名字拦住'
+
+# G2 钉子：风格提示词里必然含项目名，而项目名此刻已在换皮词表里（上一步认证登记的）。
+# 豁免作用域必须让本项目自己的名字放行，否则本项目再也生不成风格方向（R5 豁免同源口径）。
+$out = Invoke-Adm4 'G2 钉子：项目名已进换皮词表后，本项目仍能生成风格方向（豁免只放行自身名）' @('style', 'generate', $ArchiveId, '--count', '3', '--force', '--scripted-image')
+Assert-Contains $out '风格方向已生成：3 个方向' '自身名字不拦自己的提示词'
+# 回执里的提示词是 96 字摘要，项目名排在摘要之后；直接读工作态核对提示词确实带着项目名
+# （否则「没被拦下」可能只是因为提示词里压根没有项目名，这条钉子就白钉了）。
+$StyleSessionFile = Get-ChildItem -LiteralPath $DataRoot -Recurse -Filter 'session.json' -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like "*$ArchiveId*style*" } | Select-Object -First 1
+if (-not $StyleSessionFile) { Fail 'G2 钉子：找不到风格工作态 session.json' }
+$styleSession = Get-Content -LiteralPath $StyleSessionFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($styleSession.directions[0].derived_prompt -notlike '*霜落峡谷防卫计划*') {
+    Fail 'G2 钉子：派生提示词里应带项目名（否则换皮豁免这条钉子没有意义）'
+}
 
 $out = Invoke-Adm4 'F4b：另存模板预填到新项目' @('project', 'prefill', $ReuseArchive, 'tpl_frostfall')
 Assert-Contains $out '预填：写入' '另存模板可预填'
@@ -859,5 +1027,5 @@ Assert-NotContains $out '待填 0 项' '不给 --decision 时不打印单点小�
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> Phase 2 诚实空版图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> Phase 2 诚实空版图 -> 风格锚点门（生成/改词/确认/重选） -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
 exit 0

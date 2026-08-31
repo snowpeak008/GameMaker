@@ -7,13 +7,14 @@
 
 use crate::{
     ChangeRow, CheckRow, DeliverRow, DomainCard, LogItem, NodeCard, OptionRow, ProfileRow, SdkRow,
-    StageItem, TextRow,
+    StageItem, StyleCard, TextRow,
 };
-use adm4_ai::HttpProviderConfig;
+use adm4_ai::{HttpImageProviderConfig, HttpProviderConfig};
 use adm4_app::{
     AiDoctorReport, AiInvokeCheckReport, ChangeRequest, ChangeStatus, DecisionPointView,
     DeliverableManifest, ProjectDoctorReport, ProjectProfile, RunLogEntry, SdkReviewStatus,
-    SdkSnapshot, StageArtifactView, TemplateExportReport, WorkbenchOverview,
+    SdkSnapshot, StageArtifactView, StyleAnchorSet, StyleApplicationContract, StyleDirection,
+    StyleDirectionStatus, StyleFitRisk, StyleGateStatus, TemplateExportReport, WorkbenchOverview,
 };
 use adm4_authoring::WorkbenchResetReport;
 use adm4_build::pending_stage;
@@ -24,7 +25,7 @@ use adm4_pipeline::{
     PipelineRunState, StageRecord, StageResetReport, StageStatus, design_compile_registry,
     phase2_registry,
 };
-use slint::{SharedString, VecModel};
+use slint::{Image, SharedString, VecModel};
 
 /// 左栏领域卡片：**全部**领域（含 0 决策点的域）+ 进度 join。
 ///
@@ -1013,6 +1014,331 @@ pub fn missing_provider_fields(
         }
     }
     missing
+}
+
+// ---------------------------------------------------------------------------
+// G2 设计阶段风格锚点门：右栏「风格」页签的装配
+//
+// 这里只做「后端只读投影 → 行模型/文案」的确定性转换。能不能生成、能不能确认、
+// 未确认要不要阻断下游，一律由服务层给出（`StyleGateStatus.readiness` /
+// `AiDoctorReport.available`），本层照实呈现（D14）。
+// ---------------------------------------------------------------------------
+
+/// 图像通道体检的状态条文案。
+pub fn image_status_text(report: &AiDoctorReport) -> String {
+    if report.available {
+        format!("图像通道：可用（{}）", report.provider_id)
+    } else {
+        format!("图像通道：不可用 — {}", report.detail)
+    }
+}
+
+/// 图像通道配置表单的初值（`None` = 未配置，留空由用户填或套用 preset）。
+pub struct ImageProviderForm {
+    pub provider_id: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_ref: String,
+    pub size: String,
+    pub timeout_secs: String,
+}
+
+pub fn image_provider_form(config: Option<&HttpImageProviderConfig>) -> ImageProviderForm {
+    match config {
+        None => ImageProviderForm {
+            provider_id: String::new(),
+            base_url: String::new(),
+            model: String::new(),
+            api_key_ref: String::new(),
+            size: String::new(),
+            timeout_secs: String::new(),
+        },
+        Some(config) => ImageProviderForm {
+            provider_id: config.provider_id.clone(),
+            base_url: config.base_url.clone(),
+            model: config.model.clone(),
+            api_key_ref: config.api_key_ref.clone(),
+            size: config.size.clone(),
+            timeout_secs: config.timeout_secs.to_string(),
+        },
+    }
+}
+
+/// 图像通道表单的必填项缺失检查（只看「填没填」；尺寸格式与密钥可解析性由后端判）。
+pub fn missing_image_provider_fields(
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+    api_key_ref: &str,
+    size: &str,
+    timeout_secs: &str,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    for (value, label) in [
+        (provider_id, "Provider id"),
+        (base_url, "图像 Base URL"),
+        (model, "图像模型名"),
+        (api_key_ref, "密钥引用（env:NAME 或 named:NAME）"),
+        (size, "生成尺寸（如 1024x1024）"),
+        (timeout_secs, "超时秒数"),
+    ] {
+        if value.trim().is_empty() {
+            missing.push(label);
+        }
+    }
+    missing
+}
+
+/// 适配风险 → 卡片配色键（slint 侧按它选色）。
+fn style_fit_kind(risk: StyleFitRisk) -> &'static str {
+    match risk {
+        StyleFitRisk::Ok => "ok",
+        StyleFitRisk::Caution => "caution",
+        StyleFitRisk::Unknown => "unknown",
+    }
+}
+
+/// 风格网格的卡片行模型。
+///
+/// `image_of` 是图片加载器：给相对路径，换一张 `slint::Image` 或一句失败原因。
+/// 做成回调而不是在这里直接读盘，为的是两件事：① 本层要能单测，而单测里没有存档也没有图；
+/// ② 「路径怎么解析成绝对路径」是服务层的判定（`AppServices::style_image_path` 会拦越界
+/// 路径与不存在的文件），装配层不该复制一份。
+///
+/// 三态如实区分（这是这段装配唯一有分支的地方，也是最容易糊掉的地方）：
+/// 记录里没有图 → 画「无预览图」并显示最近失败原因；有图且加载成功 → 画图；
+/// 有图但加载失败 → 也画「无预览图」，但失败原因换成加载错误（不是生成错误）。
+pub fn style_cards(
+    status: &StyleGateStatus,
+    focused: Option<&str>,
+    image_of: &dyn Fn(&str) -> Result<Image, String>,
+) -> Vec<StyleCard> {
+    status
+        .directions
+        .iter()
+        .map(|row| {
+            let (image, has_image, failure) = if row.image_path.is_empty() {
+                (Image::default(), false, row.last_failure.clone())
+            } else {
+                match image_of(&row.image_path) {
+                    Ok(image) => (image, true, row.last_failure.clone()),
+                    Err(error) => (Image::default(), false, error),
+                }
+            };
+            StyleCard {
+                id: row.style_id.clone().into(),
+                title: row.title.clone().into(),
+                description: row.description.clone().into(),
+                prompt_summary: row.prompt_summary.clone().into(),
+                prompt_origin: if row.prompt_overridden {
+                    "用户改词".into()
+                } else {
+                    "派生自真源".into()
+                },
+                palette: format!("配色 {}", row.palette.join(" ")).into(),
+                fit: format!("适配 {} · {}", row.fit_risk.label_zh(), row.fit_reason).into(),
+                fit_kind: style_fit_kind(row.fit_risk).into(),
+                badge: if row.is_selected {
+                    "★已确认 ".into()
+                } else if row.recommended {
+                    "◎推荐 ".into()
+                } else {
+                    SharedString::default()
+                },
+                failure: failure.into(),
+                image,
+                has_image,
+                selected: row.is_selected,
+                active: focused == Some(row.style_id.as_str()),
+            }
+        })
+        .collect()
+}
+
+/// 「风格」页签顶部的状态摘要。
+pub fn style_summary(status: &StyleGateStatus) -> String {
+    if !status.session_present {
+        return "本项目尚未生成风格方向。点「生成方向」派生 3-5 个候选——提示词锚定已确认的画像决策点（品类/平台/体验/美术风格定位），一条都没确认时会如实报错（R4）。".to_string();
+    }
+    let mut text = format!(
+        "{} · 品类包 {} · {} 个方向 · {} 轮生成记录",
+        status.project_name,
+        status.genre_pack,
+        status.directions.len(),
+        status.round_count
+    );
+    if !status.latest_round_id.is_empty() {
+        text.push_str(&format!("（最近 {}）", status.latest_round_id));
+    }
+    text.push_str(&format!(
+        " · 真源 revision 当前 {} / 工作态 {}",
+        status.current_revision, status.session_revision
+    ));
+    if status.session_stale {
+        text.push_str("｜设计已变，建议「推翻重生成」重新派生提示词（提示不阻断）");
+    }
+    text
+}
+
+/// 尚未打开项目时的摘要（工作台没有项目就没有风格门可谈）。
+pub fn style_summary_without_project() -> String {
+    "尚未打开项目：请先在「存档管理」新建或载入项目，再来定风格。".to_string()
+}
+
+/// 就绪结论（就绪 = 下游 P2 资产生产可开跑）。
+pub fn style_readiness_text(status: &StyleGateStatus) -> String {
+    let mut text = if status.readiness.ready {
+        format!("[就绪] {}", status.readiness.detail)
+    } else {
+        format!(
+            "[阻断] {}｜下游 P2 资产生产被阻断（风格锚点集是它声明消费的外部输入）",
+            status.readiness.detail
+        )
+    };
+    if status.readiness.ready && status.anchor_stale {
+        text.push_str("｜提醒：锚点锚的设计版本落后于当前设计，可「重新选择」另立新版");
+    }
+    if !status.anchor_versions.is_empty() {
+        text.push_str(&format!(
+            "｜锚点历史 {}",
+            status
+                .anchor_versions
+                .iter()
+                .map(|version| format!("v{version}"))
+                .collect::<Vec<_>>()
+                .join("/")
+        ));
+    }
+    text
+}
+
+/// 生成入口不可用时的指路文案（缺什么说什么，不只说「不可用」）。
+pub fn style_gate_hint(image_doctor: &AiDoctorReport, project_open: bool) -> String {
+    if !project_open {
+        return String::new();
+    }
+    if image_doctor.available {
+        return String::new();
+    }
+    format!(
+        "生成入口已停用：{}。请在顶栏「AI配置/诊断」面板的「图像通道」一段填 provider id / base_url / 模型 / 密钥引用 / 尺寸后保存。风格门必须看真图，没有图像通道就是 blocked——绝不用占位图冒充（R7）。",
+        image_doctor.detail
+    )
+}
+
+/// 改词编辑框上方的来源说明。
+pub fn style_prompt_origin(direction: Option<&StyleDirection>) -> String {
+    match direction {
+        None => "选中一个方向后可在此改词重生成（清空后重生成 = 回到派生提示词）".to_string(),
+        Some(direction) if direction.prompt_override.trim().is_empty() => {
+            format!(
+                "当前提示词派生自真源（{} 条锚点）——改写后重生成即成为该方向的最终提示词",
+                direction.prompt_anchors.len()
+            )
+        }
+        Some(_) => {
+            "当前提示词是你的改词（点「回到派生提示词」可还原为锚定真源的那一版）".to_string()
+        }
+    }
+}
+
+/// 已锁定锚点的摘要行（下游要照它消费，所以关键字段都得看得见）。
+pub fn style_lock_rows(
+    anchor_set: &StyleAnchorSet,
+    contract: &StyleApplicationContract,
+) -> Vec<TextRow> {
+    let mut rows = vec![header_row(format!(
+        "已锁定风格锚点 v{}",
+        anchor_set.anchor_version
+    ))];
+    rows.push(info_row(
+        format!(
+            "方向 {}（{}）",
+            anchor_set.selected_title, anchor_set.selected_style_id
+        ),
+        format!(
+            "预设 {} · 配色 {} · 真源 revision {}",
+            anchor_set.preset_key,
+            anchor_set.palette.join(" "),
+            anchor_set.source_revision
+        ),
+        "ok",
+    ));
+    rows.push(info_row(
+        format!(
+            "署名 {} 于 {}",
+            anchor_set.confirmation.actor, anchor_set.confirmation.at
+        ),
+        anchor_set.confirmation.notes.clone(),
+        "info",
+    ));
+    rows.push(info_row(
+        format!(
+            "最终提示词（{}）",
+            if anchor_set.prompt_overridden {
+                "用户改词"
+            } else {
+                "派生自真源"
+            }
+        ),
+        anchor_set.final_prompt.clone(),
+        "info",
+    ));
+    for anchor in &anchor_set.anchors {
+        rows.push(info_row(
+            format!("锚图 {}", anchor.role),
+            format!(
+                "{} · {}",
+                anchor.image_path,
+                short_sha(&anchor.image_sha256)
+            ),
+            "info",
+        ));
+    }
+    rows.push(info_row(
+        "风格应用契约".to_string(),
+        format!(
+            "锚点哈希 {} · 分用途约束 {} 条（{}）",
+            short_sha(&contract.source_anchor_hash),
+            contract.style_constraints.len(),
+            contract
+                .style_constraints
+                .iter()
+                .map(|constraint| constraint.usage.label_zh())
+                .collect::<Vec<_>>()
+                .join("/")
+        ),
+        "ok",
+    ));
+    rows
+}
+
+/// 大图覆盖层的标题与提示词全文。
+pub fn style_viewer_texts(row: &StyleDirectionStatus, prompt: &str) -> (String, String) {
+    let title = format!(
+        "{}（{}）· 适配 {}",
+        row.title,
+        row.style_id,
+        row.fit_risk.label_zh()
+    );
+    let mut detail = format!(
+        "方向说明：{}\n提示词（{}）：{}",
+        row.description,
+        if row.prompt_overridden {
+            "用户改词"
+        } else {
+            "派生自真源"
+        },
+        prompt
+    );
+    if !row.image_sha256.is_empty() {
+        detail.push_str(&format!("\n锚图指纹：{}", row.image_sha256));
+    }
+    if !row.last_failure.is_empty() {
+        detail.push_str(&format!("\n最近失败：{}", row.last_failure));
+    }
+    detail.push_str("\n（点遮罩或「关闭」退出；不满意就回右栏改词重生成，次数不限）");
+    (title, detail)
 }
 
 /// 另存模板回执：导出条数与**跳过的未确认点数**同样显眼（后者最容易被误当成整卷定稿）。
@@ -2392,5 +2718,335 @@ mod tests {
             at: "t".into(),
         };
         assert!(reset_workbench_text(&noop).contains("本来就没有任何创作内容"));
+    }
+
+    // -----------------------------------------------------------------------
+    // G2 风格门装配层
+    // -----------------------------------------------------------------------
+
+    fn style_row(style_id: &str, risk: StyleFitRisk) -> StyleDirectionStatus {
+        StyleDirectionStatus {
+            style_id: style_id.into(),
+            title: "清晰量产".into(),
+            description: "以可读性与量产效率优先".into(),
+            prompt_summary: "flat clean vector-like game art…".into(),
+            prompt_overridden: false,
+            recommended: false,
+            recommended_reason: String::new(),
+            palette: vec!["#2F4858".into(), "#F6C445".into()],
+            fit_risk: risk,
+            fit_reason: "信息密度代价低，与已确认方向适配".into(),
+            image_path: String::new(),
+            image_sha256: String::new(),
+            last_failure: String::new(),
+            is_selected: false,
+        }
+    }
+
+    fn style_status(rows: Vec<StyleDirectionStatus>) -> StyleGateStatus {
+        StyleGateStatus {
+            project_name: "霜落峡谷防卫计划".into(),
+            genre_pack: "lane_defense".into(),
+            session_present: true,
+            session_revision: 12,
+            current_revision: 12,
+            session_stale: false,
+            directions: rows,
+            round_count: 2,
+            latest_round_id: "r0002".into(),
+            anchor_versions: Vec::new(),
+            readiness: adm4_app::StyleReadiness::not_ready("从未确认过风格锚点"),
+            anchor_stale: false,
+            confirmed_actor: String::new(),
+            confirmed_at: String::new(),
+            confirmed_notes: String::new(),
+        }
+    }
+
+    /// 卡片三态：无图 / 有图加载成功 / 有图加载失败——三条分支的呈现必须区分得开，
+    /// 否则用户看到一个空框却不知道是「还没生成」还是「图坏了」。
+    #[test]
+    fn style_cards_distinguish_missing_loaded_and_broken_images() {
+        let mut rows = vec![
+            style_row("STYLE-01-readable_production", StyleFitRisk::Ok),
+            style_row("STYLE-02-concept_painting", StyleFitRisk::Caution),
+            style_row("STYLE-03-high_contrast_arcade", StyleFitRisk::Unknown),
+        ];
+        // ① 没图，且上一轮生成失败过。
+        rows[0].last_failure = "图像 API 返回 503".into();
+        // ② 有图（加载器会成功）。
+        rows[1].image_path = "previews/r0002/STYLE-02-concept_painting.png".into();
+        rows[1].image_sha256 = "sha256:abcdef0123456789".into();
+        rows[1].prompt_overridden = true;
+        rows[1].recommended = true;
+        // ③ 有图但加载失败。
+        rows[2].image_path = "previews/r0001/broken.png".into();
+        let status = style_status(rows);
+
+        let cards = style_cards(&status, Some("STYLE-02-concept_painting"), &|relative| {
+            if relative.contains("broken") {
+                Err("预览图 broken.png 加载失败（文件在但不是可读的图像）".to_string())
+            } else {
+                Ok(Image::default())
+            }
+        });
+        assert_eq!(cards.len(), 3);
+
+        assert!(!cards[0].has_image);
+        assert_eq!(cards[0].failure, "图像 API 返回 503");
+        assert_eq!(cards[0].fit_kind, "ok");
+        assert!(!cards[0].active);
+        assert_eq!(cards[0].prompt_origin, "派生自真源");
+
+        assert!(cards[1].has_image, "加载成功的图必须画出来");
+        assert!(cards[1].failure.is_empty());
+        assert_eq!(cards[1].fit_kind, "caution");
+        assert!(cards[1].active, "聚焦方向要高亮");
+        assert_eq!(cards[1].badge, "◎推荐 ");
+        assert_eq!(cards[1].prompt_origin, "用户改词");
+        assert!(cards[1].palette.contains("#2F4858"));
+        assert!(cards[1].fit.contains("需注意"), "{}", cards[1].fit);
+
+        assert!(!cards[2].has_image, "加载失败不许画一张空图冒充有图");
+        assert!(
+            cards[2].failure.contains("加载失败"),
+            "{}",
+            cards[2].failure
+        );
+        assert_eq!(cards[2].fit_kind, "unknown");
+    }
+
+    /// 已确认的方向徽章压过推荐徽章（用户要先看到「这就是当前锚点」）。
+    #[test]
+    fn confirmed_direction_badge_wins_over_recommended() {
+        let mut row = style_row("STYLE-01-readable_production", StyleFitRisk::Ok);
+        row.recommended = true;
+        row.is_selected = true;
+        let cards = style_cards(&style_status(vec![row]), None, &|_| Ok(Image::default()));
+        assert_eq!(cards[0].badge, "★已确认 ");
+        assert!(cards[0].selected);
+    }
+
+    /// 摘要三态：未打开项目 / 未生成 / 已生成（含真源已变的提醒）。
+    #[test]
+    fn style_summary_covers_all_phases() {
+        assert!(style_summary_without_project().contains("尚未打开项目"));
+
+        let mut status = style_status(Vec::new());
+        status.session_present = false;
+        let text = style_summary(&status);
+        assert!(text.contains("尚未生成风格方向"), "{text}");
+        assert!(text.contains("R4"), "要说清无锚会报错：{text}");
+
+        let mut status = style_status(vec![style_row("STYLE-01-x", StyleFitRisk::Ok)]);
+        let text = style_summary(&status);
+        assert!(text.contains("1 个方向"), "{text}");
+        assert!(text.contains("最近 r0002"), "{text}");
+        assert!(!text.contains("设计已变"), "{text}");
+
+        status.session_stale = true;
+        status.current_revision = 15;
+        let text = style_summary(&status);
+        assert!(text.contains("设计已变"), "{text}");
+        assert!(text.contains("提示不阻断"), "{text}");
+    }
+
+    /// 就绪文案：未确认必须点明下游被阻断；已确认要带版本历史与落后提醒。
+    #[test]
+    fn style_readiness_text_states_the_downstream_verdict() {
+        let status = style_status(Vec::new());
+        let text = style_readiness_text(&status);
+        assert!(text.starts_with("[阻断]"), "{text}");
+        assert!(
+            text.contains(adm4_app::STYLE_APPLICATION_CONTRACT_NOT_APPROVED),
+            "{text}"
+        );
+        assert!(text.contains("P2 资产生产被阻断"), "{text}");
+
+        let mut ready = style_status(Vec::new());
+        ready.anchor_versions = vec![1, 2];
+        ready.anchor_stale = true;
+        ready.readiness = adm4_app::StyleReadiness {
+            ready: true,
+            anchor_version: 2,
+            selected_style_id: "STYLE-02-concept_painting".into(),
+            anchor_hash: "sha256:x".into(),
+            detail: "风格锚点 v2 已确认（方向 概念绘画，署名 主美甲 于 t）".into(),
+        };
+        let text = style_readiness_text(&ready);
+        assert!(text.starts_with("[就绪]"), "{text}");
+        assert!(text.contains("锚点历史 v1/v2"), "{text}");
+        assert!(text.contains("落后于当前设计"), "{text}");
+    }
+
+    /// 门控指路：图像通道不可用时必须说清缺什么、去哪配（不只说「不可用」）。
+    #[test]
+    fn style_gate_hint_points_at_the_missing_configuration() {
+        let unavailable = AiDoctorReport {
+            available: false,
+            provider_id: String::new(),
+            detail: "未配置图像 Provider：请在 config/app.json 补一段 image_provider…".into(),
+        };
+        let hint = style_gate_hint(&unavailable, true);
+        assert!(hint.contains("image_provider"), "{hint}");
+        assert!(hint.contains("图像通道"), "{hint}");
+        assert!(hint.contains("R7"), "{hint}");
+        // 没打开项目时不该先怪配置（先让人载入项目）。
+        assert!(style_gate_hint(&unavailable, false).is_empty());
+        // 可用时不出提示。
+        let available = AiDoctorReport {
+            available: true,
+            provider_id: "openai_images".into(),
+            detail: "已配置".into(),
+        };
+        assert!(style_gate_hint(&available, true).is_empty());
+        assert!(image_status_text(&available).contains("可用（openai_images）"));
+        assert!(image_status_text(&unavailable).contains("不可用"));
+    }
+
+    /// 改词框的来源说明三态（没选方向 / 派生提示词 / 用户改词）。
+    #[test]
+    fn style_prompt_origin_states_where_the_prompt_came_from() {
+        assert!(style_prompt_origin(None).contains("选中一个方向"));
+
+        let derived = StyleDirection {
+            derived_prompt: "flat clean vector-like game art".into(),
+            prompt_anchors: vec![
+                adm4_contracts::SpecRef::new("profile/u.genre"),
+                adm4_contracts::SpecRef::new("profile/u.platform"),
+            ],
+            ..StyleDirection::default()
+        };
+        let text = style_prompt_origin(Some(&derived));
+        assert!(text.contains("派生自真源"), "{text}");
+        assert!(text.contains("2 条锚点"), "{text}");
+
+        let overridden = StyleDirection {
+            prompt_override: "colder palette".into(),
+            ..derived.clone()
+        };
+        assert!(style_prompt_origin(Some(&overridden)).contains("你的改词"));
+    }
+
+    /// 已锁定摘要：下游要照它消费，关键字段（署名/结论/最终提示词/锚图指纹/契约哈希）
+    /// 一条都不能缺。
+    #[test]
+    fn style_lock_rows_expose_every_field_downstream_consumes() {
+        let anchor_set = StyleAnchorSet {
+            schema_version: "4.0.0".into(),
+            anchor_version: 3,
+            generated_at: "2026-09-01T00:00:00Z".into(),
+            project_name: "霜落峡谷防卫计划".into(),
+            genre_pack: "lane_defense".into(),
+            source_revision: 12,
+            source_anchors: vec![adm4_contracts::SpecRef::new("profile/u.genre")],
+            selected_style_id: "STYLE-01-readable_production".into(),
+            selected_title: "清晰量产".into(),
+            preset_key: "readable_production".into(),
+            final_prompt: "colder palette, thicker outlines".into(),
+            prompt_overridden: true,
+            palette: vec!["#2F4858".into(), "#F6C445".into()],
+            anchors: vec![adm4_app::StyleAnchorImage {
+                anchor_id: "ANCHOR-STYLE-01-readable_production-selected_preview".into(),
+                role: "selected_preview".into(),
+                image_path: "anchors/v3/STYLE-01-readable_production.png".into(),
+                image_sha256: "sha256:0123456789abcdef".into(),
+                image_bytes: 4096,
+                media_type: "image/png".into(),
+                requested_width: 512,
+                requested_height: 512,
+                prompt: "colder palette, thicker outlines".into(),
+                provider_id: "openai_images".into(),
+                model: "gpt-image-1".into(),
+            }],
+            confirmation: adm4_app::StyleConfirmation {
+                selected_style_id: "STYLE-01-readable_production".into(),
+                selected_title: "清晰量产".into(),
+                selected_image_path: "anchors/v3/STYLE-01-readable_production.png".into(),
+                notes: "四个方向都看过大图，选它".into(),
+                actor: "主美甲".into(),
+                at: "2026-09-01T00:00:00Z".into(),
+                anchor_version: 3,
+                ..adm4_app::StyleConfirmation::default()
+            },
+        };
+        let contract = StyleApplicationContract::derive(&anchor_set, "2026-09-01T00:00:00Z")
+            .expect("派生应用契约");
+        let rows = style_lock_rows(&anchor_set, &contract);
+        let dump = rows
+            .iter()
+            .map(|row| format!("{}|{}", row.title, row.text))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in [
+            "已锁定风格锚点 v3",
+            "清晰量产",
+            "readable_production",
+            "主美甲",
+            "四个方向都看过大图",
+            "colder palette, thicker outlines",
+            "anchors/v3/STYLE-01-readable_production.png",
+            "sha256:01234",
+            "分用途约束 5 条",
+            "地块/图标/界面/背景/特效",
+        ] {
+            assert!(dump.contains(needle), "锁定摘要缺「{needle}」：\n{dump}");
+        }
+        assert_eq!(rows[0].kind, "header");
+    }
+
+    /// 大图覆盖层文案：方向说明 + 提示词全文 + 指纹 + 失败原因（看图时要知道要求的是什么）。
+    #[test]
+    fn style_viewer_texts_carry_the_full_prompt_not_the_summary() {
+        let mut row = style_row("STYLE-02-concept_painting", StyleFitRisk::Caution);
+        row.title = "概念绘画".into();
+        row.image_sha256 = "sha256:deadbeef".into();
+        row.prompt_overridden = true;
+        row.last_failure = "图像 API 返回 429".into();
+        let full_prompt = "painterly concept art, soft brushwork, atmospheric depth, layered value composition, game art style board";
+        let (title, detail) = style_viewer_texts(&row, full_prompt);
+        assert!(title.contains("概念绘画"), "{title}");
+        assert!(title.contains("需注意"), "{title}");
+        assert!(detail.contains(full_prompt), "必须是提示词全文而不是摘要");
+        assert!(detail.contains("用户改词"), "{detail}");
+        assert!(detail.contains("sha256:deadbeef"), "{detail}");
+        assert!(detail.contains("图像 API 返回 429"), "{detail}");
+        assert!(detail.contains("次数不限"), "{detail}");
+    }
+
+    /// 图像通道表单：初值往返 + 必填缺失检查（值是否有效由后端判）。
+    #[test]
+    fn image_provider_form_round_trips_and_reports_missing_fields() {
+        let empty = image_provider_form(None);
+        assert!(empty.provider_id.is_empty() && empty.size.is_empty());
+
+        let config = HttpImageProviderConfig {
+            provider_id: "openai_images".into(),
+            base_url: "https://api.openai.com/v1".into(),
+            model: "gpt-image-1".into(),
+            api_key_ref: "env:OPENAI_API_KEY".into(),
+            timeout_secs: 300,
+            size: "1024x1024".into(),
+        };
+        let form = image_provider_form(Some(&config));
+        assert_eq!(form.provider_id, "openai_images");
+        assert_eq!(form.size, "1024x1024");
+        assert_eq!(form.timeout_secs, "300");
+        assert!(
+            missing_image_provider_fields(
+                &form.provider_id,
+                &form.base_url,
+                &form.model,
+                &form.api_key_ref,
+                &form.size,
+                &form.timeout_secs
+            )
+            .is_empty()
+        );
+        let missing = missing_image_provider_fields("openai_images", " ", "", "env:K", "  ", "300");
+        assert_eq!(
+            missing,
+            vec!["图像 Base URL", "图像模型名", "生成尺寸（如 1024x1024）"]
+        );
     }
 }

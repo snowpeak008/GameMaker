@@ -22,6 +22,27 @@ export struct TextRow { title: string, text: string, kind: string, target: strin
 // —— 访谈分层进度：一层一行 ——
 export struct LevelRow { label: string, text: string, current: bool }
 
+// —— G2 设计阶段风格门：风格网格的一张方向卡片 ——
+// image 由 Rust 侧从落盘的预览图加载（slint::Image::load_from_path）；has-image=false 时
+// 画「无图」占位框而不是画一张空图——那样看不出是「还没生成」还是「生成失败」。
+// fit-kind = ok/caution/unknown（适配结论的配色），badge 是推荐标记文案。
+export struct StyleCard {
+    id: string,
+    title: string,
+    description: string,
+    prompt-summary: string,
+    prompt-origin: string,
+    palette: string,
+    fit: string,
+    fit-kind: string,
+    badge: string,
+    failure: string,
+    image: image,
+    has-image: bool,
+    selected: bool,
+    active: bool,
+}
+
 // —— 流水线全版图：segment = C 段（实跑）/ P 段（Phase 2 占位）——
 // duration/running/can-rerun/can-inspect 全部由 Rust 侧按后端运行状态推出，UI 只渲染。
 export struct StageItem { id: string, name: string, status: string, summary: string, segment: string, duration: string, waiting: bool, running: bool, can-rerun: bool, can-inspect: bool, placeholder: bool }
@@ -122,6 +143,29 @@ export component MainWindow inherits Window {
     in property <bool> freeze-ready: false;
     in property <string> freeze-hint: "";
 
+    // ---------------- 右栏「风格」页签（G2 设计阶段风格锚点门）----------------
+    // 全部可用性由后端结果推出（D14）：style-can-generate 来自图像通道体检 + 项目是否打开，
+    // style-ready 来自服务层的就绪查询，UI 不自己判断「能不能确认」。
+    in property <[StyleCard]> style-cards: [];
+    in property <string> style-summary: "尚未打开项目";
+    in property <string> style-readiness: "";
+    in property <bool> style-ready: false;
+    in property <bool> style-can-generate: false;
+    in property <string> style-gate-hint: "";
+    in property <bool> style-running: false;
+    in property <[TextRow]> style-lock-rows: [];
+    /// 当前聚焦的方向 id（纯 UI 状态：单击卡片选中，双击看大图）。
+    in-out property <string> style-selected: "";
+    /// 改词编辑框：每次刷新由 Rust 侧填成该方向当前生效的**完整**提示词（不是摘要）。
+    in-out property <string> style-prompt: "";
+    in property <string> style-prompt-origin: "";
+    // 大图覆盖层（册 08 §2.3「双击图片全屏放大」）。
+    in-out property <bool> style-viewer-open: false;
+    in property <image> style-viewer-image;
+    in property <string> style-viewer-title: "";
+    in property <string> style-viewer-prompt: "";
+    in property <bool> style-viewer-has-image: false;
+
     // ---------------- 流水线 / 日志 ----------------
     in property <[StageItem]> stages: [];
     in property <string> pipeline-note: "";
@@ -142,6 +186,17 @@ export component MainWindow inherits Window {
     in property <[TextRow]> artifact-rows: [];
     in property <string> artifact-doc: "";
     in property <string> artifact-hint: "";
+
+    // ---------------- 图像通道配置（风格门要看真图）----------------
+    in property <[string]> image-presets: [];
+    in-out property <string> image-provider-id: "";
+    in-out property <string> image-base-url: "";
+    in-out property <string> image-model: "";
+    in-out property <string> image-key-ref: "";
+    in-out property <string> image-size: "";
+    in-out property <string> image-timeout: "";
+    in property <string> image-status: "图像通道：尚未诊断";
+    in property <bool> image-available: false;
 
     // ---------------- AI Provider 配置与体检 ----------------
     in property <[string]> ai-presets: [];
@@ -238,6 +293,20 @@ export component MainWindow inherits Window {
     callback ai-invoke-check();
     callback ai-save-secret(string, string); // 密钥名, 密钥值（值只落 config/secrets.json）
     callback ai-disable();
+
+    // 图像通道配置（config/app.json 的 image_provider 段）
+    callback image-apply-preset(string);
+    callback image-save(string, string, string, string, string, string); // id, url, model, key-ref, size, timeout
+    callback image-disable();
+
+    // G2 风格门：GUI 只转发（署名/结论必填、无图不许确认、未确认阻断下游都在服务层判）
+    callback style-refresh();
+    callback style-generate(bool);                    // force：true = 推翻重生成/重新选择
+    callback style-select(string);                    // 单击卡片：聚焦方向
+    callback style-open-viewer(string);               // 双击卡片：看大图
+    callback style-regenerate(string, string);        // 方向 id, 新提示词
+    callback style-clear-prompt(string);              // 回到锚定真源的派生提示词
+    callback style-confirm(string, string, string);   // 方向 id, 署名, 结论
 
     // 另存模板 / 工作台重置 / 存档体检
     callback template-export(string, string, string, string, string); // id, 模板名, 别名, 审核人, 审核结论
@@ -1186,6 +1255,14 @@ export component MainWindow inherits Window {
                                     primary: root.right-tab == "validation";
                                     clicked => { root.right-tab = "validation"; }
                                 }
+                                Button {
+                                    text: "风格";
+                                    primary: root.right-tab == "style";
+                                    clicked => {
+                                        root.right-tab = "style";
+                                        root.style-refresh();
+                                    }
+                                }
                             }
 
                             if root.right-tab == "summary": ListView {
@@ -1315,6 +1392,239 @@ export component MainWindow inherits Window {
                                                 color: row.kind == "bad"
                                                     ? #cf222e
                                                     : (row.kind == "ok" ? #1a7f37 : #1f2328);
+                                                overflow: elide;
+                                            }
+                                            if row.kind != "header": Text {
+                                                text: row.text;
+                                                font-size: 10px;
+                                                color: #57606a;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---------- 「风格」页签：设计阶段美术风格锚点门（册 08 §2）----------
+                            if root.right-tab == "style": VerticalLayout {
+                                vertical-stretch: 1;
+                                spacing: 4px;
+
+                                Text {
+                                    text: root.style-summary;
+                                    height: 42px;
+                                    font-size: 11px;
+                                    color: #1f2328;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.style-readiness;
+                                    height: 42px;
+                                    font-size: 10px;
+                                    color: root.style-ready ? #1a7f37 : #cf222e;
+                                    wrap: word-wrap;
+                                }
+                                if root.style-gate-hint != "": Text {
+                                    text: root.style-gate-hint;
+                                    height: 54px;
+                                    font-size: 10px;
+                                    color: #9a6700;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    height: 28px;
+                                    spacing: 4px;
+                                    Button {
+                                        text: "生成方向";
+                                        primary: true;
+                                        enabled: root.style-can-generate && !root.style-running;
+                                        clicked => { root.style-generate(false); }
+                                    }
+                                    Button {
+                                        text: root.style-ready ? "重新选择" : "推翻重生成";
+                                        enabled: root.style-can-generate && !root.style-running;
+                                        clicked => { root.style-generate(true); }
+                                    }
+                                    Button { text: "刷新"; width: 56px; clicked => { root.style-refresh(); } }
+                                }
+                                if root.style-running: Text {
+                                    text: "生成中…（后台线程，界面保持可用；失败会如实报原因，不产占位图）";
+                                    height: 30px;
+                                    font-size: 10px;
+                                    color: #0969da;
+                                    wrap: word-wrap;
+                                }
+
+                                // 风格网格：单击选中，双击看大图（右栏宽 348px，故单列卡片）
+                                ListView {
+                                    vertical-stretch: 1;
+                                    for card in root.style-cards: Rectangle {
+                                        height: 116px;
+                                        background: card.active ? #eef4ff : #ffffff;
+                                        border-color: card.selected ? #1a7f37 : #eaeef2;
+                                        border-width: card.selected ? 2px : 1px;
+                                        border-radius: 4px;
+
+                                        TouchArea {
+                                            clicked => { root.style-select(card.id); }
+                                            double-clicked => { root.style-open-viewer(card.id); }
+                                        }
+                                        HorizontalLayout {
+                                            padding: 4px;
+                                            spacing: 5px;
+                                            Rectangle {
+                                                width: 96px;
+                                                background: #f6f8fa;
+                                                border-color: #d8dee4;
+                                                border-width: 1px;
+                                                if card.has-image: Image {
+                                                    source: card.image;
+                                                    width: parent.width - 4px;
+                                                    height: parent.height - 4px;
+                                                    image-fit: contain;
+                                                }
+                                                if !card.has-image: Text {
+                                                    text: "无预览图";
+                                                    font-size: 10px;
+                                                    color: #6e7781;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                spacing: 1px;
+                                                horizontal-stretch: 1;
+                                                Text {
+                                                    text: card.badge + card.title;
+                                                    font-size: 12px;
+                                                    font-weight: 700;
+                                                    color: #1f2328;
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    text: card.fit;
+                                                    font-size: 10px;
+                                                    color: card.fit-kind == "caution"
+                                                        ? #9a6700
+                                                        : (card.fit-kind == "ok" ? #1a7f37 : #6e7781);
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    text: card.prompt-origin + "：" + card.prompt-summary;
+                                                    font-size: 10px;
+                                                    color: #57606a;
+                                                    wrap: word-wrap;
+                                                    vertical-stretch: 1;
+                                                }
+                                                Text {
+                                                    text: card.palette;
+                                                    font-size: 10px;
+                                                    color: #6e7781;
+                                                    overflow: elide;
+                                                }
+                                                if card.failure != "": Text {
+                                                    text: card.failure;
+                                                    font-size: 10px;
+                                                    color: #cf222e;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 选中方向：改词重生成 + attended 确认（署名与结论由后端判必填）
+                                Rectangle {
+                                    height: 196px;
+                                    background: #f6f8fa;
+                                    border-color: #d8dee4;
+                                    border-width: 1px;
+                                    border-radius: 4px;
+                                    VerticalLayout {
+                                        padding: 5px;
+                                        spacing: 3px;
+                                        Text {
+                                            text: root.style-selected == ""
+                                                ? "（未选择方向：单击卡片选中，双击看大图）"
+                                                : "方向 " + root.style-selected;
+                                            height: 16px;
+                                            font-size: 11px;
+                                            font-weight: 700;
+                                            color: #1f2328;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: root.style-prompt-origin;
+                                            height: 14px;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            overflow: elide;
+                                        }
+                                        style-prompt-edit := TextEdit {
+                                            text <=> root.style-prompt;
+                                            height: 54px;
+                                            wrap: word-wrap;
+                                        }
+                                        HorizontalLayout {
+                                            height: 26px;
+                                            spacing: 3px;
+                                            Button {
+                                                text: "改词重生成";
+                                                enabled: root.style-selected != "" && root.style-can-generate && !root.style-running;
+                                                clicked => { root.style-regenerate(root.style-selected, style-prompt-edit.text); }
+                                            }
+                                            Button {
+                                                text: "回到派生提示词";
+                                                enabled: root.style-selected != "" && root.style-can-generate && !root.style-running;
+                                                clicked => { root.style-clear-prompt(root.style-selected); }
+                                            }
+                                            Button {
+                                                text: "看大图";
+                                                width: 64px;
+                                                enabled: root.style-selected != "";
+                                                clicked => { root.style-open-viewer(root.style-selected); }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            height: 26px;
+                                            spacing: 3px;
+                                            style-actor-edit := LineEdit {
+                                                placeholder-text: "确认人署名（必填）";
+                                                width: 118px;
+                                            }
+                                            style-note-edit := LineEdit {
+                                                placeholder-text: "确认结论（必填）";
+                                                horizontal-stretch: 1;
+                                            }
+                                        }
+                                        Button {
+                                            text: "确认并锁定风格锚点（另立新版）";
+                                            height: 26px;
+                                            primary: true;
+                                            enabled: root.style-selected != "" && !root.style-running;
+                                            clicked => {
+                                                root.style-confirm(
+                                                    root.style-selected,
+                                                    style-actor-edit.text,
+                                                    style-note-edit.text
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if root.style-lock-rows.length > 0: ListView {
+                                    height: 104px;
+                                    for row in root.style-lock-rows: Rectangle {
+                                        height: row.kind == "header" ? 24px : 40px;
+                                        background: row.kind == "header" ? #eaf5ea : #ffffff;
+                                        VerticalLayout {
+                                            padding: 3px;
+                                            Text {
+                                                text: row.title;
+                                                font-size: row.kind == "header" ? 11px : 10px;
+                                                font-weight: row.kind == "header" ? 700 : 400;
+                                                color: row.kind == "bad" ? #cf222e : #1f2328;
                                                 overflow: elide;
                                             }
                                             if row.kind != "header": Text {
@@ -2563,6 +2873,74 @@ export component MainWindow inherits Window {
             }
 
             // -----------------------------------------------------------------
+            // 覆盖面板四：风格预览大图（册 08 §2.3「双击图片全屏放大」）
+            //
+            // 全窗覆盖而不是在 348px 的右栏里放大：风格是靠看图定的，缩略图看不出材质
+            // 与可读性。点遮罩或「关闭」退出；提示词原文一并显示（看图时要知道要求的是什么）。
+            // -----------------------------------------------------------------
+            if root.style-viewer-open: Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                background: #10182099;
+
+                TouchArea {
+                    clicked => { root.style-viewer-open = false; }
+                }
+                Rectangle {
+                    x: 40px;
+                    y: 28px;
+                    width: parent.width - 80px;
+                    height: parent.height - 56px;
+                    background: #ffffff;
+                    border-color: #54aeff;
+                    border-width: 2px;
+                    border-radius: 8px;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 6px;
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 8px;
+                            Text {
+                                text: root.style-viewer-title;
+                                font-size: 15px;
+                                font-weight: 700;
+                                color: #1f2328;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                            Button { text: "关闭"; width: 76px; clicked => { root.style-viewer-open = false; } }
+                        }
+                        if root.style-viewer-has-image: Image {
+                            source: root.style-viewer-image;
+                            vertical-stretch: 1;
+                            image-fit: contain;
+                        }
+                        if !root.style-viewer-has-image: Text {
+                            text: "该方向还没有预览图（尚未生成，或上一轮生成失败——原因见卡片上的红字）。";
+                            vertical-stretch: 1;
+                            font-size: 12px;
+                            color: #cf222e;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: root.style-viewer-prompt;
+                            height: 76px;
+                            font-size: 11px;
+                            color: #57606a;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
             // 覆盖面板三：AI Provider 配置与体检（全局，任何视图下可开）
             // -----------------------------------------------------------------
             if root.ai-panel-open: Rectangle {
@@ -2711,6 +3089,65 @@ export component MainWindow inherits Window {
                         font-size: 11px;
                         color: #6e7781;
                         overflow: elide;
+                    }
+
+                    // ---- 图像通道（config/app.json 的 image_provider 段）----
+                    // 与文本通道分开配：同一厂商的图像与文本是两个 endpoint、两套模型名，
+                    // 合成一份配置会让「文本能用」被当成「图像也能用」（R7 误报）。
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        Text { text: "图像通道"; width: 80px; font-size: 12px; font-weight: 700; color: #1f2328; vertical-alignment: center; }
+                        image-preset-box := ComboBox { model: root.image-presets; width: 180px; }
+                        Button {
+                            text: "套用 preset";
+                            width: 104px;
+                            clicked => { root.image-apply-preset(image-preset-box.current-value); }
+                        }
+                        Text {
+                            text: root.image-status;
+                            font-size: 11px;
+                            color: root.image-available ? #1a7f37 : #cf222e;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        image-id := LineEdit { text <=> root.image-provider-id; placeholder-text: "provider id，例如 openai_images"; width: 200px; }
+                        image-model-edit := LineEdit { text <=> root.image-model; placeholder-text: "模型，例如 gpt-image-1"; horizontal-stretch: 1; }
+                        image-size-edit := LineEdit { text <=> root.image-size; placeholder-text: "1024x1024"; width: 110px; }
+                        image-timeout-edit := LineEdit { text <=> root.image-timeout; placeholder-text: "300"; width: 80px; }
+                    }
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        image-url := LineEdit { text <=> root.image-base-url; placeholder-text: "图像 base_url，例如 https://api.openai.com/v1"; horizontal-stretch: 1; }
+                        image-key := LineEdit { text <=> root.image-key-ref; placeholder-text: "env:OPENAI_API_KEY 或 named:my_key"; width: 260px; }
+                        Button {
+                            text: "保存图像通道";
+                            width: 124px;
+                            clicked => {
+                                root.image-save(
+                                    image-id.text,
+                                    image-url.text,
+                                    image-model-edit.text,
+                                    image-key.text,
+                                    image-size-edit.text,
+                                    image-timeout-edit.text
+                                );
+                            }
+                        }
+                        Button { text: "停用图像通道"; width: 116px; clicked => { root.image-disable(); } }
+                    }
+                    Text {
+                        text: "图像通道只被设计工作台的「风格」页签使用（看真图定风格锚点）。未配置时风格生成入口显式 blocked——不产占位图冒充真图（R7）。尺寸写错在保存时就会被拒，不会静默回落到默认值。";
+                        height: 44px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
                     }
                     ListView {
                         vertical-stretch: 1;

@@ -13,6 +13,7 @@
 //! 本波（G1）的全部执行器都是[诚实空实现](runner::PendingExecutor)：如实返回 `Blocked`
 //! 与「待哪一波补什么」，**绝不返回假成功**（R7）。
 
+pub mod art;
 pub mod engine;
 pub mod governance;
 mod registry;

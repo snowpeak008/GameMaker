@@ -1,9 +1,10 @@
 //! 端到端集成测试：设计空间校验 → 创建项目 → 手动创作 → 红队 → 冻结门五道 →
 //! C0-C6 全链（确定性脚本 AI）→ 两个人工门确认 → 全绿。
 
-use adm4_ai::ScriptedProvider;
+use adm4_ai::{ScriptedImageProvider, ScriptedProvider};
 use adm4_app::{
-    AppConfig, AppServices, CONTRACT_FILE, DOCUMENT_FILE, InterviewTurnDto, save_config,
+    AppConfig, AppServices, CONTRACT_FILE, DOCUMENT_FILE, InterviewTurnDto, StyleGenerationOptions,
+    save_config,
 };
 use adm4_archive::DataRoot;
 use adm4_authoring::TemplateMode;
@@ -148,6 +149,7 @@ fn full_chain_from_space_to_signed_phase1() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -413,6 +415,7 @@ fn red_lines_hold_in_end_to_end_paths() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -522,6 +525,7 @@ fn services_with_isolated_space(temp: &Path) -> AppServices {
         &AppConfig {
             design_space_root: space_root.to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -1004,6 +1008,7 @@ fn dangling_row_reference_blocks_completeness_and_consistency_gate() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -1158,6 +1163,7 @@ fn workbench_aggregates_work_on_migrated_space() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -1634,6 +1640,7 @@ fn project_rename_validates_and_logs() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -1703,6 +1710,7 @@ fn design_space_cache_is_hit_and_behaviourally_equivalent() {
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
+            image_provider: None,
         },
     )
     .unwrap();
@@ -3744,6 +3752,337 @@ fn build_facade_runs_the_honest_empty_plan_without_faking_success() {
             .any(|entry| entry.category == "build" && entry.message.contains("被用户取消")),
         "取消不是失败，但必须可追查"
     );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// G2 场景：设计阶段美术风格锚点门（册 08 §2，选项 A）全链
+//
+// 走完 未配图像通道诚实 blocked → 生成 3-5 方向（提示词锚定真源）→ 改词重生成 →
+// attended 署名确认 → 锁定 style_anchor_set / style_application_contract →
+// P2 就绪查询转绿 → 重选风格另立新版（旧版不动）。
+// 全程零网络：图像走 `ScriptedImageProvider`（确定性占位 PNG，provider id 落盘可辨）。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn style_anchor_gate_runs_the_full_design_stage_chain() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_g2_style_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    // 风格门在冻结**之前**也能跑；这里复用已冻结夹具是为了拿一个画像点齐备的项目，
+    // 并顺带验证「冻结之后重选风格」照旧另立新版。
+    let archive_id = frozen_lane_defense_project_named(&services, &ai, "风格门验证项目");
+
+    // --- ① 没配图像通道：生成入口诚实 blocked，且必须说清缺什么配置 ---
+    let doctor = services.image_doctor();
+    assert!(!doctor.available, "本用例不配置图像通道");
+    assert!(
+        doctor.detail.contains("image_provider"),
+        "体检要指名缺哪一段配置：{}",
+        doctor.detail
+    );
+    let error = services
+        .style_generate(&archive_id, 3, false)
+        .expect_err("没有图像通道就是 blocked，不许产占位图冒充（R7）");
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::AiUnavailable);
+    for needle in ["image_provider", "base_url", "占位图"] {
+        assert!(error.message.contains(needle), "{}", error.message);
+    }
+
+    // --- ② 还没生成：状态可查，下游可判定被阻断 ---
+    let status = services.style_status(&archive_id).unwrap();
+    assert!(!status.session_present);
+    assert!(status.directions.is_empty());
+    assert!(status.anchor_versions.is_empty());
+    assert!(!status.readiness.ready);
+    assert!(
+        status
+            .readiness
+            .detail
+            .contains(adm4_app::STYLE_APPLICATION_CONTRACT_NOT_APPROVED),
+        "阻断结论必须带册 08 §3 的阻断码：{}",
+        status.readiness.detail
+    );
+    let readiness = services.style_readiness(&archive_id).unwrap();
+    let blocked = readiness.require_ready().expect_err("未确认必须阻断下游");
+    assert_eq!(blocked.kind, adm4_foundation::Adm4ErrorKind::Blocked);
+    assert!(services.style_session(&archive_id).unwrap().is_none());
+
+    // --- ③ 生成 4 个方向（零网络的确定性图像通道）---
+    let images = ScriptedImageProvider::new();
+    let options = StyleGenerationOptions {
+        direction_count: 4,
+        preview_width: 32,
+        preview_height: 24,
+        force: false,
+    };
+    let session = services
+        .style_generate_with(&archive_id, &images, &options)
+        .expect("生成风格方向");
+    assert_eq!(session.directions.len(), 4);
+    assert_eq!(session.rounds.len(), 1);
+    assert_eq!(session.recommended_count(), 1, "恰好标一个推荐方向");
+    // 提示词锚定真源：夹具确认了 4 个画像点（u.genre / u.platform / u.business_model / u.experience）。
+    assert_eq!(session.source_anchors.len(), 4);
+    assert!(
+        session
+            .source_summary
+            .iter()
+            .any(|line| line.starts_with("u.genre")),
+        "真源摘要要指得出具体决策点：{:?}",
+        session.source_summary
+    );
+    for direction in &session.directions {
+        assert!(direction.style_id.starts_with("STYLE-"));
+        assert!(
+            direction.derived_prompt.contains("风格门验证项目"),
+            "提示词里要有项目名：{}",
+            direction.derived_prompt
+        );
+        assert!(
+            direction.derived_prompt.contains("lane_defense"),
+            "提示词里要有品类包：{}",
+            direction.derived_prompt
+        );
+        assert_eq!(direction.prompt_anchors.len(), 4);
+        let preview = direction.preview.as_ref().expect("每个方向都要有预览图");
+        assert_eq!(preview.provider_id, "scripted_image");
+        // 呈现层按相对路径拿绝对路径加载图片；文件必须真在。
+        let path = services
+            .style_image_path(&archive_id, &preview.image_path)
+            .expect("预览图应可定位");
+        assert!(path.is_file());
+        let bytes = std::fs::read(&path).expect("读预览图");
+        assert_eq!(&bytes[..4], b"\x89PNG", "落盘的是真 PNG，界面才画得出来");
+    }
+    assert_eq!(images.calls().len(), 4, "一个方向一次图像调用");
+
+    // 越界路径与不存在的图一律显式报错（不返回一个让界面显示空白的路径）。
+    assert_eq!(
+        services
+            .style_image_path(&archive_id, "../../secrets.json")
+            .expect_err("越界路径必须被拒")
+            .kind,
+        adm4_foundation::Adm4ErrorKind::PathEscape
+    );
+    assert!(
+        services
+            .style_image_path(&archive_id, "previews/r0001/STYLE-99-nope.png")
+            .is_err()
+    );
+
+    // --- ④ 对话式改词重生成（次数不限，每轮留痕）---
+    let target = session.directions[1].style_id.clone();
+    let derived = session.directions[1].derived_prompt.clone();
+    let updated = services
+        .style_regenerate_with(
+            &archive_id,
+            &target,
+            "colder palette, dusk lighting, thicker outlines",
+            &images,
+        )
+        .expect("改词重生成");
+    let direction = updated.direction(&target).expect("方向仍在");
+    assert_eq!(
+        direction.effective_prompt(),
+        "colder palette, dusk lighting, thicker outlines"
+    );
+    assert_eq!(direction.derived_prompt, derived, "派生提示词不被改词覆盖");
+    assert_eq!(updated.rounds.len(), 2);
+    assert_eq!(
+        direction
+            .preview
+            .as_ref()
+            .map(|item| item.round_id.as_str()),
+        Some("r0002")
+    );
+
+    // R5：提示词里写参考游戏名一律被拒（册 08 §5 把提示词列为强制扫描点）。
+    let error = services
+        .style_regenerate_with(
+            &archive_id,
+            &target,
+            "make it look like Kingdom Rush",
+            &images,
+        )
+        .expect_err("提示词命中换皮词必须被拒");
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+    assert!(error.message.contains("kingdom rush"), "{}", error.message);
+    // 被拒之后工作态没被污染。
+    assert_eq!(
+        services
+            .style_session(&archive_id)
+            .unwrap()
+            .and_then(|session| session.direction(&target).cloned())
+            .map(|direction| direction.prompt_override)
+            .unwrap_or_default(),
+        "colder palette, dusk lighting, thicker outlines"
+    );
+
+    // --- ⑤ attended 确认：署名与结论双必填（R3），拒绝在服务层 ---
+    for (actor, note) in [("   ", "就它了"), ("主美甲", "  ")] {
+        let error = services
+            .style_confirm(&archive_id, &target, actor, note)
+            .expect_err("署名与结论缺一不可");
+        assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::RedLine);
+        assert!(error.message.contains("R3"), "{}", error.message);
+    }
+    assert!(
+        !services.style_readiness(&archive_id).unwrap().ready,
+        "被拒之后仍旧未确认"
+    );
+
+    // --- ⑥ 确认锁定：四件产物齐备且互相对得上 ---
+    let outcome = services
+        .style_confirm(
+            &archive_id,
+            &target,
+            "主美甲",
+            "四个方向都看过大图，选它兼顾可读性与氛围",
+        )
+        .expect("确认");
+    let anchor_set = &outcome.anchor_set;
+    assert_eq!(anchor_set.anchor_version, 1);
+    assert_eq!(anchor_set.selected_style_id, target);
+    assert_eq!(
+        anchor_set.final_prompt,
+        "colder palette, dusk lighting, thicker outlines"
+    );
+    assert!(anchor_set.prompt_overridden);
+    assert_eq!(anchor_set.project_name, "风格门验证项目");
+    assert_eq!(anchor_set.source_anchors.len(), 4);
+    assert_eq!(anchor_set.confirmation.actor, "主美甲");
+    assert_eq!(anchor_set.anchors.len(), 1);
+    let anchor = anchor_set.selected_anchor().expect("选中锚图");
+    assert_eq!(anchor.image_path, format!("anchors/v1/{target}.png"));
+    assert!(
+        services
+            .style_image_path(&archive_id, &anchor.image_path)
+            .unwrap()
+            .is_file()
+    );
+    let contract = &outcome.application_contract;
+    assert_eq!(contract.style_constraints.len(), 5, "五类用途全覆盖");
+    assert_eq!(contract.prompt_prefix, anchor_set.final_prompt);
+    assert!(contract.matches(anchor_set).is_ok());
+    // 回读与内存里的一致。
+    assert_eq!(
+        services.style_anchor_set(&archive_id, 1).unwrap(),
+        *anchor_set
+    );
+    assert_eq!(
+        services.style_application_contract(&archive_id, 1).unwrap(),
+        *contract
+    );
+    assert_eq!(
+        services
+            .style_fit_report(&archive_id, 1)
+            .unwrap()
+            .entries
+            .len(),
+        4
+    );
+
+    // --- ⑦ P2 就绪查询转绿（G1 把「风格锚点集」声明为 P2 的外部输入）---
+    let readiness = services.style_readiness(&archive_id).unwrap();
+    assert!(readiness.ready);
+    assert_eq!(readiness.anchor_version, 1);
+    assert_eq!(readiness.selected_style_id, target);
+    assert_eq!(readiness.anchor_hash, contract.source_anchor_hash);
+    assert!(readiness.require_ready().is_ok());
+    let status = services.style_status(&archive_id).unwrap();
+    assert_eq!(status.anchor_versions, vec![1]);
+    assert_eq!(status.confirmed_actor, "主美甲");
+    assert_eq!(
+        status
+            .directions
+            .iter()
+            .filter(|row| row.is_selected)
+            .count(),
+        1
+    );
+    assert!(!status.anchor_stale, "锚点锚的就是当前 revision");
+
+    // --- ⑧ 重选风格：另立 v2，v1 一个字节都不动（D4 不可变历史）---
+    let anchors_dir = services
+        .archives
+        .content_dir(&archive_id)
+        .join(adm4_app::STYLE_SECTION)
+        .join("anchors");
+    let v1_anchor_set = anchors_dir.join("v1").join(adm4_app::ANCHOR_SET_FILE);
+    let v1_bytes = std::fs::read(&v1_anchor_set).expect("读 v1");
+    let other = session.directions[0].style_id.clone();
+    let second = services
+        .style_confirm(&archive_id, &other, "主美乙", "试玩后改走清晰量产")
+        .expect("重选风格");
+    assert_eq!(second.anchor_set.anchor_version, 2);
+    assert_eq!(second.superseded_version, Some(1));
+    assert_eq!(
+        std::fs::read(&v1_anchor_set).expect("重读 v1"),
+        v1_bytes,
+        "旧版锚点集必须逐字节不变"
+    );
+    assert_eq!(
+        services
+            .style_anchor_set(&archive_id, 1)
+            .unwrap()
+            .selected_style_id,
+        target,
+        "v1 仍记着当时选的方向"
+    );
+    assert_eq!(
+        services
+            .style_readiness(&archive_id)
+            .unwrap()
+            .anchor_version,
+        2
+    );
+
+    // --- ⑨ 图像通道失败：原样上抛且记录在案，下一次可续跑（R7）---
+    let broken = ScriptedImageProvider::new();
+    broken.fail_with("图像 API 返回 503：上游不可用");
+    let mut forced = options.clone();
+    forced.force = true;
+    let error = services
+        .style_generate_with(&archive_id, &broken, &forced)
+        .expect_err("图像失败必须原样上抛");
+    assert_eq!(error.kind, adm4_foundation::Adm4ErrorKind::AiUnavailable);
+    assert!(error.message.contains("上游不可用"), "{}", error.message);
+    let after = services
+        .style_session(&archive_id)
+        .unwrap()
+        .expect("工作态");
+    assert_eq!(after.pending_style_ids().len(), 4, "失败的方向如实标缺图");
+    // 已锁定的两版历史一概不受影响：下游照旧按 v2 生产。
+    let readiness = services.style_readiness(&archive_id).unwrap();
+    assert!(readiness.ready);
+    assert_eq!(readiness.anchor_version, 2);
+
+    let recovered = services
+        .style_generate_with(&archive_id, &images, &options)
+        .expect("续跑补齐");
+    assert!(recovered.pending_style_ids().is_empty());
+
+    // --- ⑩ 审计：风格动作进运行日志（分类 style）---
+    let logs = services.log.tail(400).unwrap();
+    for needle in ["风格方向生成", "风格锚点 v1 已确认", "被 v2 取代"] {
+        assert!(
+            logs.iter()
+                .any(|entry| entry.category == "style" && entry.message.contains(needle)),
+            "运行日志缺「{needle}」"
+        );
+    }
+    assert!(
+        logs.iter().any(|entry| entry.category == "style"
+            && entry.message.contains("生成失败")
+            && entry.message.contains("不产占位图")),
+        "生成失败也必须留痕（R7）"
+    );
+
+    // --- ⑪ 存档体检仍一致：风格产物纳入内容指纹 ---
+    let doctor = services.project_doctor(&archive_id).unwrap();
+    assert!(doctor.healthy, "{:?}", doctor.problems);
 
     std::fs::remove_dir_all(&temp).ok();
 }

@@ -4,7 +4,10 @@ use crate::deliverable::DeliverableManifest;
 use crate::pipeline_artifact::StageArtifactView;
 use crate::runlog::RunLog;
 use crate::sdk::{SdkKnowledgeBase, SdkSnapshot};
-use adm4_ai::{AiProvider, AiRequest, HttpProviderConfig, OpenAiCompatibleProvider, SecretRef};
+use adm4_ai::{
+    AiProvider, AiRequest, HttpImageProviderConfig, HttpProviderConfig, ImageProvider,
+    OpenAiCompatibleImageProvider, OpenAiCompatibleProvider, SecretRef,
+};
 use adm4_archive::{
     ArchiveLock, ArchiveManifest, ArchiveStore, DataRoot, export_package, import_package,
 };
@@ -12,6 +15,11 @@ use adm4_authoring::{
     AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, GateFinding,
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
     WorkbenchResetReport, evaluate_freeze_gates, execute_freeze, run_red_team,
+};
+use adm4_build::art::style_anchor::{
+    STYLE_SECTION, StyleAnchorSet, StyleAnchorStore, StyleApplicationContract, StyleFitReport,
+    StyleGate, StyleGateStatus, StyleGenerationOptions, StyleLockOutcome, StyleReadiness,
+    StyleSession, StyleSourceFact, StyleSourceFacts,
 };
 use adm4_build::{
     ArtifactKind, BuildContext, PendingStage, Phase2Runner, pending_stage, phase2_artifacts,
@@ -1458,6 +1466,305 @@ impl AppServices {
     }
 
     // ------------------------------------------------------------------
+    // 设计阶段美术风格锚点门（册 08 §2，选项 A）
+    //
+    // 这道门在**冻结之前**跑：用户看真图、改词、反复重出图、署名确认，锁定
+    // `style_anchor_set` + `style_application_contract`。Phase 2 的 P2 资产生产只消费
+    // 锁定产物（G1 的制品注册表把「风格锚点集」声明为 P2 的外部输入），因此本组还提供
+    // 「锚点是否就绪」的可判定查询给 runner/呈现层用。
+    //
+    // 门面在这里只做四件事：取真源、装配换皮扫描器、注入图像通道、落日志与指纹。
+    // 一切状态迁移与拒绝判定在 `adm4_build::art::style_anchor`（D14：GUI/CLI 无业务规则）。
+    // ------------------------------------------------------------------
+
+    /// 风格门的产物仓（`content/style`），**建目录**：写入路径用。
+    fn style_store(&self, archive_id: &str) -> Adm4Result<StyleAnchorStore> {
+        let store = self.style_store_read(archive_id)?;
+        ensure_dir(store.root())?;
+        Ok(store)
+    }
+
+    /// 风格门的产物仓（只读路径用，**不建目录**）。
+    ///
+    /// 只读查询不该改动存档：建一个空 `style/` 目录会让内容指纹变化，
+    /// 于是「只查了个状态」之后存档体检报不一致——那是一条查不出来源的假警报。
+    fn style_store_read(&self, archive_id: &str) -> Adm4Result<StyleAnchorStore> {
+        Ok(StyleAnchorStore::new(
+            self.require_content_dir(archive_id)?.join(STYLE_SECTION),
+        ))
+    }
+
+    /// 风格门的真源事实：创作态里**已确认**的画像决策点（册 08 §2.1 的「L0-L2 画像」）。
+    ///
+    /// 取点口径与 [`AppServices::project_profile`] **完全同源**（品类包的 `profile_points`
+    /// 清单，缺清单回退 L0/L1；未确认的一律不上卡）。这里刻意不另开一套取点规则：
+    /// 那就是第二真源（D22），而且会让「界面上的画像」与「提示词锚的事实」各说各话。
+    ///
+    /// 风格门在冻结前跑，所以真源**不是** `GameSpec`（那时还没有），而是创作态。
+    /// `source_revision` 随锚点集落盘，用来判定「锁风格之后设计又变了没有」。
+    fn style_source_facts(&self, archive_id: &str) -> Adm4Result<StyleSourceFacts> {
+        let profile = self.project_profile(archive_id)?;
+        let revision = self.load_authoring_state(archive_id)?.revision;
+        let entries = profile
+            .fields
+            .into_iter()
+            .map(|field| {
+                // 主选排在最前：它是这个多选点的代表答案，提示词里也该先出现。
+                let mut options = field.selected;
+                options.sort_by_key(|option| !option.is_primary);
+                StyleSourceFact {
+                    decision_id: field.decision_id,
+                    question: field.label,
+                    option_labels: options.into_iter().map(|option| option.label).collect(),
+                }
+            })
+            .collect();
+        Ok(StyleSourceFacts {
+            project_name: profile.project_name,
+            genre_pack: profile.genre_pack,
+            source_revision: revision,
+            entries,
+        })
+    }
+
+    /// 风格提示词的换皮扫描器（R5，册 08 §5 把提示词列为强制扫描点）。
+    ///
+    /// 用**当前**项目名做豁免（提示词里必然含项目名）；口径与流水线落盘钩子同源，
+    /// 见 [`AppServices::skin_scanner_for_project`] 的作用域说明。
+    fn style_skin_scanner(&self, archive_id: &str) -> Adm4Result<SkinScanner> {
+        let state = self.load_authoring_state(archive_id)?;
+        let space = self.load_space_shared(&state.genre_pack)?;
+        self.skin_scanner_for_project(&space, archive_id, &state.project_name)
+    }
+
+    /// 生成参数：预览尺寸取图像通道配置里的 `size`，没配图像通道则用默认值。
+    ///
+    /// 为什么尺寸不由调用方决定：同一个图像模型往往只接受几种固定尺寸，那是**通道**的
+    /// 属性。让界面自己填尺寸的结果是用户填了个模型不接受的值，等一次超时才知道。
+    pub fn style_options(
+        &self,
+        direction_count: usize,
+        force: bool,
+    ) -> Adm4Result<StyleGenerationOptions> {
+        let mut options = StyleGenerationOptions {
+            direction_count,
+            force,
+            ..StyleGenerationOptions::default()
+        };
+        if let Some(config) = self.read_config()?.image_provider.clone() {
+            let (width, height) = config.parse_size()?;
+            options.preview_width = width;
+            options.preview_height = height;
+        }
+        options.validate()?;
+        Ok(options)
+    }
+
+    /// 生成风格方向 + 预览图（走配置的真实图像通道；未配置 → 显式 blocked）。
+    pub fn style_generate(
+        &self,
+        archive_id: &str,
+        direction_count: usize,
+        force: bool,
+    ) -> Adm4Result<StyleSession> {
+        let images = self.build_image_provider()?;
+        let options = self.style_options(direction_count, force)?;
+        self.style_generate_with(archive_id, images.as_ref(), &options)
+    }
+
+    /// [`AppServices::style_generate`] 的注入版：测试与冒烟传 `ScriptedImageProvider`（零网络）。
+    pub fn style_generate_with(
+        &self,
+        archive_id: &str,
+        images: &dyn ImageProvider,
+        options: &StyleGenerationOptions,
+    ) -> Adm4Result<StyleSession> {
+        let facts = self.style_source_facts(archive_id)?;
+        let scanner = self.style_skin_scanner(archive_id)?;
+        let store = self.style_store(archive_id)?;
+        let now = UtcTimestamp::now().to_iso8601();
+        let outcome = StyleGate::new(&store).generate(&facts, &scanner, images, options, &now);
+        // 成败都刷指纹与日志：失败那一轮的生成记录也落了盘（可停可续），
+        // 不刷指纹会让存档体检报「内容与指纹不一致」。
+        self.archives.refresh_fingerprint(archive_id)?;
+        match &outcome {
+            Ok(session) => self.log.append(
+                "style",
+                &format!(
+                    "项目 {archive_id} 风格方向生成：{} 个方向、{}x{} 预览、共 {} 轮记录（图像通道 {}）",
+                    session.directions.len(),
+                    session.preview_width,
+                    session.preview_height,
+                    session.rounds.len(),
+                    images.id()
+                ),
+            )?,
+            Err(error) => self.log.append(
+                "style",
+                &format!(
+                    "项目 {archive_id} 风格方向生成失败（原样上抛，不产占位图）：{}",
+                    error.message
+                ),
+            )?,
+        }
+        outcome
+    }
+
+    /// 对某方向提交改词并重生成预览（册 08 §2.3，次数不限）。
+    ///
+    /// `prompt_override` 传空串 = 清掉改词、回到锚定真源的派生提示词。
+    pub fn style_regenerate(
+        &self,
+        archive_id: &str,
+        style_id: &str,
+        prompt_override: &str,
+    ) -> Adm4Result<StyleSession> {
+        let images = self.build_image_provider()?;
+        self.style_regenerate_with(archive_id, style_id, prompt_override, images.as_ref())
+    }
+
+    /// [`AppServices::style_regenerate`] 的注入版。
+    pub fn style_regenerate_with(
+        &self,
+        archive_id: &str,
+        style_id: &str,
+        prompt_override: &str,
+        images: &dyn ImageProvider,
+    ) -> Adm4Result<StyleSession> {
+        let scanner = self.style_skin_scanner(archive_id)?;
+        let store = self.style_store(archive_id)?;
+        let now = UtcTimestamp::now().to_iso8601();
+        let outcome =
+            StyleGate::new(&store).regenerate(style_id, prompt_override, &scanner, images, &now);
+        self.archives.refresh_fingerprint(archive_id)?;
+        let note = if prompt_override.trim().is_empty() {
+            "清掉改词，回到派生提示词".to_string()
+        } else {
+            format!("改词「{}」", truncate_chars(prompt_override.trim(), 80))
+        };
+        match &outcome {
+            Ok(session) => self.log.append(
+                "style",
+                &format!(
+                    "项目 {archive_id} 风格方向 {style_id} 重生成（{note}）：第 {} 轮（图像通道 {}）",
+                    session.rounds.len(),
+                    images.id()
+                ),
+            )?,
+            Err(error) => self.log.append(
+                "style",
+                &format!(
+                    "项目 {archive_id} 风格方向 {style_id} 重生成失败（{note}）：{}",
+                    error.message
+                ),
+            )?,
+        }
+        outcome
+    }
+
+    /// attended 确认并锁定风格锚点（R3：署名 + 结论双必填，拒绝在服务层）。
+    ///
+    /// 落**新版本** `style/anchors/v{N}`；旧版本一个字节都不动（D4 不可变历史）。
+    /// 重选风格就是再确认一次 → v{N+1}，因此「这版游戏当时锁的什么风格」永远查得到。
+    pub fn style_confirm(
+        &self,
+        archive_id: &str,
+        style_id: &str,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<StyleLockOutcome> {
+        let store = self.style_store(archive_id)?;
+        let now = UtcTimestamp::now().to_iso8601();
+        let outcome = StyleGate::new(&store).confirm(style_id, actor, note, &now)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "style",
+            &format!(
+                "项目 {archive_id} 风格锚点 v{} 已确认：方向 {}（{}），署名 {}",
+                outcome.anchor_set.anchor_version,
+                outcome.anchor_set.selected_style_id,
+                outcome.anchor_set.selected_title,
+                outcome.anchor_set.confirmation.actor
+            ),
+        )?;
+        self.log.append(
+            "style",
+            &format!(
+                "项目 {archive_id} 风格锚点 v{} 确认结论：{}",
+                outcome.anchor_set.anchor_version, outcome.anchor_set.confirmation.notes
+            ),
+        )?;
+        if let Some(superseded) = outcome.superseded_version {
+            self.log.append(
+                "style",
+                &format!(
+                    "项目 {archive_id} 风格锚点 v{superseded} 被 v{} 取代：旧版不改不删，仍是可回溯的历史事实（D4）",
+                    outcome.anchor_set.anchor_version
+                ),
+            )?;
+        }
+        Ok(outcome)
+    }
+
+    /// 风格门状态（只读投影，CLI 与桌面共用一份口径）。
+    pub fn style_status(&self, archive_id: &str) -> Adm4Result<StyleGateStatus> {
+        let revision = self.load_authoring_state(archive_id)?.revision;
+        let store = self.style_store_read(archive_id)?;
+        StyleGate::new(&store).status(revision)
+    }
+
+    /// 风格门工作态原样读出（尚未生成过 → `Ok(None)`）。
+    ///
+    /// 呈现层需要完整的提示词（状态投影里的是截断摘要）：改词编辑框要把当前提示词
+    /// 原样填进去，截断过的文本一保存就把用户的提示词截短了。
+    pub fn style_session(&self, archive_id: &str) -> Adm4Result<Option<StyleSession>> {
+        self.style_store_read(archive_id)?.load_session()
+    }
+
+    /// **风格锚点是否就绪**：Phase 2 的 P2 资产生产把「风格锚点集」当外部输入消费，
+    /// 这就是那个「外部输入到位了没有」的查询。
+    ///
+    /// 未就绪不是错误（设计阶段本来就有没定风格的时刻），它是一条要显示给人看的结论；
+    /// 要真正阻断下游时调 [`StyleReadiness::require_ready`]。
+    pub fn style_readiness(&self, archive_id: &str) -> Adm4Result<StyleReadiness> {
+        self.style_store_read(archive_id)?.readiness()
+    }
+
+    pub fn style_anchor_set(&self, archive_id: &str, version: u32) -> Adm4Result<StyleAnchorSet> {
+        self.style_store_read(archive_id)?.load_anchor_set(version)
+    }
+
+    pub fn style_application_contract(
+        &self,
+        archive_id: &str,
+        version: u32,
+    ) -> Adm4Result<StyleApplicationContract> {
+        self.style_store_read(archive_id)?
+            .load_application_contract(version)
+    }
+
+    pub fn style_fit_report(&self, archive_id: &str, version: u32) -> Adm4Result<StyleFitReport> {
+        self.style_store_read(archive_id)?.load_fit_report(version)
+    }
+
+    /// 风格图（预览图/锚图）的绝对路径：呈现层按它加载图片。
+    ///
+    /// 只接受**相对路径**（锚点集与工作态里记的就是相对路径），越界组件一律拒；
+    /// 文件不存在也如实报错——返回一个不存在的路径会让界面显示空白而查不出原因。
+    pub fn style_image_path(&self, archive_id: &str, relative: &str) -> Adm4Result<PathBuf> {
+        let store = self.style_store_read(archive_id)?;
+        let safe = ensure_within_root(Path::new(relative))?;
+        let path = store.absolute(&safe.to_string_lossy());
+        if !path.is_file() {
+            return Err(Adm4Error::not_found(format!(
+                "风格图 {relative} 不在案（{}）：请重新生成该方向的预览图",
+                path.display()
+            )));
+        }
+        Ok(path)
+    }
+
+    // ------------------------------------------------------------------
     // 逆向产线（模板五步：S1 检索 → S2 映射 → S3 交叉核验 → S4 人工审核 → S5 认证）
     // ------------------------------------------------------------------
 
@@ -2025,6 +2332,74 @@ impl AppServices {
         let named = load_named_secrets(&self.data_root)?;
         let api_key = secret_ref.resolve(&named)?;
         Ok(Box::new(OpenAiCompatibleProvider::new(config, api_key)?))
+    }
+
+    /// 构建激活的**图像**Provider；未配置 = AiUnavailable（R7：显式失败，不产占位图）。
+    ///
+    /// 错误消息把「缺什么配置」说全（段名 + 字段名），因为这是绝大多数人第一次用风格门
+    /// 时会撞上的那道墙：只说「图像通道不可用」等于让人自己去猜配置长什么样。
+    pub fn build_image_provider(&self) -> Adm4Result<Box<dyn ImageProvider>> {
+        let Some(config) = self.read_config()?.image_provider.clone() else {
+            return Err(Adm4Error::ai_unavailable(
+                "未配置图像 Provider：请在 config/app.json 补一段 image_provider\
+                 （provider_id / base_url / model / api_key_ref，可选 size 如 1024x1024 与 timeout_secs）。\
+                 风格门必须看真图，没有图像通道就是 blocked——绝不用占位图冒充真图（R7）",
+            ));
+        };
+        let secret_ref = SecretRef::parse(&config.api_key_ref)?;
+        let named = load_named_secrets(&self.data_root)?;
+        let api_key = secret_ref.resolve(&named)?;
+        Ok(Box::new(OpenAiCompatibleImageProvider::new(
+            config, api_key,
+        )?))
+    }
+
+    /// 图像通道体检（零网络）：只查配置在不在、尺寸解析得出来、密钥解析得出来。
+    ///
+    /// 与 [`AppServices::ai_doctor`] 同款语义与同款回执结构（呈现层复用一套行模型）：
+    /// base_url 写错、密钥失效、模型名不存在时它照旧报「可用」——那些只能靠真生成一张图
+    /// 才能判定，而生成图是要花钱的，因此本方法不代劳。
+    pub fn image_doctor(&self) -> AiDoctorReport {
+        match self.build_image_provider() {
+            Ok(provider) => AiDoctorReport {
+                available: true,
+                provider_id: provider.id().to_string(),
+                detail: "图像通道已配置，尺寸与密钥均可解析（本检查零网络，不代表真能出图）"
+                    .to_string(),
+            },
+            Err(error) => AiDoctorReport {
+                available: false,
+                provider_id: String::new(),
+                detail: error.message,
+            },
+        }
+    }
+
+    /// 设置（或以 `None` 清空）激活的图像 Provider：落盘 `config/app.json` **并**更新内存配置。
+    ///
+    /// 与 [`AppServices::set_ai_provider`] 同一套热更新语义（两端一律走门面，
+    /// 不各自 load → 改 → save，否则磁盘变了而运行期快照没变）。
+    pub fn set_image_provider(&self, provider: Option<HttpImageProviderConfig>) -> Adm4Result<()> {
+        // 尺寸写错在保存时就拦下：等到生成时才报错，用户已经等了一次超时。
+        if let Some(config) = &provider {
+            config.parse_size()?;
+        }
+        let mut guard = self.write_config()?;
+        let mut updated = guard.clone();
+        updated.image_provider = provider;
+        save_config(&self.data_root, &updated)?;
+        let message = match &updated.image_provider {
+            Some(config) => format!(
+                "图像 Provider 配置更新：{}（模型 {}，尺寸 {}，密钥引用 {}）",
+                config.provider_id, config.model, config.size, config.api_key_ref
+            ),
+            None => {
+                "图像 Provider 配置已清空：风格门的生成入口将显式 blocked（无占位兜底）".to_string()
+            }
+        };
+        *guard = updated;
+        drop(guard);
+        self.log.append("style", &message)
     }
 
     /// 写入一条 named secret（`config/secrets.json`），供配置里的 `named:<名字>` 引用。

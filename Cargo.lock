@@ -188,6 +188,7 @@ dependencies = [
 name = "adm4-build"
 version = "0.1.0"
 dependencies = [
+ "adm4-ai",
  "adm4-contracts",
  "adm4-foundation",
  "adm4-pipeline",

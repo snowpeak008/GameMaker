@@ -10,6 +10,9 @@ adm4-foundation = { workspace = true }
 adm4-contracts = { workspace = true }
 adm4-spec = { workspace = true }
 adm4-pipeline = { workspace = true }
+# 设计阶段风格门要调图像通道生成预览图（art/style_anchor.rs）；
+# 它只认 `ImageProvider` trait，具体走 HTTP 还是脚本回放由调用方注入。
+adm4-ai = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
