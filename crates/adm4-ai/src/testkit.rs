@@ -91,18 +91,21 @@ impl AiProvider for ScriptedProvider {
 /// 走查都做不了（看到的是一片加载失败），风格门的交互就无法在离线环境验收。
 /// PNG 编码在这里是手写的（存储型 deflate + CRC32 + adler32，约百行纯函数），
 /// 因为任务卡禁止新增第三方依赖，而这点代码有确定性测试钉着。
+/// 克隆共享同一份调用记录与失败脚本（`Arc`）：测试常把一个克隆 `Box` 进服务层、
+/// 留原件断言"到底发了几次调用"——两者必须看见同一份账。
+#[derive(Clone)]
 pub struct ScriptedImageProvider {
     /// 已收到的请求（按序），供测试断言「服务层到底发了什么提示词、什么尺寸」。
-    calls: Mutex<Vec<ImageRequest>>,
+    calls: std::sync::Arc<Mutex<Vec<ImageRequest>>>,
     /// 非 None 时每次生成都按该原因失败：用于验证 R7 的失败原样上抛路径。
-    failure: Mutex<Option<String>>,
+    failure: std::sync::Arc<Mutex<Option<String>>>,
 }
 
 impl ScriptedImageProvider {
     pub fn new() -> Self {
         Self {
-            calls: Mutex::new(Vec::new()),
-            failure: Mutex::new(None),
+            calls: std::sync::Arc::new(Mutex::new(Vec::new())),
+            failure: std::sync::Arc::new(Mutex::new(None)),
         }
     }
 

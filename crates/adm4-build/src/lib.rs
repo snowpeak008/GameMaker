@@ -15,10 +15,16 @@
 
 pub mod art;
 pub mod engine;
+mod executors;
 pub mod governance;
+pub mod program;
 mod registry;
 mod runner;
 
+pub use executors::{
+    BUDGET_FILE, EngineSeedStatus, P0Executor, P2Executor, TwoLineContract, load_budget,
+    save_budget,
+};
 pub use registry::{
     ArtifactKind, StageArtifacts, phase2_artifacts, phase2_execution_order, producer_of,
     topological_order, validate_artifact_graph,

@@ -578,12 +578,23 @@ pub fn validation_rows(overview: &WorkbenchOverview) -> Vec<TextRow> {
     rows
 }
 
-/// 流水线全版图：C0-C6（实跑，状态来自 runner）+ P0-P5（Phase 2 占位，不断头）。
+/// 流水线全版图：C0-C6（实跑，状态来自 runner）+ P0-P5（G3 起 P0/P2 实跑，其余待实现）。
 ///
 /// 每行按 `docs/design/06` §4 要求带齐「状态 / 耗时 / 产物入口」：耗时来自
 /// `StageRecord::duration_seconds`，产物入口与重跑按钮的可用性一律由后端状态推出
 /// （从未开始执行的段没有产物可看、也没有产物需要作废，因此两个按钮都不出）。
+///
+/// 兼容入口：P 段无构建状态（等价 `stage_rows_with_build(run_state, None)`）。
 pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
+    stage_rows_with_build(run_state, None)
+}
+
+/// 全版图 + Phase 2 构建运行状态：P 段有记录显示真状态（含耗时），没跑过的段
+/// 按待实现登记表给文案（已实现但未跑 = 「待运行」）。
+pub fn stage_rows_with_build(
+    run_state: Option<&PipelineRunState>,
+    build_state: Option<&PipelineRunState>,
+) -> Vec<StageItem> {
     let mut rows: Vec<StageItem> = design_compile_registry()
         .into_iter()
         .map(|stage| {
@@ -622,24 +633,41 @@ pub fn stage_rows(run_state: Option<&PipelineRunState>) -> Vec<StageItem> {
         })
         .collect();
     rows.extend(phase2_registry().into_iter().map(|stage| {
-        // P 段的状态文案由 Phase 2 注册表给出（这一段待哪一波实现、要补什么），
-        // 不在 UI 里写死一句「另行立项」——后续波次把某段实现掉，这里跟着变。
-        let status = match pending_stage(&stage.id) {
-            Some(pending) => pending.blocked_reason(),
-            None => "待运行".to_string(),
+        let record = build_state.and_then(|state| state.stages.get(&stage.id));
+        // 有真实运行记录 → 与 C 段同一套状态渲染；没有 → 待实现文案（未实现段）
+        // 或「待运行」（已实现但还没跑）。文案不在 UI 里写死，跟着注册表与登记表变。
+        let (status, waiting, placeholder) = match record.map(|item| &item.status) {
+            Some(StageStatus::Pending) => ("待运行".to_string(), false, false),
+            Some(StageStatus::Running) => ("运行中".to_string(), false, false),
+            Some(StageStatus::Succeeded) => ("成功".to_string(), false, false),
+            Some(StageStatus::Failed { reasons }) => {
+                (format!("失败：{}", reasons.join("；")), false, false)
+            }
+            Some(StageStatus::Blocked { reasons }) => {
+                (format!("阻塞：{}", reasons.join("；")), false, false)
+            }
+            Some(StageStatus::WaitingHuman { gate }) => {
+                (format!("等待人工确认（{gate}）"), true, false)
+            }
+            None => match pending_stage(&stage.id) {
+                Some(pending) => (pending.blocked_reason(), false, true),
+                None => ("待运行".to_string(), false, true),
+            },
         };
+        let running = matches!(record.map(|item| &item.status), Some(StageStatus::Running));
+        let touched = record.is_some_and(|item| !matches!(item.status, StageStatus::Pending));
         StageItem {
             id: stage.id.into(),
             name: stage.name.into(),
             status: status.into(),
             summary: stage.summary.into(),
             segment: "P 段".into(),
-            duration: "耗时 —".into(),
-            waiting: false,
-            running: false,
-            can_rerun: false,
+            duration: duration_text(record.and_then(StageRecord::duration_seconds)).into(),
+            waiting,
+            running,
+            can_rerun: touched,
             can_inspect: false,
-            placeholder: true,
+            placeholder,
         }
     }));
     rows

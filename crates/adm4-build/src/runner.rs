@@ -77,25 +77,16 @@ impl PendingStage {
     }
 }
 
-/// P0-P5 的待实现登记表。
+/// 尚未实现的 P 段登记表。
 ///
-/// 波次归属照册 10 §2 的 G1-G5 分工推出；P0 的两条线派生没有被任何一波显式认领，
-/// 这里如实标成「G3 前置 + G4」而不是随手塞给某一波（见任务报告的遗留项）。
-pub const PENDING_STAGES: [PendingStage; 6] = [
-    PendingStage {
-        stage_id: "P0",
-        waves: "G3/G4",
-        detail: "两条线派生与对齐合流执行器（G3 资产生产的上游前置）+ 引擎工程种子（G4）",
-    },
+/// G3 已落地 P0（两条线派生与对齐合流；引擎工程种子部分如实标 pending_g4）与
+/// P2（资产生产通道 + 预算门 + 内容哈希缓存 + 基因表回填），两段已从本表移除——
+/// 本表只登记**还没有真实执行器**的段。
+pub const PENDING_STAGES: [PendingStage; 4] = [
     PendingStage {
         stage_id: "P1",
         waves: "G4",
-        detail: "可玩切片抽取 + 薄运行时清单 + 引擎指南 + 现场开发轮次记录",
-    },
-    PendingStage {
-        stage_id: "P2",
-        waves: "G3",
-        detail: "资产生产通道 + 预算门 + 内容哈希缓存 + 资产基因表回填",
+        detail: "可玩切片抽取 + 薄运行时清单 + 引擎指南 + 现场开发轮次记录（含 P0 遗留的引擎工程种子）",
     },
     PendingStage {
         stage_id: "P3",
@@ -147,12 +138,37 @@ impl StageExecutor for PendingExecutor {
     }
 }
 
-/// 本波的全套执行器（P0-P5 全是诚实空实现）。
+/// 尚未实现段的诚实空执行器（P1/P3/P4/P5）。
 pub fn pending_executors() -> Vec<Box<dyn StageExecutor>> {
     PENDING_STAGES
         .iter()
         .map(|stage| Box::new(PendingExecutor::new(stage)) as Box<dyn StageExecutor>)
         .collect()
+}
+
+/// 「已有真实现、但本装配没给它上下文」的诚实占位。
+///
+/// P0/P2 的真实执行器要注入 Phase 1 产物仓 / 风格门根 / 图像通道，这些只有门面
+/// （`AppServices`）拿得到。不带上下文的 `Phase2Runner::new()`（人工门确认、测试夹具用）
+/// 对这两段装它——被跑到时如实说「装配没接线」，而不是假装还没实现或假装成功（R7）。
+struct NotWiredExecutor {
+    stage_id: &'static str,
+    hint: &'static str,
+}
+
+impl StageExecutor for NotWiredExecutor {
+    fn stage_id(&self) -> &str {
+        self.stage_id
+    }
+
+    fn execute(&self, _ctx: &BuildContext<'_>) -> Adm4Result<StageStatus> {
+        Ok(StageStatus::Blocked {
+            reasons: vec![format!(
+                "阶段 {} 的执行器未接线：{}（请通过 AppServices::build_run 运行——门面会注入真实上下文）",
+                self.stage_id, self.hint
+            )],
+        })
+    }
 }
 
 /// P0-P5 运行器。
@@ -162,12 +178,29 @@ pub struct Phase2Runner {
 }
 
 impl Phase2Runner {
-    /// 本波默认装配：P0-P5 registry + 诚实空执行器。
+    /// 无上下文装配：未实现段 = 诚实空实现；已实现段（P0/P2）= 未接线占位。
+    ///
+    /// 这个装配**跑不出任何成功段**，它存在只为两件事：人工门确认（只查运行状态，
+    /// 不执行段）与测试夹具。真实运行走 [`Phase2Runner::with_executors`]（门面装配）。
     pub fn new() -> Self {
-        let executors = pending_executors()
+        let mut executors: BTreeMap<String, Box<dyn StageExecutor>> = pending_executors()
             .into_iter()
             .map(|executor| (executor.stage_id().to_string(), executor))
             .collect();
+        executors.insert(
+            "P0".to_string(),
+            Box::new(NotWiredExecutor {
+                stage_id: "P0",
+                hint: "两条线派生要读 Phase 1 的 C3/C4 产物仓",
+            }),
+        );
+        executors.insert(
+            "P2".to_string(),
+            Box::new(NotWiredExecutor {
+                stage_id: "P2",
+                hint: "资产生产要注入风格门产物根与图像生成通道",
+            }),
+        );
         Self {
             registry: phase2_registry(),
             executors,
@@ -582,20 +615,26 @@ mod tests {
         }
     }
 
+    /// 全部段 id（registry 口径；夹具不再依赖 `PENDING_STAGES`——G3 起它只剩未实现段）。
+    fn all_stage_ids() -> Vec<String> {
+        phase2_registry()
+            .into_iter()
+            .map(|stage| stage.id)
+            .collect()
+    }
+
     fn all_succeed() -> Vec<Box<dyn StageExecutor>> {
-        PENDING_STAGES
-            .iter()
-            .map(|stage| {
-                Box::new(ScriptedExecutor::new(
-                    stage.stage_id,
-                    StageStatus::Succeeded,
-                )) as Box<dyn StageExecutor>
+        all_stage_ids()
+            .into_iter()
+            .map(|stage_id| {
+                Box::new(ScriptedExecutor::new(&stage_id, StageStatus::Succeeded))
+                    as Box<dyn StageExecutor>
             })
             .collect()
     }
 
     #[test]
-    fn default_runner_covers_every_registry_stage_with_a_pending_executor() {
+    fn default_runner_covers_every_registry_stage_honestly() {
         let runner = Phase2Runner::new();
         assert_eq!(runner.registry().len(), 6);
         for stage in runner.registry() {
@@ -604,17 +643,24 @@ mod tests {
                 "{} 缺执行器",
                 stage.id
             );
+        }
+        // G3 后的登记口径：P0/P2 已有真实现（不在待实现表），P1/P3/P4/P5 仍登记在案。
+        for implemented in ["P0", "P2"] {
             assert!(
-                pending_stage(&stage.id).is_some(),
-                "{} 缺待实现登记",
-                stage.id
+                pending_stage(implemented).is_none(),
+                "{implemented} 已实现，不该再挂在待实现表上"
             );
         }
-        // 注入装配同时校验制品依赖图：默认版图必须自洽。
-        assert!(Phase2Runner::with_executors(pending_executors()).is_ok());
+        for waiting in ["P1", "P3", "P4", "P5"] {
+            assert!(
+                pending_stage(waiting).is_some(),
+                "{waiting} 尚未实现，必须有待实现登记"
+            );
+        }
     }
 
-    /// 本波的核心承诺：跑一遍诚实空版图，第一段就 Blocked 并说清在等谁——绝无假成功。
+    /// 无上下文装配的核心承诺：P0 如实报「执行器未接线」，绝无假成功（R7）。
+    /// 真实装配（P0Executor/P2Executor 注入真上下文）由 e2e 覆盖。
     #[test]
     fn honest_empty_plan_blocks_at_the_first_stage_with_a_reason() {
         let store = scratch_store("honest_blocked");
@@ -625,13 +671,13 @@ mod tests {
         };
         let state = Phase2Runner::new()
             .run_range(&ctx, "P0", "P5")
-            .expect("诚实空版图应能跑完流程（结论是 Blocked，不是错误）");
+            .expect("诚实装配应能跑完流程（结论是 Blocked，不是错误）");
 
         match state.stage_status("P0") {
             StageStatus::Blocked { reasons } => {
                 assert_eq!(reasons.len(), 1);
-                assert!(reasons[0].contains("G3/G4"), "{}", reasons[0]);
-                assert!(reasons[0].contains("对齐合流"), "{}", reasons[0]);
+                assert!(reasons[0].contains("未接线"), "{}", reasons[0]);
+                assert!(reasons[0].contains("AppServices"), "{}", reasons[0]);
             }
             other => panic!("P0 应 Blocked，实际 {other:?}"),
         }
@@ -689,9 +735,9 @@ mod tests {
         );
         let p1_calls = std::sync::Arc::clone(&p1.calls);
         let mut executors: Vec<Box<dyn StageExecutor>> = vec![Box::new(p0), Box::new(p1)];
-        for stage in PENDING_STAGES.iter().skip(2) {
+        for stage_id in all_stage_ids().into_iter().skip(2) {
             executors.push(Box::new(ScriptedExecutor::new(
-                stage.stage_id,
+                &stage_id,
                 StageStatus::Succeeded,
             )));
         }
@@ -742,12 +788,8 @@ mod tests {
             .run_range_with_cancel(&ctx, "P0", "P5", &cancel)
             .expect("续跑");
         assert!(outcome.cancelled_at.is_none());
-        for stage in PENDING_STAGES {
-            assert!(
-                outcome.state.is_succeeded(stage.stage_id),
-                "{} 应成功",
-                stage.stage_id
-            );
+        for stage_id in all_stage_ids() {
+            assert!(outcome.state.is_succeeded(&stage_id), "{stage_id} 应成功");
         }
         std::fs::remove_dir_all(&store.root).ok();
     }
@@ -785,15 +827,15 @@ mod tests {
             store: &store,
         };
         let mut executors: Vec<Box<dyn StageExecutor>> = Vec::new();
-        for stage in PENDING_STAGES {
-            let status = if stage.stage_id == "P2" {
+        for stage_id in all_stage_ids() {
+            let status = if stage_id == "P2" {
                 StageStatus::WaitingHuman {
                     gate: "asset_budget".into(),
                 }
             } else {
                 StageStatus::Succeeded
             };
-            executors.push(Box::new(ScriptedExecutor::new(stage.stage_id, status)));
+            executors.push(Box::new(ScriptedExecutor::new(&stage_id, status)));
         }
         let runner = Phase2Runner::with_executors(executors).expect("装配");
 
@@ -910,11 +952,10 @@ mod tests {
             Adm4ErrorKind::InvalidInput
         );
         let after = store.load_run_state().expect("读状态");
-        for stage in PENDING_STAGES {
+        for stage_id in all_stage_ids() {
             assert!(
-                after.is_succeeded(stage.stage_id),
-                "{} 不该被非法重跑参数波及",
-                stage.stage_id
+                after.is_succeeded(&stage_id),
+                "{stage_id} 不该被非法重跑参数波及"
             );
         }
         std::fs::remove_dir_all(&store.root).ok();
@@ -1049,9 +1090,9 @@ mod tests {
                 stage_id: "P0".into(),
                 error: error.clone(),
             })];
-            for stage in PENDING_STAGES.iter().skip(1) {
+            for stage_id in all_stage_ids().into_iter().skip(1) {
                 executors.push(Box::new(ScriptedExecutor::new(
-                    stage.stage_id,
+                    &stage_id,
                     StageStatus::Succeeded,
                 )));
             }

@@ -468,33 +468,34 @@ foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
 }
 
 # ---------------------------------------------------------------------------
-# 8g. G1 Phase 2 构建产线：诚实空版图（P0-P5 执行器尚未实现）
+# 8g. Phase 2 构建产线骨架（G1 建骨架；G3 起 P0/P2 有真实现）
 #
-# 本波只建成治理骨架与插件框架，因此这一段验的是「骨架跑得动 + 结论如实」：
-# run 后第一段 Blocked 并说清在等哪一波、status 只读可回放、未知阶段显式报错。
-# 复用上面已冻结并跑完 C0-C6 的 $ArchiveId，不新建场景，对冒烟总时长影响可忽略；
-# 既有断言一条未改。
+# 这一段验「骨架跑得动 + 结论如实」：P0 真跑（此时 C0-C6 已全绿，两条线可派生）、
+# P1 仍待 G4 诚实 Blocked、status 只读可回放、未知阶段显式报错。
+# 复用上面已冻结并跑完 C0-C6 的 $ArchiveId。
+# G3 断言更新：P0/P2 已实现（plan 不再挂待实现说明、run 真跑），旧「待 G3/G4」断言
+# 随实现落地按新语义改写——它们断言的是"未实现"这一事实本身，事实变了断言跟着变。
 # ---------------------------------------------------------------------------
 $out = Invoke-Adm4 'G1：Phase 2 版图（注册表 + 制品依赖图自洽）' @('build', 'plan')
 Assert-Contains $out 'P0  引擎工程骨架' '版图首段'
 Assert-Contains $out 'P3  装配与集成  依赖 P1/P2' '装配段合流两条线'
 Assert-Contains $out '产出：程序线契约、美术线契约、资产表、对齐报告、引擎工程种子' 'P0 产出制品清单'
 Assert-Contains $out '消费：美术线契约、资产表、对齐报告、风格锚点集' 'P2 消费制品清单'
-Assert-Contains $out '执行器：待 G' '每段如实标注待哪一波实现'
+Assert-Contains $out '待 G4 实现' 'P1/P3 如实标注待哪一波'
+Assert-Contains $out '待 G5 实现' 'P4/P5 如实标注待哪一波'
 
-$out = Invoke-Adm4 'G1：构建运行（诚实空版图应停在 P0 并说明原因）' @('build', 'run', $ArchiveId)
-Assert-Contains $out 'P0: 阻塞：待 G3/G4 实现' 'P0 如实阻塞'
-Assert-Contains $out 'P1: 待运行' '阻塞后不推进下游'
+$out = Invoke-Adm4 'G3：构建运行（P0 真跑派生成功，P1 诚实待 G4）' @('build', 'run', $ArchiveId)
+Assert-Contains $out 'P0: 成功' 'P0 两条线派生真跑成功（C3/C4 已在案）'
+Assert-Contains $out 'P1: 阻塞：待 G4 实现' 'P1 如实阻塞'
 Assert-Contains $out 'P5: 待运行' '末段保持未运行'
-Assert-NotContains $out 'P0: 成功' '诚实空执行器绝不返回假成功（R7）'
 
 $out = Invoke-Adm4 'G1：构建状态只读回放同一份结论' @('build', 'status', $ArchiveId)
-Assert-Contains $out 'P0: 阻塞' '状态查询可读'
-Assert-NotContains $out '失败' '阻塞不是失败'
+Assert-Contains $out 'P0: 成功' '状态查询可读'
+Assert-Contains $out 'P1: 阻塞' '阻塞可回放'
 
 $out = Invoke-Adm4 'G1：构建重跑（重置目标段及全部下游）' @('build', 'rerun', $ArchiveId, 'P0')
 Assert-Contains $out '重跑起点 P0，重置 6 段：P0 / P1 / P2 / P3 / P4 / P5' '重跑连带全部下游'
-Assert-Contains $out '清空产物：无（重置范围内原本没有已落盘产物）' '没产物就不虚报清空'
+Assert-Contains $out '清空产物 1 段：P0' '重跑作废 P0 已落盘产物（G3 起它真有产物）'
 
 Invoke-Adm4 'G1 负例：未知构建阶段必须非零退出' @('build', 'run', $ArchiveId, '--from', 'P9') -ExpectFailure | Out-Null
 Invoke-Adm4 'G1 负例：C 段不在构建版图内' @('build', 'run', $ArchiveId, '--from', 'C0') -ExpectFailure | Out-Null
@@ -660,6 +661,70 @@ Invoke-Adm4 'G2 负例：未知 style 子命令必须非零退出' @('style', 'n
 # 风格产物纳入存档指纹：一路写下来体检仍应一致。
 $out = Invoke-Adm4 'G2：风格产物写盘后存档体检仍一致' @('project', 'doctor', $ArchiveId)
 Assert-Contains $out '[OK] 存档一致' '体检结论'
+
+# ---------------------------------------------------------------------------
+# 8i. G3 资产生产线：P2 预算门 -> 署名批准 -> 批量生产 -> 缓存命中 -> 代表锚图
+#
+# 前置已齐：C0-C6 全绿（P0 消费 C3/C4）、风格锚点 v2 已锁定（P2 消费锚点集）。
+# 图像走 --scripted-image（零网络确定性占位图）。
+# ---------------------------------------------------------------------------
+
+# P2 首跑：预算申报并停下（R3 首次付费确认；此时一张图都不许生成）。
+$out = Invoke-Adm4 'G3：P2 首跑应申报预算并停下' @('build', 'run', $ArchiveId, '--from', 'P2', '--to', 'P2', '--scripted-image')
+Assert-Contains $out 'P2: 阻塞：资产预算已申报待批准' '预算门申报'
+Assert-Contains $out 'budget-confirm' '停下时指路批准命令'
+
+$out = Invoke-Adm4 'G3：预算状态可查' @('build', 'budget', $ArchiveId)
+Assert-Contains $out '预算状态 Draft' '申报态'
+Assert-Contains $out '申报清单：' '审的就是这张单子'
+
+# 负例：匿名/无结论批准一律拒（R3）；未申报的项目没有可批的单子。
+Invoke-Adm4 'G3 负例：匿名批准预算必须被拒（R3）' @('build', 'budget-confirm', $ArchiveId, '  ', '放行') -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'G3：署名批准预算' @('build', 'budget-confirm', $ArchiveId, '冒烟制作人', '首轮产线冒烟，成本可接受')
+Assert-Contains $out '资产预算已批准' '批准回执'
+Assert-Contains $out '批准 1 轮' '批准记录计数'
+
+# 批准后重跑 P2：真生产（占位图通道），台账/基因表/一致性收口全过。
+$out = Invoke-Adm4 'G3：批准后 P2 批量生产成功' @('build', 'run', $ArchiveId, '--from', 'P2', '--to', 'P2', '--scripted-image')
+Assert-Contains $out 'P2: 成功' 'P2 生产成功'
+
+$out = Invoke-Adm4 'G3：生产后预算实耗入账' @('build', 'budget', $ArchiveId)
+Assert-Contains $out '预算状态 Exhausted' '额度按申报如实耗尽（实耗 = 申报）'
+
+# P2 产物结构断言（台账七字段 + 基因表对账 + 修复队列）。
+$P2ContractFile = Get-ChildItem -Path (Join-Path $DataRoot 'archives') -Recurse -Filter 'contract.json' | Where-Object { $_.FullName -match '\\build\\v1\\P2\\' } | Select-Object -First 1
+if (-not $P2ContractFile) { Fail 'G3：P2 契约未落盘' }
+$p2 = Get-Content -LiteralPath $P2ContractFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($p2.ledger.entries.Count -lt 1) { Fail 'G3：台账为空' }
+if ($p2.ledger.generation_calls -ne $p2.ledger.entries.Count) { Fail 'G3：首轮生产每资产应恰好一次调用' }
+if ($p2.genome_drifts.Count -ne 0) { Fail "G3：基因表对账应零差异，实际 $($p2.genome_drifts.Count)" }
+if ($p2.repair_queue.Count -ne 0) { Fail "G3：修复队列应为空，实际 $($p2.repair_queue.Count)" }
+foreach ($entry in $p2.ledger.entries) {
+    if (-not $entry.prompt) { Fail "G3：台账 $($entry.asset_id) 缺提示词" }
+    if (-not $entry.fallback) { Fail "G3：台账 $($entry.asset_id) 的 Fallback 字段必须被回答" }
+    if ($null -ne $entry.in_game_size) { Fail "G3：未实测的入游尺寸必须为 null（R1），$($entry.asset_id) 却有值" }
+}
+
+# 重跑 P2：内容哈希缓存全命中（台账如实记缓存来源，零新增生成调用）。
+$out = Invoke-Adm4 'G3：重跑 P2 缓存全命中（不重复花钱）' @('build', 'rerun', $ArchiveId, 'P2', '--to', 'P2', '--scripted-image')
+Assert-Contains $out 'P2: 成功' '缓存命中重跑成功'
+$p2 = Get-Content -LiteralPath $P2ContractFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($p2.ledger.cache_hits -ne $p2.ledger.entries.Count) { Fail 'G3：重跑应全部缓存命中' }
+if ($p2.ledger.generation_calls -ne 0) { Fail 'G3：缓存命中不许再发生成调用' }
+
+# 代表资产锚图：以新锚点版本追加（v2 -> v3），旧版逐字节不变。
+$V2SetFile = Get-ChildItem -Path (Join-Path $DataRoot 'archives') -Recurse -Filter 'anchor_set.json' | Where-Object { $_.FullName -match '\\anchors\\v2\\' } | Select-Object -First 1
+if (-not $V2SetFile) { Fail 'G3：v2 锚点集不在盘' }
+$V2Bytes = [System.IO.File]::ReadAllBytes($V2SetFile.FullName)
+$out = Invoke-Adm4 'G3：追加代表资产锚图（另立 v3）' @('style', 'append-representatives', $ArchiveId, '--scripted-image')
+Assert-Contains $out '锚点升至 v3' '新锚点版本'
+Assert-Contains $out '[representative_asset]' '代表资产角色锚图在案'
+$V2After = [System.IO.File]::ReadAllBytes($V2SetFile.FullName)
+if ($V2Bytes.Length -ne $V2After.Length) { Fail 'G3：v2 锚点集被改动（不可变历史被破坏）' }
+$out = Invoke-Adm4 'G3：锚点历史三版、就绪指向 v3' @('style', 'status', $ArchiveId)
+Assert-Contains $out '锚点历史：v1 / v2 / v3' '三版历史'
+Assert-Contains $out '已锁定锚点 v3' '就绪指向最新'
 
 # ---------------------------------------------------------------------------
 # 8b. F3 模型缺口：通用层模板跨包可见/可预填、非必做点不进分母、项目重命名
@@ -1027,5 +1092,5 @@ Assert-NotContains $out '待填 0 项' '不给 --decision 时不打印单点小�
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> Phase 2 诚实空版图 -> 风格锚点门（生成/改词/确认/重选） -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> P0 两条线派生 -> 风格锚点门（生成/改词/确认/重选） -> P2 预算门/批量生产/缓存命中/代表锚图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
 exit 0

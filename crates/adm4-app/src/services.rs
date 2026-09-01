@@ -16,14 +16,16 @@ use adm4_authoring::{
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
     WorkbenchResetReport, evaluate_freeze_gates, execute_freeze, run_red_team,
 };
+use adm4_build::art::budget::AssetBudget;
 use adm4_build::art::style_anchor::{
     STYLE_SECTION, StyleAnchorSet, StyleAnchorStore, StyleApplicationContract, StyleFitReport,
     StyleGate, StyleGateStatus, StyleGenerationOptions, StyleLockOutcome, StyleReadiness,
     StyleSession, StyleSourceFact, StyleSourceFacts,
 };
 use adm4_build::{
-    ArtifactKind, BuildContext, PendingStage, Phase2Runner, pending_stage, phase2_artifacts,
-    phase2_execution_order,
+    ArtifactKind, BuildContext, P0Executor, P2Executor, PendingStage, Phase2Runner, StageExecutor,
+    load_budget, pending_executors, pending_stage, phase2_artifacts, phase2_execution_order,
+    save_budget,
 };
 use adm4_contracts::{SkinScanner, normalize_skin_word};
 use adm4_decision::{
@@ -1337,7 +1339,41 @@ impl AppServices {
         })
     }
 
-    /// 运行 P0-P5（区间）。本波每段都会如实 Blocked 并说清在等哪一波。
+    /// 装配 Phase 2 的真实执行器（G3 起 P0/P2 是真实现，P1/P3-P5 仍诚实空实现）。
+    ///
+    /// - P0 注入 Phase 1 的产物仓（读 C3/C4）；
+    /// - P2 注入风格门产物根 + 图像通道。图像通道**未配置不在这里失败**——配置缺失
+    ///   是 P2 被跑到时才该报的事实（Blocked 带原因），不该让 `build status` 都打不开。
+    fn build_runner(
+        &self,
+        archive_id: &str,
+        version: u32,
+        images_override: Option<Box<dyn ImageProvider>>,
+    ) -> Adm4Result<Phase2Runner> {
+        let design = self.artifact_store(archive_id, version)?;
+        let style_root = self.archives.content_dir(archive_id).join(STYLE_SECTION);
+        let (images, image_hint) = match images_override {
+            Some(provider) => (Some(provider), String::new()),
+            None => match self.build_image_provider() {
+                Ok(provider) => (Some(provider), String::new()),
+                Err(error) => (None, error.message),
+            },
+        };
+        let (width, height) = match self.config()?.image_provider {
+            Some(config) => config.parse_size()?,
+            None => (1024, 1024),
+        };
+        let mut executors: Vec<Box<dyn StageExecutor>> = vec![
+            Box::new(P0Executor::new(design)),
+            Box::new(P2Executor::new(
+                style_root, images, image_hint, width, height,
+            )),
+        ];
+        executors.extend(pending_executors());
+        Phase2Runner::with_executors(executors)
+    }
+
+    /// 运行 P0-P5（区间）。G3 起 P0/P2 真跑，P1/P3-P5 如实 Blocked 待后续波次。
     pub fn build_run(
         &self,
         archive_id: &str,
@@ -1358,6 +1394,18 @@ impl AppServices {
         to: &str,
         cancel: &CancelSignal,
     ) -> Adm4Result<PipelineRunOutcome> {
+        self.build_run_with_images(archive_id, from, to, cancel, None)
+    }
+
+    /// 图像通道注入变体（脚本/测试用 `--scripted-image` 时走这里；None = 按配置构建）。
+    pub fn build_run_with_images(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+        images_override: Option<Box<dyn ImageProvider>>,
+    ) -> Adm4Result<PipelineRunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let spec = self.build_source_spec(archive_id, version)?;
         let store = self.build_store(archive_id, version)?;
@@ -1365,7 +1413,9 @@ impl AppServices {
             spec: &spec,
             store: &store,
         };
-        let outcome = Phase2Runner::new().run_range_with_cancel(&ctx, from, to, cancel)?;
+        let outcome = self
+            .build_runner(archive_id, version, images_override)?
+            .run_range_with_cancel(&ctx, from, to, cancel)?;
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
             "build",
@@ -1393,6 +1443,18 @@ impl AppServices {
         to: &str,
         cancel: &CancelSignal,
     ) -> Adm4Result<PipelineRerunOutcome> {
+        self.build_rerun_with_images(archive_id, from, to, cancel, None)
+    }
+
+    /// `build_rerun` 的图像通道注入变体（与 [`AppServices::build_run_with_images`] 对称）。
+    pub fn build_rerun_with_images(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+        images_override: Option<Box<dyn ImageProvider>>,
+    ) -> Adm4Result<PipelineRerunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let spec = self.build_source_spec(archive_id, version)?;
         let store = self.build_store(archive_id, version)?;
@@ -1400,7 +1462,9 @@ impl AppServices {
             spec: &spec,
             store: &store,
         };
-        let outcome = Phase2Runner::new().rerun_from(&ctx, from, to, cancel)?;
+        let outcome = self
+            .build_runner(archive_id, version, images_override)?
+            .rerun_from(&ctx, from, to, cancel)?;
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
             "build",
@@ -1445,6 +1509,99 @@ impl AppServices {
             &format!("项目 {archive_id} 构建阶段 {stage_id} 人工确认（{actor}）"),
         )?;
         Ok(state)
+    }
+
+    /// 资产预算状态（只读；None = P2 还没跑到申报那一步）。
+    pub fn build_budget(&self, archive_id: &str) -> Adm4Result<Option<AssetBudget>> {
+        let version = self.latest_frozen_version(archive_id)?;
+        load_budget(&self.build_store(archive_id, version)?)
+    }
+
+    /// 批准资产预算（R3：署名 + 结论必填；首次付费生产的人工门）。
+    ///
+    /// 预算必须已由 P2 申报（先跑一次 `build run` 到 P2，它会申报并停下）——
+    /// 没有申报就没有可批的单子，凭空批一笔预算等于把人工门变成盲签。
+    pub fn build_budget_confirm(
+        &self,
+        archive_id: &str,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<AssetBudget> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let store = self.build_store(archive_id, version)?;
+        let mut budget = load_budget(&store)?.ok_or_else(|| {
+            Adm4Error::not_found(
+                "本项目还没有资产预算申报：先跑 build run 到 P2，它会申报清单并停下等批准",
+            )
+        })?;
+        budget.approve(actor, note, &UtcTimestamp::now().to_iso8601())?;
+        save_budget(&store, &budget)?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "build",
+            &format!(
+                "项目 {archive_id} v{version} 资产预算批准（{actor}）：{}",
+                budget.summary()
+            ),
+        )?;
+        Ok(budget)
+    }
+
+    /// 追加代表资产锚图（册 08 §2.4 的 G3 裁决项）：从 C3 `asset_spec_set` 按确定性
+    /// 规则选代表资产（**前 N 个**，N ≤ 4——C3 的产出顺序即实体声明顺序，稳定可复现），
+    /// 生成锚图并落成新锚点版本（旧版不改不删）。
+    pub fn style_append_representatives(&self, archive_id: &str) -> Adm4Result<StyleAnchorSet> {
+        let provider = self.build_image_provider()?;
+        self.style_append_representatives_with(archive_id, provider.as_ref())
+    }
+
+    /// `style_append_representatives` 的注入变体（脚本/测试）。
+    pub fn style_append_representatives_with(
+        &self,
+        archive_id: &str,
+        images: &dyn ImageProvider,
+    ) -> Adm4Result<StyleAnchorSet> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let design = self.artifact_store(archive_id, version)?;
+        let content: adm4_pipeline::ContentInventoryContract =
+            design.read_contract("C3").map_err(|error| {
+                Adm4Error::blocked(format!(
+                    "读不到 C3 内容与资产需求（{}）：代表资产清单来自 C3，请先跑到 C3",
+                    error.message
+                ))
+            })?;
+        let representatives: Vec<(String, String)> = content
+            .assets
+            .iter()
+            .take(4)
+            .map(|asset| {
+                adm4_build::program::derive::asset_id_of_c3(asset)
+                    .map(|asset_id| (asset_id, asset.description.text.clone()))
+            })
+            .collect::<Adm4Result<_>>()?;
+        let store = self.style_store(archive_id)?;
+        let gate = StyleGate::new(&store);
+        let (width, height) = match self.config()?.image_provider {
+            Some(config) => config.parse_size()?,
+            None => (1024, 1024),
+        };
+        let anchor_set = gate.append_representative_anchors(
+            images,
+            &representatives,
+            width,
+            height,
+            &UtcTimestamp::now().to_iso8601(),
+        )?;
+        self.archives.refresh_fingerprint(archive_id)?;
+        self.log.append(
+            "style",
+            &format!(
+                "项目 {archive_id} 追加代表资产锚图 {} 张，锚点升至 v{}",
+                representatives.len(),
+                anchor_set.anchor_version
+            ),
+        )?;
+        Ok(anchor_set)
     }
 
     /// 构建段的取消落日志（与 [`AppServices::log_cancellation`] 同一口径，只是分类不同）。

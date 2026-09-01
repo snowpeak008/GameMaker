@@ -725,6 +725,9 @@ impl StyleAnchorSet {
 /// 选中方向锚图的角色标识。
 pub const SELECTED_ANCHOR_ROLE: &str = "selected_preview";
 
+/// 代表资产锚图的角色标识（册 08 §2.4，由 G3 在 C3 已在案后以新锚点版本追加）。
+pub const REPRESENTATIVE_ANCHOR_ROLE: &str = "representative_asset";
+
 // ---------------------------------------------------------------------------
 // 应用契约（风格 → 资产生产的正式接口，册 08 §2.4）
 // ---------------------------------------------------------------------------
@@ -1474,6 +1477,140 @@ impl<'a> StyleGate<'a> {
             session,
             superseded_version: (superseded > 0).then_some(superseded),
         })
+    }
+
+    /// 追加**代表资产锚图**（册 08 §2.4 的 G3 裁决项）：C3 已在案后，按应用契约的
+    /// `prompt_prefix` 为少量代表资产生成锚图，以**新锚点版本**落盘。
+    ///
+    /// 不可变历史一条不破：旧版本目录不改不删；新版本复制上一版的选中锚图 + 追加
+    /// 代表资产锚图（`role = "representative_asset"`），确认记录沿用原署名——追加锚图
+    /// 不是重新选风格，方向、提示词、palette 逐字继承。
+    ///
+    /// `representatives`：(资产 id, 语义描述)。选法由调用方定（P2 门面按确定性规则选），
+    /// 这里只负责生成与落盘。空清单直接报错——没有代表资产就没有可追加的东西。
+    pub fn append_representative_anchors(
+        &self,
+        images: &dyn ImageProvider,
+        representatives: &[(String, String)],
+        width: u32,
+        height: u32,
+        now: &str,
+    ) -> Adm4Result<StyleAnchorSet> {
+        if representatives.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "代表资产清单为空：没有可追加的锚图（C3 白名单一个可见实体都没有？）",
+            ));
+        }
+        let base_version = self.store.latest_anchor_version()?;
+        if base_version == 0 {
+            return Err(Adm4Error::blocked(
+                "本项目还没有已确认的风格锚点：请先在风格门确认方向，再追加代表资产锚图",
+            ));
+        }
+        let base = self.store.load_anchor_set(base_version)?;
+        base.validate()?;
+        let contract = self.store.load_application_contract(base_version)?;
+        contract.matches(&base)?;
+
+        let version = base_version + 1;
+        let version_dir = self.store.version_dir(version);
+        if version_dir.exists() {
+            return Err(Adm4Error::conflict(format!(
+                "锚点版本目录 {} 已存在：不可变历史绝不覆盖",
+                version_dir.display()
+            )));
+        }
+        ensure_dir(&version_dir)?;
+
+        let mut anchor_set = base.clone();
+        anchor_set.anchor_version = version;
+        anchor_set.generated_at = now.to_string();
+        anchor_set.confirmation.anchor_version = version;
+        // 上一版的锚图复制进新版本目录（版本目录自足：删掉旧版不影响新版可用）。
+        let mut carried = Vec::new();
+        for anchor in &base.anchors {
+            let bytes = self.store.read_image(&anchor.image_path)?;
+            let file_name = anchor
+                .image_path
+                .rsplit('/')
+                .next()
+                .unwrap_or(anchor.image_path.as_str());
+            let relative = format!("anchors/v{version}/{file_name}");
+            let (sha256, size) = self.store.write_image(&relative, &bytes)?;
+            if sha256 != anchor.image_sha256 {
+                return Err(Adm4Error::validation(format!(
+                    "锚图 {} 复制后指纹不符：上一版锚图被外部改动过",
+                    anchor.anchor_id
+                )));
+            }
+            let mut copied = anchor.clone();
+            copied.image_path = relative;
+            copied.image_bytes = size;
+            carried.push(copied);
+        }
+        anchor_set.anchors = carried;
+
+        // 逐代表资产生成锚图：提示词 = 契约前缀 + 资产语义（同 P2 生产口径的前缀纪律）。
+        for (asset_id, semantic) in representatives {
+            if semantic.trim().is_empty() {
+                return Err(Adm4Error::validation(format!(
+                    "代表资产 {asset_id} 没有语义描述：没有语义就没有提示词可拼（R2）"
+                )));
+            }
+            let prompt = format!(
+                "{} {}。单一主体、无文字、无水印。",
+                contract.prompt_prefix.trim(),
+                semantic.trim()
+            );
+            let artifact = images.generate(&ImageRequest {
+                purpose: format!("style_representative/{asset_id}"),
+                prompt: prompt.clone(),
+                width,
+                height,
+            })?;
+            let extension = media_type_extension(&artifact.media_type)?;
+            let relative = format!(
+                "anchors/v{version}/rep_{}.{extension}",
+                asset_id.to_ascii_lowercase()
+            );
+            let (sha256, size) = self.store.write_image(&relative, &artifact.bytes)?;
+            anchor_set.anchors.push(StyleAnchorImage {
+                anchor_id: format!(
+                    "{ANCHOR_ID_PREFIX}{}-representative-{asset_id}",
+                    base.selected_style_id
+                ),
+                role: REPRESENTATIVE_ANCHOR_ROLE.to_string(),
+                image_path: relative,
+                image_sha256: sha256,
+                image_bytes: size,
+                media_type: artifact.media_type,
+                requested_width: width,
+                requested_height: height,
+                prompt,
+                provider_id: artifact.provider_id,
+                model: artifact.model,
+            });
+        }
+        anchor_set.validate()?;
+        let new_contract = StyleApplicationContract::derive(&anchor_set, now)?;
+        new_contract.validate()?;
+        let fit_report = self.store.load_fit_report(base_version)?;
+
+        write_json_file(&version_dir.join(ANCHOR_SET_FILE), &anchor_set)?;
+        write_json_file(&version_dir.join(APPLICATION_CONTRACT_FILE), &new_contract)?;
+        write_json_file(
+            &version_dir.join(CONFIRMATION_FILE),
+            &anchor_set.confirmation,
+        )?;
+        write_json_file(&version_dir.join(FIT_REPORT_FILE), &fit_report)?;
+
+        // 工作态跟进确认版本（就绪查询按最新版本实读实校）。
+        if let Some(mut session) = self.store.load_session()? {
+            session.confirmed_version = version;
+            session.updated_at = now.to_string();
+            self.store.save_session(&session)?;
+        }
+        Ok(anchor_set)
     }
 
     /// 风格门状态（只读投影）。

@@ -3315,9 +3315,15 @@ fn refresh_pipeline(window: &MainWindow, services: &AppServices, state: &Rc<RefC
 /// 按存档 id 刷新阶段行（工作线程回程与运行期轮询都走这里：它们拿不到 `Rc<RefCell<UiState>>`）。
 fn apply_pipeline_rows(window: &MainWindow, services: &AppServices, archive: &str) {
     match services.pipeline_status(archive) {
-        Ok(run_state) => window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(Some(
-            &run_state,
-        ))))),
+        Ok(run_state) => {
+            // P 段的真实运行状态（G3 起 P0/P2 实跑）：读不到照样渲染 C 段与 P 段占位，
+            // 构建状态是增量信息而非前置条件。
+            let build_state = services.build_status(archive).ok();
+            window.set_stages(ModelRc::new(VecModel::from(view::stage_rows_with_build(
+                Some(&run_state),
+                build_state.as_ref(),
+            ))));
+        }
         // 未冻结时 pipeline_status 返回 not_found：这是正常前置状态，不当错误报。
         Err(error) if error.kind == Adm4ErrorKind::NotFound => {
             window.set_stages(ModelRc::new(VecModel::from(view::stage_rows(None))));

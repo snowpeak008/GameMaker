@@ -3618,12 +3618,22 @@ fn build_facade_runs_the_honest_empty_plan_without_faking_success() {
         "资产生产消费设计阶段锁定的风格锚点：{:?}",
         plan[2].consumes
     );
+    // G3 起 P0/P2 已实现（无待实现说明），P1/P3/P4/P5 仍有诚实登记。
     for stage in &plan {
-        let note = stage
-            .pending_note
-            .as_deref()
-            .expect("本波每段都还没有执行器，必须有诚实说明");
-        assert!(note.starts_with("待 G"), "{note}");
+        match stage.stage_id.as_str() {
+            "P0" | "P2" => assert!(
+                stage.pending_note.is_none(),
+                "{} 已实现，不该再挂待实现说明",
+                stage.stage_id
+            ),
+            _ => {
+                let note = stage
+                    .pending_note
+                    .as_deref()
+                    .expect("未实现段必须有诚实说明");
+                assert!(note.starts_with("待 G"), "{note}");
+            }
+        }
     }
 
     // --- 真源前置：C0 没跑过就不许开跑（不就地重编一份规格 = 不造第二真源）---
@@ -3639,14 +3649,15 @@ fn build_facade_runs_the_honest_empty_plan_without_faking_success() {
         .unwrap();
     assert!(phase1.is_succeeded("C0"));
 
-    // --- 诚实空版图：第一段 Blocked 并说清待哪一波，后续段一律未运行 ---
+    // --- G3 起 P0 真跑：只有 C0 时缺 C3/C4，P0 如实 Blocked 指路（不就地重算 C3）---
     let state = services.build_run(&archive_id, "P0", "P5").unwrap();
     match state.stage_status("P0") {
         StageStatus::Blocked { reasons } => {
             assert_eq!(reasons.len(), 1);
-            assert!(reasons[0].contains("待 G3/G4 实现"), "{}", reasons[0]);
+            assert!(reasons[0].contains("C3"), "{}", reasons[0]);
+            assert!(reasons[0].contains("pipeline run"), "{}", reasons[0]);
         }
-        other => panic!("P0 应如实 Blocked，实际 {other:?}"),
+        other => panic!("P0 缺上游契约应如实 Blocked，实际 {other:?}"),
     }
     assert_stage_statuses(
         &state,
@@ -4083,6 +4094,289 @@ fn style_anchor_gate_runs_the_full_design_stage_chain() {
     // --- ⑪ 存档体检仍一致：风格产物纳入内容指纹 ---
     let doctor = services.project_doctor(&archive_id).unwrap();
     assert!(doctor.healthy, "{:?}", doctor.problems);
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// G3 场景：Phase 2 资产生产线（P0 两条线派生 + P2 资产批量生产）全链
+//
+// 走完 冻结→C0-C4→风格确认→P0 派生成功→P2 预算门申报停下→署名批准→Scripted 图像
+// 批量生产→台账/基因表/一致性断言→重跑 P2 缓存全命中（零图像调用）→代表资产锚图追加。
+// 全程零网络：文本走 ScriptedProvider、图像走 ScriptedImageProvider。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn asset_production_line_runs_p0_and_p2_end_to_end() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_g3_assets_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let archive_id = frozen_lane_defense_project_named(&services, &ai, "资产产线验证项目");
+
+    // --- 前置：跑 Phase 1 到 C4（P0 消费 C3/C4）+ 风格门确认（P2 消费锚点集）---
+    let phase1 = services
+        .pipeline_run_with(&archive_id, "C0", "C4", &ai)
+        .unwrap();
+    assert!(phase1.is_succeeded("C4"), "C4 应成功：{phase1:?}");
+    let images = ScriptedImageProvider::new();
+    let options = services.style_options(3, false).unwrap();
+    services
+        .style_generate_with(&archive_id, &images, &options)
+        .unwrap();
+    let style_id = services
+        .style_session(&archive_id)
+        .unwrap()
+        .expect("工作态在案")
+        .directions[0]
+        .style_id
+        .clone();
+    services
+        .style_confirm(&archive_id, &style_id, "主美甲", "产线验证选定方向")
+        .unwrap();
+    let calls_after_style = images.calls().len();
+
+    // --- P0：两条线派生 + 对齐合流，真跑成功 ---
+    let state = services.build_run(&archive_id, "P0", "P0").unwrap();
+    assert!(
+        state.is_succeeded("P0"),
+        "P0 应派生成功：{:?}",
+        state.stage_status("P0")
+    );
+    // P0 契约落盘且结构可读：两条线 + 资产表 + 对齐报告 + 引擎种子如实 pending_g4。
+    let version = services.latest_frozen_version(&archive_id).unwrap();
+    let p0: adm4_build::TwoLineContract = {
+        let content_dir = services.archives.content_dir(&archive_id);
+        let path = content_dir
+            .join("build")
+            .join(format!("v{version}"))
+            .join("P0")
+            .join("contract.json");
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("P0 契约在盘")).expect("可解析")
+    };
+    assert_eq!(p0.engine_seed.status, "pending_g4", "引擎种子如实未产");
+    assert!(!p0.program.systems.is_empty());
+    assert!(!p0.art.assets.is_empty());
+    assert!(
+        p0.alignment.is_clean(),
+        "{:?}",
+        p0.alignment.unresolved_conflicts
+    );
+    assert!(p0.authority.passed());
+
+    // --- 区间语义：P0..P2 会先撞上 P1（G4 未实现，诚实 Blocked），P2 不被推进 ---
+    let state = services.build_run(&archive_id, "P0", "P2").unwrap();
+    assert!(
+        matches!(state.stage_status("P1"), StageStatus::Blocked { .. }),
+        "P1 仍待 G4，必须诚实 Blocked"
+    );
+    assert_eq!(state.stage_status("P2"), StageStatus::Pending);
+
+    // --- P2 首跑（单段区间；依赖检查只看 P0 已成功）：预算门申报并停下（R3）---
+    let state = services.build_run(&archive_id, "P2", "P2").unwrap();
+    match state.stage_status("P2") {
+        StageStatus::Blocked { reasons } => {
+            assert!(reasons[0].contains("预算"), "{}", reasons[0]);
+            assert!(reasons[0].contains("budget-confirm"), "{}", reasons[0]);
+        }
+        other => panic!("P2 首跑应停在预算门，实际 {other:?}"),
+    }
+    assert_eq!(
+        images.calls().len(),
+        calls_after_style,
+        "预算未批一张图都不许生成"
+    );
+    let budget = services
+        .build_budget(&archive_id)
+        .unwrap()
+        .expect("预算已申报");
+    assert_eq!(budget.declared_assets.len(), p0.art.assets.len());
+
+    // 匿名批准被拒（R3）。
+    assert!(
+        services
+            .build_budget_confirm(&archive_id, "  ", "放行")
+            .is_err()
+    );
+    services
+        .build_budget_confirm(&archive_id, "制作人甲", "首轮产线验证，成本可接受")
+        .unwrap();
+
+    // --- 未配图像通道：P2 如实 Blocked 报通道不可用（不产占位图，R7）---
+    let state = services.build_run(&archive_id, "P2", "P2").unwrap();
+    match state.stage_status("P2") {
+        StageStatus::Blocked { reasons } => {
+            assert!(reasons[0].contains("图像生成通道不可用"), "{}", reasons[0]);
+        }
+        other => panic!("未配图像通道 P2 应诚实 Blocked，实际 {other:?}"),
+    }
+
+    // --- P2 生产（注入 Scripted 图像通道）：批量生产 + 台账 + 基因表 + 一致性 ---
+    let production_images = ScriptedImageProvider::new();
+    let outcome = services
+        .build_run_with_images(
+            &archive_id,
+            "P2",
+            "P2",
+            &adm4_pipeline::CancelSignal::never(),
+            Some(Box::new(production_images.clone())),
+        )
+        .unwrap();
+    assert!(
+        outcome.state.is_succeeded("P2"),
+        "P2 应生产成功：{:?}",
+        outcome.state.stage_status("P2")
+    );
+    let asset_count = p0.art.assets.len();
+    assert_eq!(
+        production_images.calls().len(),
+        asset_count,
+        "每个资产恰好一次生成调用"
+    );
+
+    // P2 契约：台账七字段 + 基因表对账零差异 + 确定性比对全 Ok + 修复队列空。
+    let record: adm4_build::art::genome_backfill::AssetProductionRecord = {
+        let path = services
+            .archives
+            .content_dir(&archive_id)
+            .join("build")
+            .join(format!("v{version}"))
+            .join("P2")
+            .join("contract.json");
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("P2 契约在盘")).expect("可解析")
+    };
+    assert!(
+        record.clean(),
+        "对账差异 {:?} / 修复队列 {:?}",
+        record.genome_drifts,
+        record.repair_queue
+    );
+    assert_eq!(record.ledger.entries.len(), asset_count);
+    assert_eq!(record.ledger.generation_calls, asset_count);
+    assert_eq!(record.anchor_version, 1);
+    for entry in &record.ledger.entries {
+        assert!(!entry.prompt.is_empty(), "台账必须记完整提示词");
+        assert!(
+            !entry.fallback.is_empty(),
+            "Fallback 字段必须被回答（godogen 七字段）"
+        );
+        assert!(
+            entry.in_game_size.is_none(),
+            "未实测的入游尺寸如实 None（R1）"
+        );
+        // 资产文件真实落盘在暂存资产根，路径 = 资产表登记的运行时加载路径。
+        let on_disk = services
+            .archives
+            .content_dir(&archive_id)
+            .join("build")
+            .join(format!("v{version}"))
+            .join("assets")
+            .join(&entry.runtime_path);
+        assert!(on_disk.is_file(), "资产未落盘：{}", on_disk.display());
+    }
+    // 预算实耗如实入账。
+    let budget = services
+        .build_budget(&archive_id)
+        .unwrap()
+        .expect("预算在案");
+    assert_eq!(budget.consumed_calls, asset_count);
+
+    // --- 重跑 P2：内容哈希缓存全命中，一次图像调用都不发（省钱），预算实耗不涨 ---
+    let calls_before_rerun = production_images.calls().len();
+    let rerun = services
+        .build_rerun_with_images(
+            &archive_id,
+            "P2",
+            "P2",
+            &adm4_pipeline::CancelSignal::never(),
+            Some(Box::new(production_images.clone())),
+        )
+        .unwrap();
+    assert!(
+        rerun.state.is_succeeded("P2"),
+        "缓存命中的重跑应成功：{:?}",
+        rerun.state.stage_status("P2")
+    );
+    assert_eq!(
+        production_images.calls().len(),
+        calls_before_rerun,
+        "缓存全命中：零新增图像调用"
+    );
+    let budget = services
+        .build_budget(&archive_id)
+        .unwrap()
+        .expect("预算在案");
+    assert_eq!(budget.consumed_calls, asset_count, "缓存命中不占预算额度");
+    let record: adm4_build::art::genome_backfill::AssetProductionRecord = {
+        let path = services
+            .archives
+            .content_dir(&archive_id)
+            .join("build")
+            .join(format!("v{version}"))
+            .join("P2")
+            .join("contract.json");
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("P2 契约在盘")).expect("可解析")
+    };
+    assert_eq!(
+        record.ledger.cache_hits, asset_count,
+        "重跑的台账如实记缓存来源"
+    );
+    assert_eq!(record.ledger.generation_calls, 0);
+
+    // --- 代表资产锚图：以新锚点版本追加，旧版逐字节不变 ---
+    let v1_bytes = {
+        let path = services
+            .archives
+            .content_dir(&archive_id)
+            .join("style")
+            .join("anchors")
+            .join("v1")
+            .join("anchor_set.json");
+        std::fs::read(&path).expect("v1 锚点集在盘")
+    };
+    let appended = services
+        .style_append_representatives_with(&archive_id, &production_images)
+        .expect("追加代表锚图");
+    assert_eq!(appended.anchor_version, 2, "追加 = 新版本");
+    assert!(
+        appended.anchors.len() > 1,
+        "新版含选中锚图 + 代表资产锚图：{:?}",
+        appended.anchors.len()
+    );
+    assert!(
+        appended
+            .anchors
+            .iter()
+            .any(|anchor| anchor.role == "representative_asset"),
+        "必须有代表资产角色的锚图"
+    );
+    let v1_after = {
+        let path = services
+            .archives
+            .content_dir(&archive_id)
+            .join("style")
+            .join("anchors")
+            .join("v1")
+            .join("anchor_set.json");
+        std::fs::read(&path).expect("v1 仍在盘")
+    };
+    assert_eq!(v1_bytes, v1_after, "旧锚点版本逐字节不变（不可变历史）");
+    // 就绪查询指向新版本。
+    let readiness = services.style_readiness(&archive_id).unwrap();
+    assert!(readiness.ready);
+    assert_eq!(readiness.anchor_version, 2);
+
+    // --- 审计：生产与预算动作都留痕 ---
+    let logs = services.log.tail(300).unwrap();
+    assert!(
+        logs.iter()
+            .any(|entry| entry.category == "build" && entry.message.contains("资产预算批准")),
+        "预算批准必须留痕（R3）"
+    );
+    assert!(
+        logs.iter()
+            .any(|entry| entry.category == "style" && entry.message.contains("代表资产锚图")),
+        "锚图追加必须留痕"
+    );
 
     std::fs::remove_dir_all(&temp).ok();
 }

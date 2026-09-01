@@ -7,4 +7,8 @@
 //!
 //! 资产生产（`asset_producer` / `budget` / `cache` / `genome_backfill`，册 08 §4）留 G3。
 
+pub mod asset_producer;
+pub mod budget;
+pub mod cache;
+pub mod genome_backfill;
 pub mod style_anchor;

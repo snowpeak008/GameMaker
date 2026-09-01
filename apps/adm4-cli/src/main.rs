@@ -512,11 +512,20 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
                     format!("[BLOCKED] {}", readiness.detail)
                 }
             );
-            let outcome = services.build_run_with_cancel(
+            // --scripted-image：P2 生产走确定性占位图（零网络冒烟；provider id 落盘可辨）。
+            let images_override = if args.contains(&"--scripted-image")
+                || flag_value(args, "--scripted-image-file").is_some()
+            {
+                Some(choose_image_provider(services, args)?)
+            } else {
+                None
+            };
+            let outcome = services.build_run_with_images(
                 archive_id,
                 from,
                 to,
                 &adm4_pipeline::CancelSignal::never(),
+                images_override,
             )?;
             if let Some(cancelled_at) = &outcome.cancelled_at {
                 println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
@@ -533,7 +542,20 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             let archive_id = required(args.first().copied(), "archive_id")?;
             let stage = required(args.get(1).copied(), "重跑起点阶段")?;
             let to = flag_value(args, "--to").unwrap_or("P5");
-            let outcome = services.build_rerun(archive_id, stage, to)?;
+            let images_override = if args.contains(&"--scripted-image")
+                || flag_value(args, "--scripted-image-file").is_some()
+            {
+                Some(choose_image_provider(services, args)?)
+            } else {
+                None
+            };
+            let outcome = services.build_rerun_with_images(
+                archive_id,
+                stage,
+                to,
+                &adm4_pipeline::CancelSignal::never(),
+                images_override,
+            )?;
             print_reset(&outcome.reset);
             if let Some(cancelled_at) = &outcome.cancelled_at {
                 println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
@@ -549,10 +571,36 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             print_build(&services.build_confirm(archive_id, stage, actor, note)?);
             Ok(())
         }
+        Some("budget") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            match services.build_budget(archive_id)? {
+                Some(budget) => {
+                    println!("{}", budget.summary());
+                    println!("申报清单：{}", budget.declared_assets.join("、"));
+                    for approval in &budget.approvals {
+                        println!(
+                            "  批准记录：{} 于 {}（{} 次调用）：{}",
+                            approval.actor, approval.at, approval.approved_calls, approval.note
+                        );
+                    }
+                }
+                None => println!("尚无资产预算申报（跑 build run 到 P2 会申报清单并停下等批准）"),
+            }
+            Ok(())
+        }
+        Some("budget-confirm") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let actor = required(args.get(1).copied(), "署名")?;
+            let note = required(args.get(2).copied(), "结论")?;
+            let budget = services.build_budget_confirm(archive_id, actor, note)?;
+            println!("资产预算已批准：{}", budget.summary());
+            println!("下一步：重跑 build run 到 P2 开始生产");
+            Ok(())
+        }
         _ => {
             println!("{BUILD_HELP}");
             Err(Adm4Error::invalid_input(
-                "未知 build 子命令（可用：plan / run / status / rerun / confirm）",
+                "未知 build 子命令（可用：plan / run / status / rerun / confirm / budget / budget-confirm）",
             ))
         }
     }
@@ -751,10 +799,29 @@ fn style_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             }
             Ok(())
         }
+        Some("append-representatives") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let images = choose_image_provider(services, args)?;
+            let anchor_set =
+                services.style_append_representatives_with(archive_id, images.as_ref())?;
+            println!(
+                "代表资产锚图已追加：锚点升至 v{}，共 {} 张锚图（选中方向 1 张 + 代表资产 {} 张）",
+                anchor_set.anchor_version,
+                anchor_set.anchors.len(),
+                anchor_set.anchors.len().saturating_sub(1)
+            );
+            for anchor in &anchor_set.anchors {
+                println!(
+                    "  [{}] {} → {}",
+                    anchor.role, anchor.anchor_id, anchor.image_path
+                );
+            }
+            Ok(())
+        }
         other => {
             println!("{STYLE_HELP}");
             Err(Adm4Error::invalid_input(format!(
-                "未知 style 子命令：{other:?}（可用：generate/regenerate/confirm/status）"
+                "未知 style 子命令：{other:?}（可用：generate/regenerate/confirm/status/append-representatives）"
             )))
         }
     }
@@ -1920,7 +1987,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注]（Phase 2 构建产线）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -2079,9 +2146,11 @@ const BUILD_HELP: &str = r#"构建产线（build）——Phase 2 的 P0-P5，语
 前置：项目已冻结，且该冻结版本的 C0 规格编译产物在案（Phase 2 一切派生自 GameSpec）。
       C0 未跑时本组命令一律非零退出并说明原因，不会就地重编一份规格（那是第二真源）。
 
-当前实现进度：**P0-P5 的执行器尚未实现**（本波只建成治理骨架与插件框架）。
-      因此 build run 会在第一段如实停下，打印「阻塞：待 G? 实现：…」——
+当前实现进度：**P0（两条线派生与对齐合流）与 P2（资产批量生产）已实现**（G3）；
+      P1/P3/P4/P5 仍是诚实空实现，跑到即打印「阻塞：待 G? 实现：…」——
       这是如实结论，不是命令出错；要看每段在等什么用 build plan。
+      P2 有两道前置门：风格锚点集（style confirm 锁定）与资产预算（首次到达 P2 自动
+      申报并停下，用 build budget-confirm 署名批准后重跑即开始生产，R3 首次付费确认）。
 
 用法：
   adm4 build plan

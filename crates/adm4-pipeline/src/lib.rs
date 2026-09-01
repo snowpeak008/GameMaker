@@ -15,6 +15,10 @@ mod framework;
 mod runner;
 
 pub use c0_compile::compile_frozen_design;
+// C3/C4 契约类型对外导出：Phase 2 的 P0 派生器要按类型读它们（设计文档契约集是
+// P0 声明的消费制品）。只导出类型不导出执行器——派生器读产物，不重跑阶段。
+pub use c3_content::{AssetSpec as C3AssetSpec, ContentInventoryContract, UiSpecEntry};
+pub use c4_capabilities::{CapabilitiesContract, CapabilityContract as C4Capability};
 pub use cancel::CancelSignal;
 pub use framework::{
     ArtifactStore, HumanConfirmation, PipelineRunState, StageKind, StageRecord, StageSpec,
