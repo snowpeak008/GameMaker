@@ -22,10 +22,12 @@ use adm4_build::art::style_anchor::{
     StyleGate, StyleGateStatus, StyleGenerationOptions, StyleLockOutcome, StyleReadiness,
     StyleSession, StyleSourceFact, StyleSourceFacts,
 };
+use adm4_build::engine::{EngineBackend, NotConfiguredBackend};
+use adm4_build::program::engine_guide::NotProvidedGuide;
 use adm4_build::{
-    ArtifactKind, BuildContext, P0Executor, P2Executor, PendingStage, Phase2Runner, StageExecutor,
-    load_budget, pending_executors, pending_stage, phase2_artifacts, phase2_execution_order,
-    save_budget,
+    ArtifactKind, BuildContext, DEFAULT_ENGINE_ID, P0Executor, P1Contract, P1Executor, P2Executor,
+    PendingStage, Phase2Runner, StageExecutor, TwoLineContract, load_budget, pending_executors,
+    pending_stage, phase2_artifacts, phase2_execution_order, save_budget,
 };
 use adm4_contracts::{SkinScanner, normalize_skin_word};
 use adm4_decision::{
@@ -39,7 +41,7 @@ use adm4_foundation::{
 };
 use adm4_pipeline::{
     ArtifactStore, CancelSignal, PipelineRerunOutcome, PipelineRunOutcome, PipelineRunState,
-    PipelineRunner, RunnerContext, phase2_registry,
+    PipelineRunner, RunnerContext, StageStatus, phase2_registry,
 };
 use adm4_space::{DesignSpace, DesignSpaceRoot, load_design_space};
 use adm4_spec::GameSpec;
@@ -1284,7 +1286,7 @@ impl AppServices {
     }
 
     // ------------------------------------------------------------------
-    // Phase 2 构建产线（P0-P5；本波执行器全是诚实空实现，如实 Blocked）
+    // Phase 2 构建产线（P0-P5；P0/P1/P2 真实执行器，P3-P5 诚实空实现如实 Blocked）
     // ------------------------------------------------------------------
 
     /// Phase 2 版图（只读）：阶段 id / 名称 / 依赖 / 产出与消费的制品 / 待哪一波实现。
@@ -1339,9 +1341,37 @@ impl AppServices {
         })
     }
 
-    /// 装配 Phase 2 的真实执行器（G3 起 P0/P2 是真实现，P1/P3-P5 仍诚实空实现）。
+    /// 按配置构建引擎后端。
     ///
-    /// - P0 注入 Phase 1 的产物仓（读 C3/C4）；
+    /// 未配置 → [`NotConfiguredBackend`]（id `"none"`）；配置了 id 但本波没有任何真实后端
+    /// 实现可挑 → 同样是 `NotConfiguredBackend`，只是原因写成「无对应实现，归 G4b」。
+    /// 两种情形都**不在这里失败**：缺引擎是 P1 被跑到时才该报的事实（Blocked 带 detail）。
+    fn build_engine_backend(&self) -> Adm4Result<Box<dyn EngineBackend>> {
+        match self.config()?.engine_backend {
+            None => Ok(Box::new(NotConfiguredBackend::new(
+                DEFAULT_ENGINE_ID,
+                "config/app.json 未配置 engine_backend：本波不接任何真实引擎，P1 只产切片/清单/耐久文档，不跑现场开发",
+            ))),
+            Some(config) => {
+                let id = config.id.trim();
+                if id.is_empty() {
+                    return Err(Adm4Error::validation(
+                        "config/app.json 的 engine_backend.id 为空：要么删掉这段，要么给出后端标识",
+                    ));
+                }
+                Ok(Box::new(NotConfiguredBackend::new(
+                    id,
+                    &format!("配置了引擎后端 {id}，但本波没有对应的后端实现（真机接线归 G4b）"),
+                )))
+            }
+        }
+    }
+
+    /// 装配 Phase 2 的真实执行器（P0/P1/P2 是真实现，P3-P5 仍诚实空实现）。
+    ///
+    /// - P0 注入 Phase 1 的产物仓（读 C3/C4）与配置里的引擎标识（种子 `engine_id`）；
+    /// - P1 注入引擎后端（`engine_override` 优先，否则按配置）、指南来源（本波统一
+    ///   `NotProvidedGuide`）与工作区根（构建仓 `P1/` 段目录）；
     /// - P2 注入风格门产物根 + 图像通道。图像通道**未配置不在这里失败**——配置缺失
     ///   是 P2 被跑到时才该报的事实（Blocked 带原因），不该让 `build status` 都打不开。
     fn build_runner(
@@ -1349,6 +1379,7 @@ impl AppServices {
         archive_id: &str,
         version: u32,
         images_override: Option<Box<dyn ImageProvider>>,
+        engine_override: Option<Box<dyn EngineBackend>>,
     ) -> Adm4Result<Phase2Runner> {
         let design = self.artifact_store(archive_id, version)?;
         let style_root = self.archives.content_dir(archive_id).join(STYLE_SECTION);
@@ -1363,8 +1394,19 @@ impl AppServices {
             Some(config) => config.parse_size()?,
             None => (1024, 1024),
         };
+        let backend = match engine_override {
+            Some(backend) => backend,
+            None => self.build_engine_backend()?,
+        };
+        let engine_id = backend.id().to_string();
+        let workspace_root = self.build_store(archive_id, version)?.root.join("P1");
         let mut executors: Vec<Box<dyn StageExecutor>> = vec![
-            Box::new(P0Executor::new(design)),
+            Box::new(P0Executor::with_engine_id(design, &engine_id)),
+            Box::new(P1Executor::new(
+                backend,
+                Box::new(NotProvidedGuide::new(engine_id)),
+                workspace_root,
+            )),
             Box::new(P2Executor::new(
                 style_root, images, image_hint, width, height,
             )),
@@ -1373,7 +1415,7 @@ impl AppServices {
         Phase2Runner::with_executors(executors)
     }
 
-    /// 运行 P0-P5（区间）。G3 起 P0/P2 真跑，P1/P3-P5 如实 Blocked 待后续波次。
+    /// 运行 P0-P5（区间）。P0/P1/P2 真跑，P3-P5 如实 Blocked 待后续波次。
     pub fn build_run(
         &self,
         archive_id: &str,
@@ -1406,6 +1448,19 @@ impl AppServices {
         cancel: &CancelSignal,
         images_override: Option<Box<dyn ImageProvider>>,
     ) -> Adm4Result<PipelineRunOutcome> {
+        self.build_run_with_engine(archive_id, from, to, cancel, images_override, None)
+    }
+
+    /// 图像通道 + 引擎后端双注入变体（`--mock-engine` 与 e2e 走这里；None = 按配置构建）。
+    pub fn build_run_with_engine(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+        images_override: Option<Box<dyn ImageProvider>>,
+        engine_override: Option<Box<dyn EngineBackend>>,
+    ) -> Adm4Result<PipelineRunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let spec = self.build_source_spec(archive_id, version)?;
         let store = self.build_store(archive_id, version)?;
@@ -1414,7 +1469,7 @@ impl AppServices {
             store: &store,
         };
         let outcome = self
-            .build_runner(archive_id, version, images_override)?
+            .build_runner(archive_id, version, images_override, engine_override)?
             .run_range_with_cancel(&ctx, from, to, cancel)?;
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
@@ -1455,6 +1510,19 @@ impl AppServices {
         cancel: &CancelSignal,
         images_override: Option<Box<dyn ImageProvider>>,
     ) -> Adm4Result<PipelineRerunOutcome> {
+        self.build_rerun_with_engine(archive_id, from, to, cancel, images_override, None)
+    }
+
+    /// `build_rerun` 的图像通道 + 引擎后端双注入变体（与 [`AppServices::build_run_with_engine`] 对称）。
+    pub fn build_rerun_with_engine(
+        &self,
+        archive_id: &str,
+        from: &str,
+        to: &str,
+        cancel: &CancelSignal,
+        images_override: Option<Box<dyn ImageProvider>>,
+        engine_override: Option<Box<dyn EngineBackend>>,
+    ) -> Adm4Result<PipelineRerunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let spec = self.build_source_spec(archive_id, version)?;
         let store = self.build_store(archive_id, version)?;
@@ -1463,7 +1531,7 @@ impl AppServices {
             store: &store,
         };
         let outcome = self
-            .build_runner(archive_id, version, images_override)?
+            .build_runner(archive_id, version, images_override, engine_override)?
             .rerun_from(&ctx, from, to, cancel)?;
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
@@ -1490,6 +1558,56 @@ impl AppServices {
     pub fn build_status(&self, archive_id: &str) -> Adm4Result<PipelineRunState> {
         let version = self.latest_frozen_version(archive_id)?;
         self.build_store(archive_id, version)?.load_run_state()
+    }
+
+    /// P1 契约的只读摘要（`build p1-status` 与桌面 P 段呈现用）。
+    ///
+    /// 三种事实分开呈现：
+    /// - 契约在盘 → 按契约给摘要（`contract_present = true`）；
+    /// - 契约不在盘但运行状态里 P1 已 Blocked（例如切片抽取处按 R2 停下，还没到落契约那步）
+    ///   → 给一份只含阻塞原因的摘要（`contract_present = false`），切片字段留空如实表示「没抽出」；
+    /// - P1 没跑过 → `Err(Blocked)` 指路，不造空摘要：空摘要看着像「切片为空」，而事实是「还没抽」。
+    pub fn build_p1_summary(&self, archive_id: &str) -> Adm4Result<P1Summary> {
+        let version = self.latest_frozen_version(archive_id)?;
+        let store = self.build_store(archive_id, version)?;
+        let contract: P1Contract = match store.read_contract("P1") {
+            Ok(contract) => contract,
+            Err(read_error) => {
+                if let StageStatus::Blocked { reasons } = store.load_run_state()?.stage_status("P1")
+                {
+                    // 引擎 id 只在 P0 种子里；P0 契约读不到或没种子时如实留空，不猜。
+                    let engine_id = match store.read_contract::<TwoLineContract>("P0") {
+                        Ok(p0) => match p0.engine_seed.seed {
+                            Some(seed) => seed.engine_id,
+                            None => String::new(),
+                        },
+                        Err(_) => String::new(),
+                    };
+                    return Ok(P1Summary {
+                        contract_present: false,
+                        engine_id,
+                        blocked_reasons_hint: reasons,
+                        ..P1Summary::default()
+                    });
+                }
+                return Err(Adm4Error::blocked(format!(
+                    "读不到 P1 可玩切片契约（{}）：请先跑 build run {archive_id} --to P1",
+                    read_error.message
+                )));
+            }
+        };
+        Ok(P1Summary {
+            contract_present: true,
+            scene: contract.slice.scene,
+            core_loop: contract.slice.core_loop,
+            primary_input: contract.slice.primary_input,
+            round_count: contract.dev_round_log.rounds.len(),
+            gap_count: contract.gaps.len(),
+            guide_present: contract.guide.is_some(),
+            engine_id: contract.engine_seed.engine_id,
+            preflight_detail: contract.preflight_detail,
+            blocked_reasons_hint: contract.blocked_reasons,
+        })
     }
 
     /// 构建段的人工门确认（署名 + 结论必填，R3）。
@@ -2875,6 +2993,30 @@ pub struct BuildStageView {
     pub consumes: Vec<String>,
     /// 执行器尚未实现时的诚实说明（已实现的段为 None）。
     pub pending_note: Option<String>,
+}
+
+/// P1 契约的只读摘要（切片要点 + 轮次/缺口计数 + 指南与引擎事实 + 阻塞原因）。
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct P1Summary {
+    /// P1 契约是否在盘。`false` = P1 在落契约之前就 Blocked（如切片抽取按 R2 停下），
+    /// 此时切片字段全空、只有 `blocked_reasons_hint` 有内容。
+    pub contract_present: bool,
+    pub scene: String,
+    pub core_loop: String,
+    pub primary_input: Vec<String>,
+    /// 已记录的现场开发轮次数。
+    pub round_count: usize,
+    /// 抽切片时登记的事实缺口数（不致命，但要回真源补）。
+    pub gap_count: usize,
+    /// 引擎指南是否已提供（本波统一未提供，归引擎插件波次）。
+    pub guide_present: bool,
+    /// 种子上的引擎后端标识。
+    pub engine_id: String,
+    /// 引擎预检结论原文。
+    pub preflight_detail: String,
+    /// 上次运行 P1 的阻塞原因（空 = 上次 Succeeded）。
+    pub blocked_reasons_hint: Vec<String>,
 }
 
 /// 访谈回合 DTO：`InterviewTurn` 未派生 serde，门面层包装为可序列化结构，

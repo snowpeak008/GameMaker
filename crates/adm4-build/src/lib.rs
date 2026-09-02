@@ -22,8 +22,9 @@ mod registry;
 mod runner;
 
 pub use executors::{
-    BUDGET_FILE, EngineSeedStatus, P0Executor, P2Executor, TwoLineContract, load_budget,
-    save_budget,
+    BUDGET_FILE, DEFAULT_ENGINE_ID, EngineSeedStatus, P0Executor, P1_WORKSPACE_DIR, P1Contract,
+    P1Executor, P2Executor, TwoLineContract, derive_engine_seed, derive_project_dir_name,
+    engine_round_to_log_round, load_budget, save_budget,
 };
 pub use registry::{
     ArtifactKind, StageArtifacts, phase2_artifacts, phase2_execution_order, producer_of,

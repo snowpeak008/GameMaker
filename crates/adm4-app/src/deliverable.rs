@@ -2,7 +2,7 @@
 //!
 //! 归宿定位（`docs/plan/05` §2.2）：二版「打包阶段」在四版的**文档集交付**落点。
 //! 本期只做设计文档集的清点与校验（读既有 `content/pipeline/v{N}/{C0..C6}/` 产物）；
-//! 游戏构建 / Unity 工程 / 运行时验证仍属 Phase 2（P0-P5），保留占位不在此实现。
+//! 游戏构建 / 引擎工程 / 运行时验证仍属 Phase 2（P0-P5），保留占位不在此实现。
 //! `.adm4proj` 整包导出/导入复用既有 `AppServices::export_project`/`import_project`。
 //!
 //! 落盘：项目内 `content/deliverable/v{N}/manifest.json`（事务外补写 + refresh_fingerprint）。

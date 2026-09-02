@@ -150,6 +150,7 @@ fn full_chain_from_space_to_signed_phase1() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -416,6 +417,7 @@ fn red_lines_hold_in_end_to_end_paths() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -526,6 +528,7 @@ fn services_with_isolated_space(temp: &Path) -> AppServices {
             design_space_root: space_root.to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -1009,6 +1012,7 @@ fn dangling_row_reference_blocks_completeness_and_consistency_gate() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -1164,6 +1168,7 @@ fn workbench_aggregates_work_on_migrated_space() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -1641,6 +1646,7 @@ fn project_rename_validates_and_logs() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -1711,6 +1717,7 @@ fn design_space_cache_is_hit_and_behaviourally_equivalent() {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         },
     )
     .unwrap();
@@ -3618,10 +3625,10 @@ fn build_facade_runs_the_honest_empty_plan_without_faking_success() {
         "资产生产消费设计阶段锁定的风格锚点：{:?}",
         plan[2].consumes
     );
-    // G3 起 P0/P2 已实现（无待实现说明），P1/P3/P4/P5 仍有诚实登记。
+    // G4a 起 P0/P1/P2 已实现（无待实现说明），P3/P4/P5 仍有诚实登记。
     for stage in &plan {
         match stage.stage_id.as_str() {
-            "P0" | "P2" => assert!(
+            "P0" | "P1" | "P2" => assert!(
                 stage.pending_note.is_none(),
                 "{} 已实现，不该再挂待实现说明",
                 stage.stage_id
@@ -4142,7 +4149,7 @@ fn asset_production_line_runs_p0_and_p2_end_to_end() {
         "P0 应派生成功：{:?}",
         state.stage_status("P0")
     );
-    // P0 契约落盘且结构可读：两条线 + 资产表 + 对齐报告 + 引擎种子如实 pending_g4。
+    // P0 契约落盘且结构可读：两条线 + 资产表 + 对齐报告 + 引擎种子（G4a 真产；未配引擎 → engine_id none）。
     let version = services.latest_frozen_version(&archive_id).unwrap();
     let p0: adm4_build::TwoLineContract = {
         let content_dir = services.archives.content_dir(&archive_id);
@@ -4153,7 +4160,10 @@ fn asset_production_line_runs_p0_and_p2_end_to_end() {
             .join("contract.json");
         serde_json::from_str(&std::fs::read_to_string(&path).expect("P0 契约在盘")).expect("可解析")
     };
-    assert_eq!(p0.engine_seed.status, "pending_g4", "引擎种子如实未产");
+    assert_eq!(p0.engine_seed.status, "produced", "引擎种子由真源派生");
+    let seed = p0.engine_seed.seed.as_ref().expect("真种子在案");
+    assert_eq!(seed.engine_id, "none", "未配引擎时种子如实标 none");
+    assert!(!seed.project_dir_name.is_empty());
     assert!(!p0.program.systems.is_empty());
     assert!(!p0.art.assets.is_empty());
     assert!(
@@ -4163,11 +4173,13 @@ fn asset_production_line_runs_p0_and_p2_end_to_end() {
     );
     assert!(p0.authority.passed());
 
-    // --- 区间语义：P0..P2 会先撞上 P1（G4 未实现，诚实 Blocked），P2 不被推进 ---
+    // --- 区间语义：P0..P2 会先撞上 P1——lane_defense 经 P0 派生 3 个主操作候选未收敛，
+    // 切片抽取按 R2「未知即停」落 Blocked（设计侧问题，非程序错误），P2 不被推进 ---
     let state = services.build_run(&archive_id, "P0", "P2").unwrap();
     assert!(
         matches!(state.stage_status("P1"), StageStatus::Blocked { .. }),
-        "P1 仍待 G4，必须诚实 Blocked"
+        "P1 因主操作候选未收敛必须诚实 Blocked：{:?}",
+        state.stage_status("P1")
     );
     assert_eq!(state.stage_status("P2"), StageStatus::Pending);
 
@@ -4377,6 +4389,204 @@ fn asset_production_line_runs_p0_and_p2_end_to_end() {
             .any(|entry| entry.category == "style" && entry.message.contains("代表资产锚图")),
         "锚图追加必须留痕"
     );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// G4a 场景：P0 引擎工程种子真产 + P1 可玩切片现场开发（Mock 引擎后端）
+//
+// 四条路径：(a) Mock 就绪 → P0→P1 Succeeded，四份 durable docs + 轮次日志落盘，
+// 后端被调 OpenOrCreateProject + AgentDevelop；(b) Mock 未就绪 → P1 Blocked、detail 透传、
+// 不调 AgentDevelop；(c) 无引擎配置 → P1 Blocked 含未配置原因；(d) P0 旧档 pending_g4 可读。
+// ---------------------------------------------------------------------------
+
+/// 测试用共享后端：`MockEngineBackend` 移交给门面后仍要能读 `calls()`，
+/// 用 `Arc` 包一层并转发全部接口（只在测试里存在，不进库代码）。
+struct SharedMockEngine(std::sync::Arc<adm4_app::MockEngineBackend>);
+
+impl adm4_app::EngineBackend for SharedMockEngine {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn preflight(&self) -> adm4_foundation::Adm4Result<adm4_build::engine::EnginePreflight> {
+        self.0.preflight()
+    }
+    fn open_or_create_project(
+        &self,
+        seed: &adm4_build::engine::EngineProjectSeed,
+        dir: &Path,
+    ) -> adm4_foundation::Adm4Result<()> {
+        self.0.open_or_create_project(seed, dir)
+    }
+    fn agent_develop(
+        &self,
+        task: &adm4_build::engine::SliceTask,
+        ctx: &adm4_build::engine::DevContext,
+    ) -> adm4_foundation::Adm4Result<adm4_app::EngineDevRound> {
+        self.0.agent_develop(task, ctx)
+    }
+    fn run_playmode(
+        &self,
+        project: &Path,
+    ) -> adm4_foundation::Adm4Result<adm4_build::engine::RunResult> {
+        self.0.run_playmode(project)
+    }
+    fn capture_proof(
+        &self,
+        project: &Path,
+    ) -> adm4_foundation::Adm4Result<adm4_build::engine::ProofBundle> {
+        self.0.capture_proof(project)
+    }
+}
+
+fn mock_engine(ready: bool) -> std::sync::Arc<adm4_app::MockEngineBackend> {
+    std::sync::Arc::new(adm4_app::MockEngineBackend::new(
+        "mock_engine",
+        adm4_app::MockEngineScript {
+            preflight_ready: ready,
+            rounds: vec![adm4_app::EngineDevRound {
+                index: 0,
+                commands: vec!["mock: build".into()],
+                failures: Vec::new(),
+                repair_summary: "一轮成功".into(),
+                status: adm4_app::EngineDevRoundStatus::Succeeded,
+            }],
+            ..adm4_app::MockEngineScript::default()
+        },
+    ))
+}
+
+/// 跑 Phase 1 到 C4 并返回 (archive_id, 构建仓 v{N} 目录)。
+fn prepared_for_build(
+    services: &AppServices,
+    ai: &ScriptedProvider,
+    name: &str,
+) -> (String, PathBuf) {
+    let archive_id = frozen_lane_defense_project_named(services, ai, name);
+    let phase1 = services
+        .pipeline_run_with(&archive_id, "C0", "C4", ai)
+        .unwrap();
+    assert!(phase1.is_succeeded("C4"), "C4 应成功：{phase1:?}");
+    let version = services.latest_frozen_version(&archive_id).unwrap();
+    let build_root = services
+        .archives
+        .content_dir(&archive_id)
+        .join("build")
+        .join(format!("v{version}"));
+    (archive_id, build_root)
+}
+
+// P1 三条后端门控用例（Mock 成功链 / 预检未就绪 / 未配引擎）已按 T-G4a-3 裁决 2 移到
+// dm4-build/src/executors.rs 的 p1_integration 集成测试：lane_defense 全链夹具经 P0 派生
+// 3 个主操作候选（设计侧未收敛），在 e2e 里靶它只能验到切片阻塞而验不到后端门控。
+// 下面这条只验门面注入接缝 + R2 阻断本身：即便注入就绪的 Mock，P1 也在切片抽取处 Blocked
+// 点名三个候选，且后端连预检都不该被调用（切片在预检之前）。
+
+#[test]
+fn p1_with_injected_mock_engine_blocks_on_unconverged_primary_input_before_preflight() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_g4a_p1_r2_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let (archive_id, build_root) = prepared_for_build(&services, &ai, "主操作未收敛验证项目");
+
+    let engine = mock_engine(true);
+    let outcome = services
+        .build_run_with_engine(
+            &archive_id,
+            "P0",
+            "P1",
+            &CancelSignal::never(),
+            None,
+            Some(Box::new(SharedMockEngine(std::sync::Arc::clone(&engine)))),
+        )
+        .unwrap();
+    assert!(
+        outcome.state.is_succeeded("P0"),
+        "{:?}",
+        outcome.state.stage_status("P0")
+    );
+    let p0: adm4_build::TwoLineContract = serde_json::from_str(
+        &std::fs::read_to_string(build_root.join("P0").join("contract.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        p0.engine_seed.seed.as_ref().expect("真种子").engine_id,
+        "mock_engine"
+    );
+    match outcome.state.stage_status("P1") {
+        StageStatus::Blocked { reasons } => {
+            let joined = reasons.join("\n");
+            assert!(joined.contains("主操作"), "{joined}");
+            for candidate in [
+                "cap_ld.counter_damage",
+                "cap_ld.deploy_cost",
+                "cap_ld.income_rule",
+            ] {
+                assert!(
+                    joined.contains(candidate),
+                    "应点名候选 {candidate}：{joined}"
+                );
+            }
+        }
+        other => panic!("P1 应因主操作候选未收敛 Blocked（R2），实际 {other:?}"),
+    }
+    assert!(
+        engine.calls().is_empty(),
+        "切片抽取在预检之前阻塞，后端不应被调用：{:?}",
+        engine.calls()
+    );
+    // P1 未落契约但运行状态已 Blocked：摘要如实标「契约不在盘」并带阻塞原因，切片字段留空。
+    let summary = services.build_p1_summary(&archive_id).unwrap();
+    assert!(!summary.contract_present);
+    assert!(summary.scene.is_empty() && summary.primary_input.is_empty());
+    assert_eq!(summary.engine_id, "mock_engine");
+    assert!(
+        summary
+            .blocked_reasons_hint
+            .iter()
+            .any(|r| r.contains("主操作")),
+        "{:?}",
+        summary.blocked_reasons_hint
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+#[test]
+fn legacy_p0_contract_with_pending_g4_seed_is_still_readable_and_p1_points_to_rerun() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_g4a_p0_legacy_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    let (archive_id, build_root) = prepared_for_build(&services, &ai, "旧档兼容验证项目");
+
+    let state = services.build_run(&archive_id, "P0", "P0").unwrap();
+    assert!(state.is_succeeded("P0"));
+    // 把 P0 契约改写成 G3 旧档形态（status=pending_g4、无 seed 键），模拟升级前产物。
+    let path = build_root.join("P0").join("contract.json");
+    let mut json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    json["engine_seed"] = serde_json::json!({
+        "status": "pending_g4",
+        "note": "引擎工程种子归 G4（册 09）"
+    });
+    std::fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+    let legacy: adm4_build::TwoLineContract =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).expect("旧档必须可读");
+    assert_eq!(legacy.engine_seed.status, "pending_g4");
+    assert!(legacy.engine_seed.seed.is_none());
+    assert!(!legacy.program.systems.is_empty(), "其余字段不受影响");
+
+    // P1 读到旧档：如实阻塞并指路重跑 P0，不凭空造种子。
+    let state = services.build_run(&archive_id, "P1", "P1").unwrap();
+    match state.stage_status("P1") {
+        StageStatus::Blocked { reasons } => {
+            assert!(reasons[0].contains("pending_g4"), "{}", reasons[0]);
+            assert!(reasons[0].contains("build rerun"), "{}", reasons[0]);
+        }
+        other => panic!("P1 读旧档应 Blocked 指路，实际 {other:?}"),
+    }
 
     std::fs::remove_dir_all(&temp).ok();
 }

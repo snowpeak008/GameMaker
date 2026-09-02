@@ -20,6 +20,20 @@ pub struct AppConfig {
     /// 合成一个字段会逼用户在文本可用时假装图像也可用——那正是 R7 关心的误报。
     #[serde(default)]
     pub image_provider: Option<HttpImageProviderConfig>,
+    /// 激活的引擎后端配置（无则 P1 的引擎预检如实 Blocked：未配置引擎，不跑现场开发）。
+    ///
+    /// 只登记一个字符串 `id`：门面按它挑后端实现，治理层不认得任何具体引擎（D17）。
+    /// 本波没有任何真实后端实现可挑，配置了也只会得到「后端 id 无对应实现」的诚实阻塞。
+    #[serde(default)]
+    pub engine_backend: Option<EngineBackendConfig>,
+}
+
+/// 引擎后端配置：只有后端标识。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct EngineBackendConfig {
+    /// 后端标识（写进 P0 种子的 `engine_id`，与后端实现的 `id()` 对应）。
+    pub id: String,
 }
 
 fn default_design_space_root() -> String {
@@ -33,6 +47,7 @@ pub fn load_config(data_root: &DataRoot) -> Adm4Result<AppConfig> {
             design_space_root: default_design_space_root(),
             ai_provider: None,
             image_provider: None,
+            engine_backend: None,
         });
     }
     read_json_file(&path)

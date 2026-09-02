@@ -79,18 +79,13 @@ impl PendingStage {
 
 /// 尚未实现的 P 段登记表。
 ///
-/// G3 已落地 P0（两条线派生与对齐合流；引擎工程种子部分如实标 pending_g4）与
-/// P2（资产生产通道 + 预算门 + 内容哈希缓存 + 基因表回填），两段已从本表移除——
-/// 本表只登记**还没有真实执行器**的段。
-pub const PENDING_STAGES: [PendingStage; 4] = [
-    PendingStage {
-        stage_id: "P1",
-        waves: "G4",
-        detail: "可玩切片抽取 + 薄运行时清单 + 引擎指南 + 现场开发轮次记录（含 P0 遗留的引擎工程种子）",
-    },
+/// G3 已落地 P0（两条线派生与对齐合流）与 P2（资产生产通道 + 预算门 + 内容哈希缓存 +
+/// 基因表回填）；G4a 已落地 P1（可玩切片 + 运行时清单 + 引擎指南 + 现场开发轮次）与
+/// P0 的引擎工程种子。三段已从本表移除——本表只登记**还没有真实执行器**的段。
+pub const PENDING_STAGES: [PendingStage; 3] = [
     PendingStage {
         stage_id: "P3",
-        waves: "G4",
+        waves: "G4b",
         detail: "现场装配集成（资产接入 + 运行时加载路径闭环）",
     },
     PendingStage {
@@ -138,7 +133,7 @@ impl StageExecutor for PendingExecutor {
     }
 }
 
-/// 尚未实现段的诚实空执行器（P1/P3/P4/P5）。
+/// 尚未实现段的诚实空执行器（P3/P4/P5）。
 pub fn pending_executors() -> Vec<Box<dyn StageExecutor>> {
     PENDING_STAGES
         .iter()
@@ -148,9 +143,9 @@ pub fn pending_executors() -> Vec<Box<dyn StageExecutor>> {
 
 /// 「已有真实现、但本装配没给它上下文」的诚实占位。
 ///
-/// P0/P2 的真实执行器要注入 Phase 1 产物仓 / 风格门根 / 图像通道，这些只有门面
-/// （`AppServices`）拿得到。不带上下文的 `Phase2Runner::new()`（人工门确认、测试夹具用）
-/// 对这两段装它——被跑到时如实说「装配没接线」，而不是假装还没实现或假装成功（R7）。
+/// P0/P1/P2 的真实执行器要注入 Phase 1 产物仓 / 引擎后端与指南来源 / 风格门根 / 图像通道，
+/// 这些只有门面（`AppServices`）拿得到。不带上下文的 `Phase2Runner::new()`（人工门确认、
+/// 测试夹具用）对这三段装它——被跑到时如实说「装配没接线」，而不是假装还没实现或假装成功（R7）。
 struct NotWiredExecutor {
     stage_id: &'static str,
     hint: &'static str,
@@ -178,7 +173,7 @@ pub struct Phase2Runner {
 }
 
 impl Phase2Runner {
-    /// 无上下文装配：未实现段 = 诚实空实现；已实现段（P0/P2）= 未接线占位。
+    /// 无上下文装配：未实现段 = 诚实空实现；已实现段（P0/P1/P2）= 未接线占位。
     ///
     /// 这个装配**跑不出任何成功段**，它存在只为两件事：人工门确认（只查运行状态，
     /// 不执行段）与测试夹具。真实运行走 [`Phase2Runner::with_executors`]（门面装配）。
@@ -192,6 +187,13 @@ impl Phase2Runner {
             Box::new(NotWiredExecutor {
                 stage_id: "P0",
                 hint: "两条线派生要读 Phase 1 的 C3/C4 产物仓",
+            }),
+        );
+        executors.insert(
+            "P1".to_string(),
+            Box::new(NotWiredExecutor {
+                stage_id: "P1",
+                hint: "可玩切片现场开发要注入引擎后端、引擎指南来源与工作区目录",
             }),
         );
         executors.insert(
@@ -644,14 +646,15 @@ mod tests {
                 stage.id
             );
         }
-        // G3 后的登记口径：P0/P2 已有真实现（不在待实现表），P1/P3/P4/P5 仍登记在案。
-        for implemented in ["P0", "P2"] {
+        // G4a 后的登记口径：P0/P1/P2 已有真实现（不在待实现表），P3/P4/P5 仍登记在案。
+        assert_eq!(PENDING_STAGES.len(), 3);
+        for implemented in ["P0", "P1", "P2"] {
             assert!(
                 pending_stage(implemented).is_none(),
                 "{implemented} 已实现，不该再挂在待实现表上"
             );
         }
-        for waiting in ["P1", "P3", "P4", "P5"] {
+        for waiting in ["P3", "P4", "P5"] {
             assert!(
                 pending_stage(waiting).is_some(),
                 "{waiting} 尚未实现，必须有待实现登记"

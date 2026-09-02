@@ -4,3 +4,7 @@
 //! `manifest.rs` / `engine_guide.rs`——G1 的制品注册表已把它们声明为 P1 的产物。
 
 pub mod derive;
+pub mod dev_round;
+pub mod engine_guide;
+pub mod manifest;
+pub mod slice;

@@ -481,12 +481,17 @@ Assert-Contains $out 'P0  引擎工程骨架' '版图首段'
 Assert-Contains $out 'P3  装配与集成  依赖 P1/P2' '装配段合流两条线'
 Assert-Contains $out '产出：程序线契约、美术线契约、资产表、对齐报告、引擎工程种子' 'P0 产出制品清单'
 Assert-Contains $out '消费：美术线契约、资产表、对齐报告、风格锚点集' 'P2 消费制品清单'
-Assert-Contains $out '待 G4 实现' 'P1/P3 如实标注待哪一波'
+Assert-Contains $out '待 G4b 实现' 'P3 如实标注待哪一波'
 Assert-Contains $out '待 G5 实现' 'P4/P5 如实标注待哪一波'
+Assert-NotContains $out '待 G4 实现' 'P1 已实现（G4a），plan 不再挂待实现说明'
 
-$out = Invoke-Adm4 'G3：构建运行（P0 真跑派生成功，P1 诚实待 G4）' @('build', 'run', $ArchiveId)
+# G4a 起 P1 真跑：未配引擎时切片抽取仍在预检之前执行；lane_defense 派生 3 个主操作候选，
+# 按 R2 停下——P1 阻塞原因是「主操作候选未收敛」，不再是「待实现」。
+$out = Invoke-Adm4 'G4a：构建运行（P0 真跑派生成功，P1 因主操作候选未收敛如实阻塞）' @('build', 'run', $ArchiveId)
 Assert-Contains $out 'P0: 成功' 'P0 两条线派生真跑成功（C3/C4 已在案）'
-Assert-Contains $out 'P1: 阻塞：待 G4 实现' 'P1 如实阻塞'
+Assert-Contains $out 'P1: 阻塞' 'P1 如实阻塞'
+Assert-Contains $out '主操作' 'P1 阻塞原因点名主操作'
+Assert-NotContains $out 'P1: 阻塞：待' 'P1 不再是待实现'
 Assert-Contains $out 'P5: 待运行' '末段保持未运行'
 
 $out = Invoke-Adm4 'G1：构建状态只读回放同一份结论' @('build', 'status', $ArchiveId)
@@ -502,6 +507,26 @@ Invoke-Adm4 'G1 负例：C 段不在构建版图内' @('build', 'run', $ArchiveI
 Invoke-Adm4 'G1 负例：倒序区间必须被拒' @('build', 'run', $ArchiveId, '--from', 'P3', '--to', 'P1') -ExpectFailure | Out-Null
 Invoke-Adm4 'G1 负例：阻塞的段不是人工门，确认必须被拒' @('build', 'confirm', $ArchiveId, 'P0', '冒烟评审员', '想直接放行') -ExpectFailure | Out-Null
 Invoke-Adm4 'G1 负例：未知 build 子命令必须非零退出' @('build', 'no-such-subcommand') -ExpectFailure | Out-Null
+
+# G4a：P1 注入回放引擎（--mock-engine）。lane_defense 经 P0 派生 3 个 Command 型能力，
+# 切片抽取按「1 主操作」硬规则在预检之前就按 R2 停下——P1 Blocked 点名全部候选，是设计侧
+# 未收敛的冒烟证据，不是程序错误；build run 遇 Blocked 与 P2 预算门同口径：退出码 0、状态行如实。
+$out = Invoke-Adm4 'G4a：--mock-engine 跑 P0..P1，P1 因主操作候选未收敛如实阻塞（R2）' @('build', 'run', $ArchiveId, '--from', 'P0', '--to', 'P1', '--mock-engine')
+Assert-Contains $out 'P0: 成功' 'P0 已成功（run 不重跑已成功段，种子仍是上次的 none）'
+Assert-Contains $out 'P1: 阻塞' 'P1 阻塞而非失败'
+Assert-Contains $out '主操作' '阻塞原因点名主操作'
+Assert-Contains $out '候选' '阻塞原因说明是候选未收敛'
+foreach ($candidate in @('cap_ld.counter_damage', 'cap_ld.deploy_cost', 'cap_ld.income_rule')) {
+    Assert-Contains $out $candidate "阻塞原因点名候选 $candidate"
+}
+Assert-NotContains $out 'P1: 失败' '多候选属设计侧问题，不得映成失败'
+
+$out = Invoke-Adm4 'G4a：P1 阻塞后 p1-status 仍给摘要（契约未落，只报阻塞原因）' @('build', 'p1-status', $ArchiveId)
+Assert-Contains $out 'P1 可玩切片摘要' 'p1-status 标题'
+Assert-Contains $out '未抽出' '契约不在盘时如实标未抽出'
+Assert-Contains $out '引擎后端：none' '引擎后端 id 取自在盘的 P0 种子（上次 run 未配引擎）'
+Assert-Contains $out '上次运行阻塞原因' 'blocked 提示'
+Assert-Contains $out '主操作' '阻塞原因回放'
 
 # 构建段与文档编译段互不干扰：跑完 build 后 C0-C6 仍全绿、产物仍齐备。
 $out = Invoke-Adm4 'G1：构建段不得污染 C0-C6 的运行状态' @('pipeline', 'status', $ArchiveId)

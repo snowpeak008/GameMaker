@@ -1,4 +1,4 @@
-﻿//! V4 应用编排层：项目生命周期、创作、冻结、流水线、逆向、日志。
+//! V4 应用编排层：项目生命周期、创作、冻结、流水线、逆向、日志。
 //! GUI/CLI 只调用本层，不含业务规则。
 
 mod change;
@@ -23,10 +23,15 @@ pub use adm4_build::art::style_anchor::{
     StyleGenerationItem, StyleGenerationOptions, StyleGenerationRound, StyleLockOutcome,
     StylePreview, StyleReadiness, StyleRoundKind, StyleSession, StyleUsage, style_presets,
 };
+/// 引擎后端接缝与回放后端（CLI `--mock-engine` 与 e2e 注入用），经门面再导出。
+pub use adm4_build::engine::{
+    DevRound as EngineDevRound, DevRoundStatus as EngineDevRoundStatus, EngineBackend, MockCall,
+    MockEngineBackend, MockEngineScript,
+};
 pub use change::{ChangeLog, ChangeRequest, ChangeStatus};
 pub use config::{
-    AppConfig, list_named_secret_names, load_config, load_named_secrets, save_config,
-    save_named_secret,
+    AppConfig, EngineBackendConfig, list_named_secret_names, load_config, load_named_secrets,
+    save_config, save_named_secret,
 };
 pub use deliverable::{DeliverableManifest, DeliverableSegment};
 pub use pipeline_artifact::{
@@ -37,8 +42,8 @@ pub use sdk::{SdkKnowledgeBase, SdkRecord, SdkReviewStatus, SdkSnapshot};
 pub use services::{
     AI_INVOKE_CHECK_PURPOSE, AiDoctorReport, AiInvokeCheckReport, AppServices, BuildStageView,
     DecisionOptionView, DecisionPointView, ExemptionView, GateSummary, InterviewTurnDto,
-    MissingByDomain, MissingEntry, NodeRiskNote, ProfileField, ProfileOption, ProjectDoctorReport,
-    ProjectProfile, RedTeamFinding, RedTeamSummary, RowReferenceIssue, TemplateCompareEntry,
-    TemplateComparison, TemplateExportReport, WorkbenchOverview, WorkbenchRisk, WorkbenchSummary,
-    WorkbenchValidation,
+    MissingByDomain, MissingEntry, NodeRiskNote, P1Summary, ProfileField, ProfileOption,
+    ProjectDoctorReport, ProjectProfile, RedTeamFinding, RedTeamSummary, RowReferenceIssue,
+    TemplateCompareEntry, TemplateComparison, TemplateExportReport, WorkbenchOverview,
+    WorkbenchRisk, WorkbenchSummary, WorkbenchValidation,
 };

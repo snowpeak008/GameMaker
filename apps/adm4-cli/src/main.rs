@@ -520,12 +520,13 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             } else {
                 None
             };
-            let outcome = services.build_run_with_images(
+            let outcome = services.build_run_with_engine(
                 archive_id,
                 from,
                 to,
                 &adm4_pipeline::CancelSignal::never(),
                 images_override,
+                choose_engine_backend(args),
             )?;
             if let Some(cancelled_at) = &outcome.cancelled_at {
                 println!("运行在阶段 {cancelled_at} 之前被取消（该段记为待运行）");
@@ -536,6 +537,48 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
         Some("status") => {
             let archive_id = required(args.first().copied(), "archive_id")?;
             print_build(&services.build_status(archive_id)?);
+            Ok(())
+        }
+        Some("p1-status") => {
+            let archive_id = required(args.first().copied(), "archive_id")?;
+            let summary = services.build_p1_summary(archive_id)?;
+            println!("P1 可玩切片摘要");
+            if !summary.contract_present {
+                println!("  切片：未抽出（P1 在落契约之前已阻塞，见下方原因）");
+                if !summary.engine_id.is_empty() {
+                    println!("  引擎后端：{}", summary.engine_id);
+                }
+                println!("  上次运行阻塞原因：");
+                for reason in &summary.blocked_reasons_hint {
+                    println!("    - {reason}");
+                }
+                return Ok(());
+            }
+            println!("  场景：{}", summary.scene);
+            println!("  核心循环：{}", summary.core_loop);
+            println!("  主操作：{}", join_or_none(&summary.primary_input));
+            println!("  开发轮次：{} 轮", summary.round_count);
+            println!("  事实缺口：{} 条", summary.gap_count);
+            println!(
+                "  引擎指南：{}",
+                if summary.guide_present {
+                    "已提供"
+                } else {
+                    "未提供（归引擎插件波次）"
+                }
+            );
+            println!(
+                "  引擎后端：{}（预检：{}）",
+                summary.engine_id, summary.preflight_detail
+            );
+            if summary.blocked_reasons_hint.is_empty() {
+                println!("  上次运行：Succeeded");
+            } else {
+                println!("  上次运行阻塞原因：");
+                for reason in &summary.blocked_reasons_hint {
+                    println!("    - {reason}");
+                }
+            }
             Ok(())
         }
         Some("rerun") => {
@@ -549,12 +592,13 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
             } else {
                 None
             };
-            let outcome = services.build_rerun_with_images(
+            let outcome = services.build_rerun_with_engine(
                 archive_id,
                 stage,
                 to,
                 &adm4_pipeline::CancelSignal::never(),
                 images_override,
+                choose_engine_backend(args),
             )?;
             print_reset(&outcome.reset);
             if let Some(cancelled_at) = &outcome.cancelled_at {
@@ -600,10 +644,39 @@ fn build_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Ad
         _ => {
             println!("{BUILD_HELP}");
             Err(Adm4Error::invalid_input(
-                "未知 build 子命令（可用：plan / run / status / rerun / confirm / budget / budget-confirm）",
+                "未知 build 子命令（可用：plan / run / status / p1-status / rerun / confirm / budget / budget-confirm）",
             ))
         }
     }
+}
+
+/// `--mock-engine`：P1 注入确定性回放后端（预检就绪、一轮成功、命令有记录）。
+///
+/// 零真机的冒烟开关：后端 id 是 `mock_engine`，随 P0 种子与 P1 契约落盘可辨，
+/// 不会被误认成真实引擎产出。不带该开关返回 `None`，门面按配置构建（未配置 → 诚实阻塞）。
+fn choose_engine_backend(args: &[&str]) -> Option<Box<dyn adm4_app::EngineBackend>> {
+    if !args.contains(&"--mock-engine") {
+        return None;
+    }
+    let script = adm4_app::MockEngineScript {
+        preflight_ready: true,
+        rounds: vec![adm4_app::EngineDevRound {
+            index: 0,
+            commands: vec![
+                "mock: open project".to_string(),
+                "mock: apply playable slice".to_string(),
+                "mock: build".to_string(),
+            ],
+            failures: Vec::new(),
+            repair_summary: "回放后端：按脚本一轮成功，无需修复".to_string(),
+            status: adm4_app::EngineDevRoundStatus::Succeeded,
+        }],
+        ..adm4_app::MockEngineScript::default()
+    };
+    Some(Box::new(adm4_app::MockEngineBackend::new(
+        "mock_engine",
+        script,
+    )))
 }
 
 /// 逐段打印 Phase 2 状态；段清单来自注册表，CLI 不写死 P0-P5。
@@ -1987,7 +2060,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] | rerun <id> <阶段> [--to P5] | status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] [--mock-engine] | rerun <id> <阶段> [--to P5] [--mock-engine] | status <id> | p1-status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P1/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -2146,9 +2219,11 @@ const BUILD_HELP: &str = r#"构建产线（build）——Phase 2 的 P0-P5，语
 前置：项目已冻结，且该冻结版本的 C0 规格编译产物在案（Phase 2 一切派生自 GameSpec）。
       C0 未跑时本组命令一律非零退出并说明原因，不会就地重编一份规格（那是第二真源）。
 
-当前实现进度：**P0（两条线派生与对齐合流）与 P2（资产批量生产）已实现**（G3）；
-      P1/P3/P4/P5 仍是诚实空实现，跑到即打印「阻塞：待 G? 实现：…」——
+当前实现进度：**P0（两条线派生 + 引擎工程种子）、P1（可玩切片现场开发）、P2（资产批量
+      生产）已实现**（G3/G4a）；P3/P4/P5 仍是诚实空实现，跑到即打印「阻塞：待 G? 实现：…」——
       这是如实结论，不是命令出错；要看每段在等什么用 build plan。
+      P1 依赖引擎后端：config/app.json 未配 engine_backend（或本波尚无对应实现）时，P1 仍会
+      产出切片/清单/耐久文档并如实 Blocked（预检未就绪，不跑现场开发）。
       P2 有两道前置门：风格锚点集（style confirm 锁定）与资产预算（首次到达 P2 自动
       申报并停下，用 build budget-confirm 署名批准后重跑即开始生产，R3 首次付费确认）。
 
@@ -2157,18 +2232,25 @@ const BUILD_HELP: &str = r#"构建产线（build）——Phase 2 的 P0-P5，语
       打印 Phase 2 版图（只读）：每段的依赖、产出与消费的制品、执行器待哪一波实现。
       制品依赖图与阶段依赖声明的自洽性在这里顺带校验（成环/悬空消费会非零退出）。
 
-  adm4 build run <项目存档id> [--from P0] [--to P5]
+  adm4 build run <项目存档id> [--from P0] [--to P5] [--scripted-image] [--mock-engine]
       基于最近冻结版本运行构建产线（默认 P0→P5），遇阻塞/失败/人工门停下。
       已成功的阶段直接跳过（断点续跑）；要重做已成功的阶段请用 build rerun。
       结束后打印 P0-P5 各阶段状态：待运行/运行中/成功/失败/阻塞/等待人工确认。
+      --mock-engine：P1 注入确定性回放引擎后端（预检就绪、一轮成功），零真机冒烟；
+      后端 id 为 mock_engine 并随种子/契约落盘可辨，不会被误认为真实引擎产出。
 
-  adm4 build rerun <项目存档id> <重跑起点阶段> [--to P5]
+  adm4 build rerun <项目存档id> <重跑起点阶段> [--to P5] [--scripted-image] [--mock-engine]
       强制重跑：先把起点段**及其全部下游段**的运行状态与已落盘产物一并作废，再向后跑。
       重置范围内已通过的人工门确认一并作废、必须重新署名确认（R3）；
       作废明细逐条打印并进运行日志。区间/阶段名不合法时一份产物都不会被动。
 
   adm4 build status <项目存档id>
       查询各阶段状态（只读）。
+
+  adm4 build p1-status <项目存档id>
+      打印 P1 契约摘要（只读）：场景/核心循环/主操作、开发轮次数、事实缺口数、
+      引擎指南是否提供、引擎后端与预检结论、上次运行的阻塞原因。P1 未跑过则非零退出指路；
+      P1 在落契约之前就阻塞（如主操作候选未收敛）时只打阻塞原因并标「切片：未抽出」。
 
   adm4 build confirm <项目存档id> <阶段> <确认人> [备注]
       人工确认指定构建阶段的人工门（如资产预算门、proof 裁决门）。
@@ -2304,7 +2386,7 @@ const DELIVER_HELP: &str = r#"文档集交付（deliver）——清点某冻结�
     退出码仍为 0——「清单不完整」是如实结论，不是命令失败。要判门禁请看 pipeline status。
   - 流水线目录整体不存在（从未跑过）= 七段全缺，同样如实报告。
   - .adm4proj 整包导出/导入是另一件事，走 project export / project import。
-  - 游戏构建 / Unity 工程导出 / 运行时验证 / 发布包属 Phase 2（P0-P5），本期不提供。"#;
+  - 游戏构建 / 引擎工程导出 / 运行时验证 / 发布包属 Phase 2（P0-P5），本期不提供。"#;
 
 const AI_HELP: &str = r#"AI 配置（ai）——doctor 查配置（零网络），invoke-check 真打一次
 

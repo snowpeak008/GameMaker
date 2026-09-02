@@ -54,7 +54,7 @@ pub struct SdkRecord {
     /// 资源类别（默认 `custom`）。
     #[serde(default = "default_category")]
     pub category: String,
-    /// 目标引擎（默认 `Unity`；Phase 2 构建集成消费）。
+    /// 目标引擎（默认「未指定」——引擎由构建配置决定，不在登记时写死；Phase 2 构建集成消费）。
     #[serde(default = "default_engines")]
     pub target_engines: String,
     /// 目标平台（默认 `windows-desktop`）。
@@ -82,7 +82,7 @@ fn default_category() -> String {
     "custom".into()
 }
 fn default_engines() -> String {
-    "Unity".into()
+    "未指定".into()
 }
 fn default_platforms() -> String {
     "windows-desktop".into()
