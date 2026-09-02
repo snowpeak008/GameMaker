@@ -482,6 +482,7 @@ mod tests {
                 name: "战斗系统".into(),
                 purpose: "结算克制伤害".into(),
                 interfaces: Vec::new(),
+                design_notes: Vec::new(),
             }],
             mechanics: vec![MechanicSpec {
                 id: "counter_damage".into(),
@@ -494,6 +495,7 @@ mod tests {
                     formula: "attack * counter".into(),
                 }],
                 state_machine: None,
+                design_notes: Vec::new(),
             }],
             entities: vec![
                 EntitySpec {
@@ -515,6 +517,7 @@ mod tests {
             ],
             tables: Vec::new(),
             content: Vec::new(),
+            graphs: Vec::new(),
             acceptance: Vec::new(),
             source_map: Vec::new(),
         }

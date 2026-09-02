@@ -1,0 +1,25 @@
+{
+  "static_violations": [],
+  "redteam_findings": [
+    {
+      "id": "w1",
+      "severity": "warning",
+      "target": "mechanics/ld.income_rule",
+      "text": "回复节奏与部署成本的匹配需要试玩验证"
+    }
+  ],
+  "proof": {
+    "reviewer": "scripted:scripted",
+    "reviewed_count": 7,
+    "upstream_count": 7,
+    "content_hash": "sha256:65585a02cefcc70dea55a90e5f57ccaf94f7008fa291c5f6771539ae0ce2336c",
+    "per_category_evidence": [
+      {
+        "category": "feasibility",
+        "checked": "3 条机制逐条",
+        "conclusion": "均可实现",
+        "evidence": []
+      }
+    ]
+  }
+}

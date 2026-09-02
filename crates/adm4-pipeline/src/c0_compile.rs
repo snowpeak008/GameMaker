@@ -104,6 +104,7 @@ pub fn compile_frozen_design(frozen: &FrozenDesign, space: &DesignSpace) -> Adm4
                         name: label,
                         purpose: option.summary.clone(),
                         interfaces: option.implications.clone(),
+                        design_notes: Vec::new(),
                     });
                     source_map.push(entry(
                         &format!("systems/{element_id}"),
@@ -171,6 +172,7 @@ pub fn compile_frozen_design(frozen: &FrozenDesign, space: &DesignSpace) -> Adm4
                             .cloned()
                             .unwrap_or_else(|| "generic".into()),
                         data,
+                        design_notes: Vec::new(),
                     });
                     source_map.push(entry(
                         &format!("content/{element_id}"),
@@ -221,6 +223,7 @@ pub fn compile_frozen_design(frozen: &FrozenDesign, space: &DesignSpace) -> Adm4
         entities,
         tables,
         content,
+        graphs: Vec::new(),
         acceptance: Vec::new(),
         source_map,
     };
@@ -403,6 +406,7 @@ fn compile_mechanic(
         preconditions: Vec::new(),
         effects,
         state_machine: None,
+        design_notes: Vec::new(),
     })
 }
 
@@ -499,6 +503,7 @@ fn compile_entity_table(
         row_key: schema.row_key.clone(),
         rows: rows.clone(),
         cells: Vec::new(),
+        design_notes: Vec::new(),
     };
     Ok((entities, table))
 }
@@ -524,6 +529,7 @@ fn compile_data_table(
             row_key: schema.row_key.clone(),
             rows: rows.clone(),
             cells: Vec::new(),
+            design_notes: Vec::new(),
         }),
         (ParameterSchema::Matrix(schema), ParameterValues::Cells { cells }) => Ok(TableSpec {
             id: element_id.to_string(),
@@ -535,6 +541,7 @@ fn compile_data_table(
             row_key: "row".into(),
             rows: Vec::new(),
             cells: cells.clone(),
+            design_notes: Vec::new(),
         }),
         (ParameterSchema::Scalar { .. }, ParameterValues::Scalars { entries }) => Ok(TableSpec {
             id: element_id.to_string(),
@@ -547,6 +554,7 @@ fn compile_data_table(
                     .collect(),
             ],
             cells: Vec::new(),
+            design_notes: Vec::new(),
         }),
         _ => Err(UnclassifiedItem {
             item: element_id.to_string(),

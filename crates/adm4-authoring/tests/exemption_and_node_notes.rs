@@ -32,6 +32,7 @@ fn point(id: &str, level: DesignLevel, node_id: Option<&str>) -> DecisionPoint {
         node_id: node_id.map(Into::into),
         selection_mode: SelectionMode::Single,
         requirement: PointRequirement::Unlocked,
+        tier_gate: None,
         options: vec![option("a"), option("b")],
         skin_fields: Vec::new(),
         evidence_slots: false,

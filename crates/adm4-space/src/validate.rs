@@ -276,6 +276,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![
                 DecisionOption {
                     id: "a".into(),
@@ -305,6 +306,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![DecisionOption {
                 id: "rows".into(),
                 label: "表".into(),

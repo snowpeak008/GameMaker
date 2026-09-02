@@ -274,6 +274,11 @@ pub struct DecisionPoint {
     pub selection_mode: SelectionMode,
     #[serde(default)]
     pub requirement: PointRequirement,
+    /// 所属重度档 id（W7 系统模块，定稿 §5.1）：项目对该模块选定的档位未达此档时，
+    /// 点不激活、不进完成度分母。None = 不受档位门控——旧清单没有该键 →
+    /// `serde(default)` → None，行为与扩展前逐字节一致（I2 旧档守恒）。
+    #[serde(default)]
+    pub tier_gate: Option<String>,
     pub options: Vec<DecisionOption>,
     /// 属于「皮」的参数路径（换皮门只查这些）。
     #[serde(default)]

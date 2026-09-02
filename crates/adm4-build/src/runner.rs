@@ -573,6 +573,7 @@ mod tests {
             entities: Vec::new(),
             tables: Vec::new(),
             content: Vec::new(),
+            graphs: Vec::new(),
             acceptance: Vec::new(),
             source_map: Vec::new(),
         }

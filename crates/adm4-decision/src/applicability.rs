@@ -118,6 +118,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options,
             skin_fields: Vec::new(),
             evidence_slots: false,

@@ -447,6 +447,7 @@ mod tests {
                 name: "战斗".into(),
                 purpose: String::new(),
                 interfaces: Vec::new(),
+                design_notes: Vec::new(),
             }],
             mechanics: Vec::new(),
             entities: vec![EntitySpec {
@@ -457,6 +458,7 @@ mod tests {
             }],
             tables: Vec::new(),
             content: Vec::new(),
+            graphs: Vec::new(),
             acceptance: Vec::new(),
             source_map: Vec::new(),
         }

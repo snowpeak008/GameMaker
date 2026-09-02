@@ -68,6 +68,7 @@ fn point(id: &str, question: &str, options: &[(&str, &str)]) -> DecisionPoint {
         node_id: None,
         selection_mode: Default::default(),
         requirement: Default::default(),
+        tier_gate: None,
         options: options
             .iter()
             .map(|(option_id, label)| DecisionOption {

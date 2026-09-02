@@ -683,6 +683,7 @@ mod tests {
             node_id: None,
             selection_mode: adm4_decision::SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options,
             skin_fields: Vec::new(),
             evidence_slots: false,

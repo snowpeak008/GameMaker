@@ -1,0 +1,92 @@
+{
+  "assets": [
+    {
+      "id": "asset_ld.enemy_roster.crawler",
+      "entity_id": "ld.enemy_roster.crawler",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.enemy_roster.crawler"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.enemy_roster.glider",
+      "entity_id": "ld.enemy_roster.glider",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.enemy_roster.glider"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.guard_roster.thorn_archer",
+      "entity_id": "ld.guard_roster.thorn_archer",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.guard_roster.thorn_archer"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.guard_roster.mist_mage",
+      "entity_id": "ld.guard_roster.mist_mage",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.guard_roster.mist_mage"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.guard_roster.stone_ward",
+      "entity_id": "ld.guard_roster.stone_ward",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.guard_roster.stone_ward"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.guard_roster.sun_harvester",
+      "entity_id": "ld.guard_roster.sun_harvester",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.guard_roster.sun_harvester"
+        ]
+      }
+    },
+    {
+      "id": "asset_ld.guard_roster.bramble_guard",
+      "entity_id": "ld.guard_roster.bramble_guard",
+      "asset_kind": "sprite2d",
+      "description": {
+        "text": "扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。",
+        "anchors": [
+          "entities/ld.guard_roster.bramble_guard"
+        ]
+      }
+    }
+  ],
+  "ui_entries": [],
+  "non_visual_entities": [],
+  "cardinality": {
+    "rule": "每个可见实体（sprite2d/model3d）派生 1 条美术资产需求；ui_only 进 UI 清单；invisible 不产资产",
+    "produced": 7,
+    "expected": {
+      "min": 5,
+      "max": 14
+    },
+    "dropped": []
+  }
+}

@@ -445,6 +445,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![DecisionOption {
                 id: "roster".into(),
                 label: "守卫名单".into(),
@@ -684,6 +685,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![
                 DecisionOption {
                     id: "walker".into(),

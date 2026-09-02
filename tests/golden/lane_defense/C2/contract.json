@@ -1,0 +1,97 @@
+{
+  "sections": [
+    {
+      "id": "overview",
+      "title": "游戏概览",
+      "narrative": {
+        "text": "基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。",
+        "anchors": [
+          "intent"
+        ]
+      }
+    },
+    {
+      "id": "system_ld.combat_system",
+      "title": "系统：克制式战斗",
+      "narrative": {
+        "text": "基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。",
+        "anchors": [
+          "systems/ld.combat_system",
+          "mechanics/ld.counter_damage"
+        ]
+      }
+    },
+    {
+      "id": "system_ld.deploy_system",
+      "title": "系统：网格部署",
+      "narrative": {
+        "text": "基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。",
+        "anchors": [
+          "systems/ld.deploy_system",
+          "mechanics/ld.deploy_cost"
+        ]
+      }
+    },
+    {
+      "id": "system_ld.economy_system",
+      "title": "系统：周期回复资源",
+      "narrative": {
+        "text": "基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。",
+        "anchors": [
+          "systems/ld.economy_system",
+          "mechanics/ld.income_rule"
+        ]
+      }
+    },
+    {
+      "id": "system_ld.wave_system",
+      "title": "系统：脚本化波次",
+      "narrative": {
+        "text": "基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。",
+        "anchors": [
+          "systems/ld.wave_system"
+        ]
+      }
+    }
+  ],
+  "anchor_coverage": {
+    "value": 1.0,
+    "evidence": [
+      {
+        "file": "C2/contract.json",
+        "path": "systems/ld.combat_system",
+        "observed": "章节 system_ld.combat_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "systems/ld.deploy_system",
+        "observed": "章节 system_ld.deploy_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "systems/ld.economy_system",
+        "observed": "章节 system_ld.economy_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "systems/ld.wave_system",
+        "observed": "章节 system_ld.wave_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "mechanics/ld.counter_damage",
+        "observed": "章节 system_ld.combat_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "mechanics/ld.deploy_cost",
+        "observed": "章节 system_ld.deploy_system 锚定"
+      },
+      {
+        "file": "C2/contract.json",
+        "path": "mechanics/ld.income_rule",
+        "observed": "章节 system_ld.economy_system 锚定"
+      }
+    ]
+  }
+}

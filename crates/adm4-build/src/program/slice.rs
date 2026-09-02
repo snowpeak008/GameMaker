@@ -425,12 +425,14 @@ pub(crate) mod test_fixtures {
                     name: "战斗系统".into(),
                     purpose: "结算克制伤害".into(),
                     interfaces: Vec::new(),
+                    design_notes: Vec::new(),
                 },
                 SystemSpec {
                     id: "economy_system".into(),
                     name: "经济系统".into(),
                     purpose: "资源结算".into(),
                     interfaces: Vec::new(),
+                    design_notes: Vec::new(),
                 },
             ],
             mechanics: vec![MechanicSpec {
@@ -442,6 +444,7 @@ pub(crate) mod test_fixtures {
                     entity: "guard".into(),
                 }],
                 state_machine: None,
+                design_notes: Vec::new(),
             }],
             entities: vec![EntitySpec {
                 id: "guard".into(),
@@ -454,7 +457,9 @@ pub(crate) mod test_fixtures {
                 id: "wave_1".into(),
                 content_kind: "wave_schedule".into(),
                 data: serde_json::json!({"waves": 3}),
+                design_notes: Vec::new(),
             }],
+            graphs: Vec::new(),
             acceptance: vec![AcceptanceScenario {
                 id: "acc_survive".into(),
                 capability_id: "cap_place_guard".into(),
@@ -630,6 +635,7 @@ mod tests {
             id: "wave_2".into(),
             content_kind: "wave_schedule".into(),
             data: serde_json::json!({}),
+            design_notes: Vec::new(),
         });
         let error = extract_playable_slice(&two_scenes, &program()).expect_err("两个场景");
         assert!(

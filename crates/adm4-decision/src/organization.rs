@@ -445,6 +445,7 @@ mod tests {
             node_id: node_id.map(Into::into),
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![
                 DecisionOption {
                     id: "a".into(),

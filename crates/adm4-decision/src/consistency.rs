@@ -309,6 +309,7 @@ mod tests {
             node_id: None,
             selection_mode: SelectionMode::Single,
             requirement: PointRequirement::Unlocked,
+            tier_gate: None,
             options: vec![DecisionOption {
                 id: option_id.into(),
                 label: option_id.into(),

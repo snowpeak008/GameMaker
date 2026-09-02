@@ -1,0 +1,742 @@
+{
+  "identity": {
+    "schema_version": "4.0.0",
+    "project_id": "霜落峡谷防卫计划@sha256:64bda8cc81639dfe",
+    "frozen_hash": "sha256:64bda8cc81639dfebcf747689f58a11e931e69db5aaab505f377ce4ce0b8c864"
+  },
+  "intent": {
+    "title": "霜落峡谷防卫计划",
+    "experience_promise": "以小博大的守护：守护脆弱目标的压力曲线契合品类体验",
+    "genre_structure": "通道塔防",
+    "profile": {
+      "u.business_model": "买断制",
+      "u.platform": "PC 单机"
+    }
+  },
+  "systems": [
+    {
+      "id": "ld.combat_system",
+      "name": "克制式战斗",
+      "purpose": "守卫与敌人之间存在克制关系，伤害受克制系数放大",
+      "interfaces": [
+        "需要克制矩阵",
+        "需要伤害公式"
+      ]
+    },
+    {
+      "id": "ld.deploy_system",
+      "name": "网格部署",
+      "purpose": "守卫放置在固定网格位上，消耗资源",
+      "interfaces": [
+        "需要网格坐标",
+        "需要部署成本规则"
+      ]
+    },
+    {
+      "id": "ld.economy_system",
+      "name": "周期回复资源",
+      "purpose": "资源随时间周期性增长，用于部署",
+      "interfaces": [
+        "需要回复节奏参数"
+      ]
+    },
+    {
+      "id": "ld.wave_system",
+      "name": "脚本化波次",
+      "purpose": "每关波次表预先设计，敌人按表出场",
+      "interfaces": [
+        "需要波次表",
+        "需要敌人名单"
+      ]
+    }
+  ],
+  "mechanics": [
+    {
+      "id": "ld.counter_damage",
+      "system_id": "ld.combat_system",
+      "rule_text": "克制系数乘法公式。伤害 = 攻击力 × 克制系数（系数来自克制矩阵）（base_multiplier=2）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "modify_property",
+          "entity": "ld.enemy_roster",
+          "property": "hp",
+          "formula": "hp - attack * counter_coeff * 2"
+        }
+      ],
+      "state_machine": null
+    },
+    {
+      "id": "ld.deploy_cost",
+      "system_id": "ld.deploy_system",
+      "rule_text": "成本闸门。部署消耗守卫成本，资源不足禁止部署；移除返还比例资源（refund_ratio=0.8）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "consume_resource",
+          "resource": "energy",
+          "formula": "cost(guard)"
+        },
+        {
+          "effect": "spawn_entity",
+          "entity": "ld.guard_roster"
+        }
+      ],
+      "state_machine": null
+    },
+    {
+      "id": "ld.income_rule",
+      "system_id": "ld.economy_system",
+      "rule_text": "周期定额回复。每隔固定秒数回复固定数额资源（amount=25, interval_seconds=5）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "grant_resource",
+          "resource": "energy",
+          "formula": "+25 / 5s"
+        }
+      ],
+      "state_machine": null
+    }
+  ],
+  "entities": [
+    {
+      "id": "ld.enemy_roster.crawler",
+      "name": "crawler",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99999.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 20.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.enemy_roster.glider",
+      "name": "glider",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99999.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 20.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster.thorn_archer",
+      "name": "thorn_archer",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster.mist_mage",
+      "name": "mist_mage",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster.stone_ward",
+      "name": "stone_ward",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster.sun_harvester",
+      "name": "sun_harvester",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ld.guard_roster.bramble_guard",
+      "name": "bramble_guard",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "id": "ld.counter_matrix",
+      "columns": [
+        {
+          "key": "coeff",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        }
+      ],
+      "row_key": "row",
+      "rows": [],
+      "cells": [
+        {
+          "row": "thorn_archer",
+          "col": "crawler",
+          "value": 1.0
+        },
+        {
+          "row": "thorn_archer",
+          "col": "glider",
+          "value": 1.0
+        },
+        {
+          "row": "mist_mage",
+          "col": "crawler",
+          "value": 1.0
+        },
+        {
+          "row": "mist_mage",
+          "col": "glider",
+          "value": 2.5
+        },
+        {
+          "row": "stone_ward",
+          "col": "crawler",
+          "value": 1.0
+        },
+        {
+          "row": "stone_ward",
+          "col": "glider",
+          "value": 1.0
+        },
+        {
+          "row": "sun_harvester",
+          "col": "crawler",
+          "value": 1.0
+        },
+        {
+          "row": "sun_harvester",
+          "col": "glider",
+          "value": 1.0
+        },
+        {
+          "row": "bramble_guard",
+          "col": "crawler",
+          "value": 1.5
+        },
+        {
+          "row": "bramble_guard",
+          "col": "glider",
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "ld.enemy_roster",
+      "columns": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99999.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 20.0
+          }
+        }
+      ],
+      "row_key": "id",
+      "rows": [
+        {
+          "hp": 60,
+          "id": "crawler",
+          "speed": 1.0
+        },
+        {
+          "hp": 40,
+          "id": "glider",
+          "speed": 2.2
+        }
+      ],
+      "cells": []
+    },
+    {
+      "id": "ld.guard_roster",
+      "columns": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "attack_interval",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.1,
+            "max": 10.0
+          }
+        }
+      ],
+      "row_key": "id",
+      "rows": [
+        {
+          "attack": 12,
+          "attack_interval": 1.2,
+          "cost": 100,
+          "id": "thorn_archer"
+        },
+        {
+          "attack": 20,
+          "attack_interval": 1.8,
+          "cost": 150,
+          "id": "mist_mage"
+        },
+        {
+          "attack": 4,
+          "attack_interval": 2.0,
+          "cost": 60,
+          "id": "stone_ward"
+        },
+        {
+          "attack": 0,
+          "attack_interval": 3.0,
+          "cost": 50,
+          "id": "sun_harvester"
+        },
+        {
+          "attack": 8,
+          "attack_interval": 1.6,
+          "cost": 90,
+          "id": "bramble_guard"
+        }
+      ],
+      "cells": []
+    }
+  ],
+  "content": [
+    {
+      "id": "ld.wave_table",
+      "content_kind": "wave_schedule",
+      "data": {
+        "rows": [
+          {
+            "count": 5,
+            "enemy_id": "crawler",
+            "interval_seconds": 2.0,
+            "wave": 1
+          },
+          {
+            "count": 8,
+            "enemy_id": "crawler",
+            "interval_seconds": 1.6,
+            "wave": 2
+          },
+          {
+            "count": 4,
+            "enemy_id": "glider",
+            "interval_seconds": 1.5,
+            "wave": 3
+          },
+          {
+            "count": 10,
+            "enemy_id": "crawler",
+            "interval_seconds": 1.2,
+            "wave": 4
+          },
+          {
+            "count": 8,
+            "enemy_id": "glider",
+            "interval_seconds": 1.0,
+            "wave": 5
+          }
+        ],
+        "values": "rows"
+      }
+    }
+  ],
+  "acceptance": [],
+  "source_map": [
+    {
+      "spec_path": "systems/ld.combat_system",
+      "decision_id": "ld.combat_system"
+    },
+    {
+      "spec_path": "mechanics/ld.counter_damage",
+      "decision_id": "ld.counter_damage"
+    },
+    {
+      "spec_path": "tables/ld.counter_matrix",
+      "decision_id": "ld.counter_matrix"
+    },
+    {
+      "spec_path": "mechanics/ld.deploy_cost",
+      "decision_id": "ld.deploy_cost"
+    },
+    {
+      "spec_path": "systems/ld.deploy_system",
+      "decision_id": "ld.deploy_system"
+    },
+    {
+      "spec_path": "systems/ld.economy_system",
+      "decision_id": "ld.economy_system"
+    },
+    {
+      "spec_path": "tables/ld.enemy_roster",
+      "decision_id": "ld.enemy_roster"
+    },
+    {
+      "spec_path": "entities/ld.enemy_roster.crawler",
+      "decision_id": "ld.enemy_roster"
+    },
+    {
+      "spec_path": "entities/ld.enemy_roster.glider",
+      "decision_id": "ld.enemy_roster"
+    },
+    {
+      "spec_path": "tables/ld.guard_roster",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "entities/ld.guard_roster.thorn_archer",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "entities/ld.guard_roster.mist_mage",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "entities/ld.guard_roster.stone_ward",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "entities/ld.guard_roster.sun_harvester",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "entities/ld.guard_roster.bramble_guard",
+      "decision_id": "ld.guard_roster"
+    },
+    {
+      "spec_path": "mechanics/ld.income_rule",
+      "decision_id": "ld.income_rule"
+    },
+    {
+      "spec_path": "systems/ld.wave_system",
+      "decision_id": "ld.wave_system"
+    },
+    {
+      "spec_path": "content/ld.wave_table",
+      "decision_id": "ld.wave_table"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.business_model"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.experience"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.genre"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.platform"
+    }
+  ]
+}

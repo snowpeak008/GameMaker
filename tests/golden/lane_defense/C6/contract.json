@@ -1,0 +1,192 @@
+{
+  "tasks": [
+    {
+      "id": "task_cap_ld.counter_damage",
+      "kind": "program",
+      "title": "实现 MechanicExecutionService",
+      "source_refs": [
+        "mechanics/ld.counter_damage"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_cap_ld.deploy_cost",
+      "kind": "program",
+      "title": "实现 MechanicExecutionService",
+      "source_refs": [
+        "mechanics/ld.deploy_cost"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_cap_ld.income_rule",
+      "kind": "program",
+      "title": "实现 MechanicExecutionService",
+      "source_refs": [
+        "mechanics/ld.income_rule"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.enemy_roster.crawler",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.enemy_roster.crawler",
+      "source_refs": [
+        "entities/ld.enemy_roster.crawler"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.enemy_roster.glider",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.enemy_roster.glider",
+      "source_refs": [
+        "entities/ld.enemy_roster.glider"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.guard_roster.thorn_archer",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.guard_roster.thorn_archer",
+      "source_refs": [
+        "entities/ld.guard_roster.thorn_archer"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.guard_roster.mist_mage",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.guard_roster.mist_mage",
+      "source_refs": [
+        "entities/ld.guard_roster.mist_mage"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.guard_roster.stone_ward",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.guard_roster.stone_ward",
+      "source_refs": [
+        "entities/ld.guard_roster.stone_ward"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.guard_roster.sun_harvester",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.guard_roster.sun_harvester",
+      "source_refs": [
+        "entities/ld.guard_roster.sun_harvester"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_asset_ld.guard_roster.bramble_guard",
+      "kind": "asset",
+      "title": "制作资产 asset_ld.guard_roster.bramble_guard",
+      "source_refs": [
+        "entities/ld.guard_roster.bramble_guard"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task_assemble_ld.combat_system",
+      "kind": "assembly",
+      "title": "装配系统 克制式战斗",
+      "source_refs": [
+        "systems/ld.combat_system"
+      ],
+      "depends_on": [
+        "task_cap_ld.counter_damage"
+      ]
+    },
+    {
+      "id": "task_assemble_ld.deploy_system",
+      "kind": "assembly",
+      "title": "装配系统 网格部署",
+      "source_refs": [
+        "systems/ld.deploy_system"
+      ],
+      "depends_on": [
+        "task_cap_ld.deploy_cost"
+      ]
+    },
+    {
+      "id": "task_assemble_ld.economy_system",
+      "kind": "assembly",
+      "title": "装配系统 周期回复资源",
+      "source_refs": [
+        "systems/ld.economy_system"
+      ],
+      "depends_on": [
+        "task_cap_ld.income_rule"
+      ]
+    },
+    {
+      "id": "task_assemble_ld.wave_system",
+      "kind": "assembly",
+      "title": "装配系统 脚本化波次",
+      "source_refs": [
+        "systems/ld.wave_system"
+      ],
+      "depends_on": []
+    }
+  ],
+  "reconciliation": {
+    "value": 1.0,
+    "evidence": [
+      {
+        "file": "C6/contract.json",
+        "path": "capabilities/cap_ld.counter_damage",
+        "observed": "任务 task_cap_ld.counter_damage 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "capabilities/cap_ld.deploy_cost",
+        "observed": "任务 task_cap_ld.deploy_cost 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "capabilities/cap_ld.income_rule",
+        "observed": "任务 task_cap_ld.income_rule 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.enemy_roster.crawler",
+        "observed": "任务 task_asset_ld.enemy_roster.crawler 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.enemy_roster.glider",
+        "observed": "任务 task_asset_ld.enemy_roster.glider 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.guard_roster.thorn_archer",
+        "observed": "任务 task_asset_ld.guard_roster.thorn_archer 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.guard_roster.mist_mage",
+        "observed": "任务 task_asset_ld.guard_roster.mist_mage 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.guard_roster.stone_ward",
+        "observed": "任务 task_asset_ld.guard_roster.stone_ward 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.guard_roster.sun_harvester",
+        "observed": "任务 task_asset_ld.guard_roster.sun_harvester 存在"
+      },
+      {
+        "file": "C6/contract.json",
+        "path": "assets/asset_ld.guard_roster.bramble_guard",
+        "observed": "任务 task_asset_ld.guard_roster.bramble_guard 存在"
+      }
+    ]
+  },
+  "missing": []
+}

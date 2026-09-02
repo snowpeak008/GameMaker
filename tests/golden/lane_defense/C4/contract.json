@@ -1,0 +1,113 @@
+{
+  "capabilities": [
+    {
+      "id": "cap_ld.counter_damage",
+      "interface_name": "MechanicExecutionService",
+      "data_structures": [],
+      "source_refs": [
+        "mechanics/ld.counter_damage"
+      ],
+      "scenarios": [
+        {
+          "id": "scenario_ld.counter_damage",
+          "capability_id": "cap_ld.counter_damage",
+          "given": [
+            "系统 ld.combat_system 处于就绪状态"
+          ],
+          "when": [
+            "克制系数乘法公式。伤害 = 攻击力 × 克制系数（系数来自克制矩阵）（base_multiplier=2）"
+          ],
+          "then": [
+            "实体 ld.enemy_roster 的 hp 按公式 hp - attack * counter_coeff * 2 变化"
+          ],
+          "source_refs": [
+            "mechanics/ld.counter_damage"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap_ld.deploy_cost",
+      "interface_name": "MechanicExecutionService",
+      "data_structures": [],
+      "source_refs": [
+        "mechanics/ld.deploy_cost"
+      ],
+      "scenarios": [
+        {
+          "id": "scenario_ld.deploy_cost",
+          "capability_id": "cap_ld.deploy_cost",
+          "given": [
+            "系统 ld.deploy_system 处于就绪状态"
+          ],
+          "when": [
+            "成本闸门。部署消耗守卫成本，资源不足禁止部署；移除返还比例资源（refund_ratio=0.8）"
+          ],
+          "then": [
+            "资源 energy 按 cost(guard) 消耗",
+            "生成实体 ld.guard_roster"
+          ],
+          "source_refs": [
+            "mechanics/ld.deploy_cost"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap_ld.income_rule",
+      "interface_name": "MechanicExecutionService",
+      "data_structures": [],
+      "source_refs": [
+        "mechanics/ld.income_rule"
+      ],
+      "scenarios": [
+        {
+          "id": "scenario_ld.income_rule",
+          "capability_id": "cap_ld.income_rule",
+          "given": [
+            "系统 ld.economy_system 处于就绪状态"
+          ],
+          "when": [
+            "周期定额回复。每隔固定秒数回复固定数额资源（amount=25, interval_seconds=5）"
+          ],
+          "then": [
+            "资源 energy 按 +25 / 5s 增加"
+          ],
+          "source_refs": [
+            "mechanics/ld.income_rule"
+          ]
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "value": 1.0,
+    "evidence": [
+      {
+        "file": "C4/contract.json",
+        "path": "mechanics/ld.counter_damage",
+        "observed": "被能力 cap_ld.counter_damage 覆盖"
+      },
+      {
+        "file": "C4/contract.json",
+        "path": "mechanics/ld.deploy_cost",
+        "observed": "被能力 cap_ld.deploy_cost 覆盖"
+      },
+      {
+        "file": "C4/contract.json",
+        "path": "mechanics/ld.income_rule",
+        "observed": "被能力 cap_ld.income_rule 覆盖"
+      }
+    ]
+  },
+  "cardinality": {
+    "rule": "每条 L4 机制确定性投影为 1 个能力契约与 ≥1 个 GWT 场景",
+    "produced": 3,
+    "expected": {
+      "min": 3,
+      "max": 3
+    },
+    "dropped": []
+  },
+  "blockers": []
+}

@@ -38,7 +38,7 @@ pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
     let mut capabilities = Vec::new();
     for mechanic in &spec.mechanics {
         let interface_name = name_interface(ctx, mechanic)?;
-        let scenario = project_scenario(mechanic);
+        let scenario = project_scenario(mechanic)?;
         let data_structures = collect_data_structures(&spec, mechanic);
         capabilities.push(CapabilityContract {
             id: format!("cap_{}", mechanic.id),
@@ -144,7 +144,10 @@ pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
 }
 
 /// 确定性 GWT 投影：preconditions → Given；rule_text → When；effects（封闭枚举）→ Then。
-fn project_scenario(mechanic: &MechanicSpec) -> AcceptanceScenario {
+///
+/// W7 新增 9 变体（第 2 层 8 个 + Custom）的需求渲染属波 1（T-W7-1b/1c）；
+/// 未交付前遇到即返回结构化 Err（§0 C4 未交付臂纪律：无 `_` 臂、禁 todo!()）。
+fn project_scenario(mechanic: &MechanicSpec) -> Adm4Result<AcceptanceScenario> {
     let given = if mechanic.preconditions.is_empty() {
         vec![format!("系统 {} 处于就绪状态", mechanic.system_id)]
     } else {
@@ -154,6 +157,11 @@ fn project_scenario(mechanic: &MechanicSpec) -> AcceptanceScenario {
             .map(|condition| format!("{} {}", condition.subject, condition.predicate))
             .collect()
     };
+    let undelivered = |variant: &str| {
+        Err(Adm4Error::blocked(format!(
+            "效果变体 {variant} 的需求渲染未交付（W7 波 1 实现）"
+        )))
+    };
     let then = mechanic
         .effects
         .iter()
@@ -162,37 +170,63 @@ fn project_scenario(mechanic: &MechanicSpec) -> AcceptanceScenario {
                 entity,
                 property,
                 formula,
-            } => format!("实体 {entity} 的 {property} 按公式 {formula} 变化"),
-            EffectSpec::SpawnEntity { entity } => format!("生成实体 {entity}"),
-            EffectSpec::DespawnEntity { entity } => format!("移除实体 {entity}"),
+            } => Ok(format!("实体 {entity} 的 {property} 按公式 {formula} 变化")),
+            EffectSpec::SpawnEntity { entity } => Ok(format!("生成实体 {entity}")),
+            EffectSpec::DespawnEntity { entity } => Ok(format!("移除实体 {entity}")),
             EffectSpec::ChangeState { machine, to_state } => {
-                format!("状态机 {machine} 进入 {to_state}")
+                Ok(format!("状态机 {machine} 进入 {to_state}"))
             }
             EffectSpec::GrantResource { resource, formula } => {
-                format!("资源 {resource} 按 {formula} 增加")
+                Ok(format!("资源 {resource} 按 {formula} 增加"))
             }
             EffectSpec::ConsumeResource { resource, formula } => {
-                format!("资源 {resource} 按 {formula} 消耗")
+                Ok(format!("资源 {resource} 按 {formula} 消耗"))
             }
-            EffectSpec::EmitSignal { signal } => format!("发出信号 {signal}"),
+            EffectSpec::EmitSignal { signal } => Ok(format!("发出信号 {signal}")),
+            EffectSpec::Displace { .. } => undelivered("Displace"),
+            EffectSpec::AreaApply { .. } => undelivered("AreaApply"),
+            EffectSpec::Attach { .. } => undelivered("Attach"),
+            EffectSpec::Detach { .. } => undelivered("Detach"),
+            EffectSpec::Schedule { .. } => undelivered("Schedule"),
+            EffectSpec::ModifyRule { .. } => undelivered("ModifyRule"),
+            EffectSpec::DrawFromPool { .. } => undelivered("DrawFromPool"),
+            EffectSpec::RollCheck { .. } => undelivered("RollCheck"),
+            EffectSpec::Custom { .. } => undelivered("Custom"),
         })
-        .collect();
-    AcceptanceScenario {
+        .collect::<Adm4Result<Vec<String>>>()?;
+    Ok(AcceptanceScenario {
         id: format!("scenario_{}", mechanic.id),
         capability_id: format!("cap_{}", mechanic.id),
         given,
         when: vec![mechanic.rule_text.clone()],
         then,
         source_refs: vec![SpecRef::new(format!("mechanics/{}", mechanic.id))],
-    }
+    })
 }
 
 fn collect_data_structures(spec: &GameSpec, mechanic: &MechanicSpec) -> Vec<String> {
     let mut structures = Vec::new();
     for effect in &mechanic.effects {
-        if let EffectSpec::ModifyProperty { entity, .. }
-        | EffectSpec::SpawnEntity { entity }
-        | EffectSpec::DespawnEntity { entity } = effect
+        let entity = match effect {
+            EffectSpec::ModifyProperty { entity, .. }
+            | EffectSpec::SpawnEntity { entity }
+            | EffectSpec::DespawnEntity { entity } => Some(entity),
+            EffectSpec::ChangeState { .. }
+            | EffectSpec::GrantResource { .. }
+            | EffectSpec::ConsumeResource { .. }
+            | EffectSpec::EmitSignal { .. } => None,
+            // W7 波 1 补真实收集（含 AreaApply/Schedule/RollCheck 嵌套 inner 的递归收集）
+            EffectSpec::Displace { .. }
+            | EffectSpec::AreaApply { .. }
+            | EffectSpec::Attach { .. }
+            | EffectSpec::Detach { .. }
+            | EffectSpec::Schedule { .. }
+            | EffectSpec::ModifyRule { .. }
+            | EffectSpec::DrawFromPool { .. }
+            | EffectSpec::RollCheck { .. }
+            | EffectSpec::Custom { .. } => None,
+        };
+        if let Some(entity) = entity
             && let Some(found) = spec
                 .entities
                 .iter()
@@ -239,4 +273,115 @@ fn camel(text: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adm4_foundation::Adm4ErrorKind;
+    use std::collections::BTreeMap;
+
+    fn mechanic_with(effects: Vec<EffectSpec>) -> MechanicSpec {
+        MechanicSpec {
+            id: "m1".into(),
+            system_id: "s1".into(),
+            rule_text: "规则".into(),
+            preconditions: Vec::new(),
+            effects,
+            state_machine: None,
+            design_notes: Vec::new(),
+        }
+    }
+
+    /// 锁定：波 1 交付真渲染前，Displace 必须走结构化"未交付"Err，
+    /// 不许悄悄糊假渲染（§0 C4 未交付臂纪律）。
+    #[test]
+    fn displace_projection_is_honest_undelivered_err() {
+        let mechanic = mechanic_with(vec![EffectSpec::Displace {
+            subject: "enemy".into(),
+            direction_expr: "away".into(),
+            distance_expr: "3".into(),
+            duration_expr: "0.5".into(),
+        }]);
+        let error = project_scenario(&mechanic).expect_err("Displace 渲染未交付应 Err");
+        assert_eq!(error.kind, Adm4ErrorKind::Blocked);
+        assert!(
+            error.message.contains("Displace") && error.message.contains("未交付"),
+            "{}",
+            error.message
+        );
+    }
+
+    /// 锁定：ModifyRule 同上。
+    #[test]
+    fn modify_rule_projection_is_honest_undelivered_err() {
+        let mechanic = mechanic_with(vec![EffectSpec::ModifyRule {
+            target_rule: "damage_formula".into(),
+            patch: Default::default(),
+            priority: 0,
+        }]);
+        let error = project_scenario(&mechanic).expect_err("ModifyRule 渲染未交付应 Err");
+        assert_eq!(error.kind, Adm4ErrorKind::Blocked);
+        assert!(
+            error.message.contains("ModifyRule") && error.message.contains("未交付"),
+            "{}",
+            error.message
+        );
+    }
+
+    /// 锁定：Custom 同上——即使带了完整 GWT 模板，转录投影也属波 1，不许提前糊。
+    #[test]
+    fn custom_projection_is_honest_undelivered_err() {
+        let mechanic = mechanic_with(vec![EffectSpec::Custom {
+            verb: "merge".into(),
+            operands: BTreeMap::new(),
+            given: "g".into(),
+            when_: "w".into(),
+            then: "t".into(),
+        }]);
+        let error = project_scenario(&mechanic).expect_err("Custom 渲染未交付应 Err");
+        assert_eq!(error.kind, Adm4ErrorKind::Blocked);
+        assert!(
+            error.message.contains("Custom") && error.message.contains("未交付"),
+            "{}",
+            error.message
+        );
+    }
+
+    /// 混入一个新变体就整体 Err：旧 7 变体不因同机制的未交付变体被静默丢弃。
+    #[test]
+    fn mixed_effects_fail_whole_projection() {
+        let mechanic = mechanic_with(vec![
+            EffectSpec::SpawnEntity {
+                entity: "guard".into(),
+            },
+            EffectSpec::Schedule {
+                timing: Default::default(),
+                amount_expr: "2".into(),
+                unit: Default::default(),
+                inner: Vec::new(),
+            },
+        ]);
+        let error = project_scenario(&mechanic).expect_err("含 Schedule 的机制应整体 Err");
+        assert!(error.message.contains("Schedule"), "{}", error.message);
+    }
+
+    /// 旧 7 变体投影不受本卡影响（基线守恒）。
+    #[test]
+    fn legacy_seven_variants_still_project() {
+        let mechanic = mechanic_with(vec![
+            EffectSpec::ModifyProperty {
+                entity: "enemy".into(),
+                property: "hp".into(),
+                formula: "hp - damage".into(),
+            },
+            EffectSpec::EmitSignal {
+                signal: "hit".into(),
+            },
+        ]);
+        let scenario = project_scenario(&mechanic).expect("旧变体应正常投影");
+        assert_eq!(scenario.then.len(), 2);
+        assert!(scenario.then[0].contains("hp"));
+        assert!(scenario.then[1].contains("hit"));
+    }
 }

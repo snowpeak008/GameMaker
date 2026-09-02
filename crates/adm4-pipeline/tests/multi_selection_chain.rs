@@ -57,6 +57,7 @@ fn point(
         node_id: Some(node_id.into()),
         selection_mode: mode,
         requirement: PointRequirement::Unlocked,
+        tier_gate: None,
         options,
         skin_fields: Vec::new(),
         evidence_slots: false,

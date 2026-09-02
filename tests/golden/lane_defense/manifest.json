@@ -1,0 +1,74 @@
+{
+    "generated_at":  "2026-09-02T18:49:36Z",
+    "tool_version":  "adm4-cli 0.1.0 (sha256:7a05645e6780b06b43e9dd0671e1869aa2e2ca25921acd23e3614188be58995f)",
+    "build_note":  "cargo build 失败（退出码 101，疑似并行卡半成品）；改用既有二进制（构建时间 2026-09-02T19:28:11）继续固化",
+    "genre_pack":  "lane_defense",
+    "frozen_version":  "v1",
+    "stages":  [
+                   "C0",
+                   "C1",
+                   "C2",
+                   "C3",
+                   "C4",
+                   "C5",
+                   "C6"
+               ],
+    "files":  {
+                  "C0/contract.json":  {
+                                           "bytes":  16317,
+                                           "sha256":  "ea93c539a25dd3aa45a981672313ddd542d10ed5a7f8dae4fb1d88bf02cec26f"
+                                       },
+                  "C0/document.md":  {
+                                         "bytes":  304,
+                                         "sha256":  "3285070aeb1e0b57a57e5f34e020c7200cb313cbc4e431c4f6b932d9e2c2211a"
+                                     },
+                  "C1/contract.json":  {
+                                           "bytes":  621,
+                                           "sha256":  "3e32b7fde061a56deafd8e1e09abf3e30e4abd8461580a25cb8fb4184ec89902"
+                                       },
+                  "C1/document.md":  {
+                                         "bytes":  191,
+                                         "sha256":  "34b59ac7388e191f255cae32761147ba17adaa7050aed048e808a6beb2a4dd65"
+                                     },
+                  "C2/contract.json":  {
+                                           "bytes":  2922,
+                                           "sha256":  "89ab19a1ff240078810720d8a262bb0c6fb30143e0e296cd32acd0d191d8da04"
+                                       },
+                  "C2/document.md":  {
+                                         "bytes":  1152,
+                                         "sha256":  "f2bf1287ca74eed84f32db04b40e58094a0b448b94487a04fa3ae47a8956bf86"
+                                     },
+                  "C3/contract.json":  {
+                                           "bytes":  2842,
+                                           "sha256":  "ab8a9a00e8e068a5508074281e2389b4a739f8e769972d7e258a3ce4dff3fe4d"
+                                       },
+                  "C3/document.md":  {
+                                         "bytes":  1623,
+                                         "sha256":  "c48608fb2076423d4e2d1d2440f1e626bc95c2cb679915eef8993b4d939cd260"
+                                     },
+                  "C4/contract.json":  {
+                                           "bytes":  3122,
+                                           "sha256":  "fbafaa7436532bdb5d8c385fb9f1e084186dd81edfdf3e48e322d81f6b2215e6"
+                                       },
+                  "C4/document.md":  {
+                                         "bytes":  1290,
+                                         "sha256":  "3036aca6376af940b4ee074d91cb78490bf29b405ae7b1d1c5b933f4ffd67d60"
+                                     },
+                  "C5/contract.json":  {
+                                           "bytes":  354,
+                                           "sha256":  "69ae8be8d7f03fc52dbccd5fefea7a77fdc7e9d4ae33b153df715ece1506f360"
+                                       },
+                  "C5/document.md":  {
+                                         "bytes":  366,
+                                         "sha256":  "ca8f5b12a0bc22f1360fcec44c5193afb7acda34d80e0bba98e038c0567c1801"
+                                     },
+                  "C6/contract.json":  {
+                                           "bytes":  5351,
+                                           "sha256":  "28e441648017a315cf85ac42c601ced530da2cb4b5a305222006226db3ea5010"
+                                       },
+                  "C6/document.md":  {
+                                         "bytes":  1124,
+                                         "sha256":  "f7993b0ff926d7ec05784135d74b5aae3120048716747337a5b86c8dd6513efe"
+                                     }
+              }
+}

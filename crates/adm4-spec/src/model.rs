@@ -1,8 +1,37 @@
+pub use crate::effects::EffectSpec;
+pub use crate::graph::GraphSpec;
 use adm4_contracts::{MatrixCell, SpecRef, TypedValue, ValueConstraint, ValueKind};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const SPEC_SCHEMA_VERSION: &str = "4.0.0";
+
+/// 设计注记的角色（W7 定稿 §5.5）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DesignNoteRole {
+    /// 选择理由（选项 rationale）。
+    #[default]
+    Rationale,
+    /// 设计者自由陈述。
+    Statement,
+}
+
+/// 设计注记：rationale 进编译链（W7 定稿 §5.5）。
+///
+/// **纪律：注记只被携带与展示，永不被编译成结构**——GWT 仍只从结构化
+/// 字段派生，保 I1 确定性守恒。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DesignNote {
+    #[serde(default)]
+    pub source_decision: String,
+    #[serde(default)]
+    pub source_option: String,
+    #[serde(default)]
+    pub role: DesignNoteRole,
+    #[serde(default)]
+    pub text: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpecIdentity {
@@ -33,44 +62,14 @@ pub struct SystemSpec {
     pub purpose: String,
     #[serde(default)]
     pub interfaces: Vec<String>,
+    #[serde(default)]
+    pub design_notes: Vec<DesignNote>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConditionSpec {
     pub subject: String,
     pub predicate: String,
-}
-
-/// 机制效果的封闭枚举——C4 确定性投影的前提。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "effect", rename_all = "snake_case")]
-pub enum EffectSpec {
-    ModifyProperty {
-        entity: String,
-        property: String,
-        formula: String,
-    },
-    SpawnEntity {
-        entity: String,
-    },
-    DespawnEntity {
-        entity: String,
-    },
-    ChangeState {
-        machine: String,
-        to_state: String,
-    },
-    GrantResource {
-        resource: String,
-        formula: String,
-    },
-    ConsumeResource {
-        resource: String,
-        formula: String,
-    },
-    EmitSignal {
-        signal: String,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +98,8 @@ pub struct MechanicSpec {
     pub effects: Vec<EffectSpec>,
     #[serde(default)]
     pub state_machine: Option<StateMachineSpec>,
+    #[serde(default)]
+    pub design_notes: Vec<DesignNote>,
 }
 
 /// 实体的视觉形态声明（C3 视觉白名单依据：未声明 = 不产美术资产）。
@@ -141,6 +142,8 @@ pub struct TableSpec {
     /// 矩阵型表的格数据（行/列/值）。
     #[serde(default)]
     pub cells: Vec<MatrixCell>,
+    #[serde(default)]
+    pub design_notes: Vec<DesignNote>,
 }
 
 /// L6：关卡/波次等内容数据。
@@ -149,6 +152,8 @@ pub struct ContentSpec {
     pub id: String,
     pub content_kind: String,
     pub data: serde_json::Value,
+    #[serde(default)]
+    pub design_notes: Vec<DesignNote>,
 }
 
 /// GWT 验收场景（C4 派生填充；Phase 2 P4 真机执行）。
@@ -179,6 +184,9 @@ pub struct GameSpec {
     pub entities: Vec<EntitySpec>,
     pub tables: Vec<TableSpec>,
     pub content: Vec<ContentSpec>,
+    /// L5/L6：图结构参数（W7 新增，旧档缺键可读）。
+    #[serde(default)]
+    pub graphs: Vec<GraphSpec>,
     #[serde(default)]
     pub acceptance: Vec<AcceptanceScenario>,
     pub source_map: Vec<SpecSourceEntry>,
@@ -198,6 +206,7 @@ impl GameSpec {
             "entities" => self.entities.iter().any(|item| item.id == id),
             "tables" => self.tables.iter().any(|item| item.id == id),
             "content" => self.content.iter().any(|item| item.id == id),
+            "graphs" => self.graphs.iter().any(|item| item.id == id),
             "acceptance" => self.acceptance.iter().any(|item| item.id == id),
             _ => false,
         }
@@ -229,6 +238,11 @@ impl GameSpec {
             self.content
                 .iter()
                 .map(|item| SpecRef::new(format!("content/{}", item.id))),
+        );
+        paths.extend(
+            self.graphs
+                .iter()
+                .map(|item| SpecRef::new(format!("graphs/{}", item.id))),
         );
         paths
     }
