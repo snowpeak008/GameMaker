@@ -3,8 +3,9 @@ use crate::runner::RunnerContext;
 use adm4_ai::AiRequest;
 use adm4_contracts::{CategoryEvidence, ReviewProof, verify_review_batch};
 use adm4_foundation::{Adm4Error, Adm4Result, sha256_hex};
-use adm4_spec::{GameSpec, validate_game_spec};
+use adm4_spec::{EffectSpec, GameSpec, validate_game_spec};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 /// 红队发现的合法严重度枚举；缺失或超出枚举一律拒收（不得默认降级为 warning）。
 const FINDING_SEVERITIES: [&str; 2] = ["blocker", "warning"];
@@ -23,16 +24,21 @@ pub struct ValidationContract {
     pub static_violations: Vec<String>,
     pub redteam_findings: Vec<RedTeamFinding>,
     pub proof: ReviewProof,
+    /// 含 Custom 效果的机制清单——custom 是逃生舱口，列入红队必审
+    /// （W7 定稿 §5.7 C1 小改；渲染进 C1 文档的待审节）。
+    #[serde(default)]
+    pub custom_review_targets: Vec<String>,
 }
 
 pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
     let spec: GameSpec = ctx.store.read_contract("C0")?;
 
-    // 机器规则：零违例硬门。
-    let static_violations: Vec<String> = validate_game_spec(&spec)
+    // 机器规则：零违例硬门（spec 级校验 + W7 波 1 追加清单）。
+    let mut static_violations: Vec<String> = validate_game_spec(&spec)
         .into_iter()
         .map(|violation| format!("[{}] {}", violation.code, violation.message))
         .collect();
+    static_violations.extend(collect_extended_violations(&spec));
     if !static_violations.is_empty() {
         return Err(Adm4Error::validation(format!(
             "C1 静态验证 {} 项违例：{}",
@@ -128,16 +134,156 @@ pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
         static_violations,
         redteam_findings: findings,
         proof,
+        custom_review_targets: collect_custom_review_targets(&spec),
     };
-    let document = format!(
-        "# C1 验证与红队报告\n\n- 静态违例：0\n- 红队发现：{}（无 blocker）\n- 评审者：{}\n- 评审数量：{}/{}\n\n> 本文档由 contract.json 渲染，请勿手改。\n",
+    let mut document = format!(
+        "# C1 验证与红队报告\n\n- 静态违例：0\n- 红队发现：{}（无 blocker）\n- 评审者：{}\n- 评审数量：{}/{}\n\n",
         contract.redteam_findings.len(),
         contract.proof.reviewer,
         contract.proof.reviewed_count,
         contract.proof.upstream_count
     );
+    // custom 机制列入红队必审清单（W7 定稿 §5.7）：仅在存在 Custom 效果时渲染，
+    // 无 custom 的项目文档字节不变（金样零漂移）。
+    if !contract.custom_review_targets.is_empty() {
+        document.push_str("## Custom 机制待审（红队必审）\n\n");
+        for mechanic_id in &contract.custom_review_targets {
+            document.push_str(&format!(
+                "- `mechanics/{mechanic_id}`：含 Custom 效果（逃生舱口转录），红队须人工核对 GWT 模板与 rule_text 的一致性\n"
+            ));
+        }
+        document.push('\n');
+    }
+    document.push_str("> 本文档由 contract.json 渲染，请勿手改。\n");
     ctx.store.write_stage("C1", &contract, &document)?;
     Ok(StageStatus::Succeeded)
+}
+
+/// W7 波 1 追加的 C1 校验清单（定稿 §5.7 C1 小改）：
+/// - graphs 引用闭合：验收场景 source_refs 指向的 `graphs/<id>` 必须真实存在
+///   （source_map 悬空已由 spec 级校验兜住，这里补验收面的闭合）；
+/// - ModifyRule target 存在性复检：target_rule 必须是 spec 内真实机制 id
+///   （C0/GameSpec 校验层拦截的兜底复检，嵌套效果内同查）；
+/// - Custom GWT 模板非空复检：C0 按 R2 拦截的兜底（嵌套效果内同查）。
+fn collect_extended_violations(spec: &GameSpec) -> Vec<String> {
+    let mut violations = Vec::new();
+    for scenario in &spec.acceptance {
+        for source_ref in &scenario.source_refs {
+            if source_ref.0.starts_with("graphs/") && !spec.contains_ref(source_ref) {
+                violations.push(format!(
+                    "[c1_graph_ref_dangling] 验收场景 {} 引用了不存在的图 {}",
+                    scenario.id, source_ref.0
+                ));
+            }
+        }
+    }
+    let mechanic_ids: BTreeSet<&str> = spec
+        .mechanics
+        .iter()
+        .map(|mechanic| mechanic.id.as_str())
+        .collect();
+    for mechanic in &spec.mechanics {
+        for effect in &mechanic.effects {
+            check_effect_recursively(&mechanic.id, effect, &mechanic_ids, &mut violations);
+        }
+    }
+    violations
+}
+
+/// 单个效果的 C1 复检（穷尽匹配无 `_` 臂；嵌套效果递归下探）。
+fn check_effect_recursively(
+    mechanic_id: &str,
+    effect: &EffectSpec,
+    mechanic_ids: &BTreeSet<&str>,
+    violations: &mut Vec<String>,
+) {
+    match effect {
+        EffectSpec::ModifyProperty { .. }
+        | EffectSpec::SpawnEntity { .. }
+        | EffectSpec::DespawnEntity { .. }
+        | EffectSpec::ChangeState { .. }
+        | EffectSpec::GrantResource { .. }
+        | EffectSpec::ConsumeResource { .. }
+        | EffectSpec::EmitSignal { .. }
+        | EffectSpec::Displace { .. }
+        | EffectSpec::Attach { .. }
+        | EffectSpec::Detach { .. }
+        | EffectSpec::DrawFromPool { .. } => {}
+        EffectSpec::AreaApply { inner, .. } | EffectSpec::Schedule { inner, .. } => {
+            for nested in inner {
+                check_effect_recursively(mechanic_id, nested, mechanic_ids, violations);
+            }
+        }
+        EffectSpec::RollCheck {
+            on_success,
+            on_failure,
+            ..
+        } => {
+            for nested in on_success.iter().chain(on_failure.iter()) {
+                check_effect_recursively(mechanic_id, nested, mechanic_ids, violations);
+            }
+        }
+        EffectSpec::ModifyRule { target_rule, .. } => {
+            if !mechanic_ids.contains(target_rule.as_str()) {
+                violations.push(format!(
+                    "[c1_modify_rule_dangling] 机制 {mechanic_id} 的 ModifyRule 目标 {target_rule} 不存在（须为 spec 内真实机制 id）"
+                ));
+            }
+        }
+        EffectSpec::Custom {
+            verb,
+            given,
+            when_,
+            then,
+            ..
+        } => {
+            if given.trim().is_empty() || when_.trim().is_empty() || then.trim().is_empty() {
+                violations.push(format!(
+                    "[c1_custom_gwt_incomplete] 机制 {mechanic_id} 的 Custom 效果（verb={verb}）GWT 三段模板不完整（C0 拦截的兜底复检）"
+                ));
+            }
+        }
+    }
+}
+
+/// 收集含 Custom 效果的机制 id（含嵌套内的 Custom）——红队必审清单。
+fn collect_custom_review_targets(spec: &GameSpec) -> Vec<String> {
+    let mut targets = Vec::new();
+    for mechanic in &spec.mechanics {
+        if mechanic.effects.iter().any(effect_contains_custom) {
+            targets.push(mechanic.id.clone());
+        }
+    }
+    targets
+}
+
+fn effect_contains_custom(effect: &EffectSpec) -> bool {
+    match effect {
+        EffectSpec::Custom { .. } => true,
+        EffectSpec::AreaApply { inner, .. } | EffectSpec::Schedule { inner, .. } => {
+            inner.iter().any(effect_contains_custom)
+        }
+        EffectSpec::RollCheck {
+            on_success,
+            on_failure,
+            ..
+        } => on_success
+            .iter()
+            .chain(on_failure.iter())
+            .any(effect_contains_custom),
+        EffectSpec::ModifyProperty { .. }
+        | EffectSpec::SpawnEntity { .. }
+        | EffectSpec::DespawnEntity { .. }
+        | EffectSpec::ChangeState { .. }
+        | EffectSpec::GrantResource { .. }
+        | EffectSpec::ConsumeResource { .. }
+        | EffectSpec::EmitSignal { .. }
+        | EffectSpec::Displace { .. }
+        | EffectSpec::Attach { .. }
+        | EffectSpec::Detach { .. }
+        | EffectSpec::ModifyRule { .. }
+        | EffectSpec::DrawFromPool { .. } => false,
+    }
 }
 
 /// 解析红队发现清单（R2 未知即停）。
@@ -303,5 +449,167 @@ mod tests {
         let findings = parse_findings(&value).unwrap();
         assert_eq!(findings.len(), 1);
         assert!(findings[0].text.is_empty());
+    }
+
+    // ===== W7 波 1 追加校验（T-W7-1b）=====
+
+    use adm4_contracts::SpecRef;
+    use adm4_spec::{
+        AcceptanceScenario, EntitySpec, MechanicSpec, ProjectIntent, SPEC_SCHEMA_VERSION,
+        SpecIdentity, SystemSpec, VisualForm,
+    };
+
+    fn minimal_spec() -> GameSpec {
+        GameSpec {
+            identity: SpecIdentity {
+                schema_version: SPEC_SCHEMA_VERSION.into(),
+                project_id: "p1".into(),
+                frozen_hash: "sha256:abc".into(),
+            },
+            intent: ProjectIntent::default(),
+            systems: vec![SystemSpec {
+                id: "combat".into(),
+                name: "战斗".into(),
+                purpose: String::new(),
+                interfaces: Vec::new(),
+                design_notes: Vec::new(),
+            }],
+            mechanics: vec![MechanicSpec {
+                id: "damage".into(),
+                system_id: "combat".into(),
+                rule_text: "伤害规则".into(),
+                preconditions: Vec::new(),
+                effects: vec![EffectSpec::ModifyProperty {
+                    entity: "enemy".into(),
+                    property: "hp".into(),
+                    formula: "hp - damage".into(),
+                }],
+                state_machine: None,
+                design_notes: Vec::new(),
+            }],
+            entities: vec![EntitySpec {
+                id: "enemy".into(),
+                name: "敌人".into(),
+                visual_form: Some(VisualForm::Sprite2d),
+                properties: Vec::new(),
+            }],
+            tables: Vec::new(),
+            content: Vec::new(),
+            graphs: Vec::new(),
+            acceptance: Vec::new(),
+            source_map: Vec::new(),
+        }
+    }
+
+    /// ModifyRule target 悬空被复检拦截；指向真实机制 id 则放行。
+    #[test]
+    fn modify_rule_dangling_target_is_flagged() {
+        let mut spec = minimal_spec();
+        spec.mechanics[0].effects.push(EffectSpec::ModifyRule {
+            target_rule: "ghost_rule".into(),
+            patch: Default::default(),
+            priority: 0,
+        });
+        let violations = collect_extended_violations(&spec);
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.contains("c1_modify_rule_dangling")
+                    && violation.contains("ghost_rule")),
+            "{violations:?}"
+        );
+
+        // 指向真实机制 id（自指也算真实）则零违例。
+        let mut ok = minimal_spec();
+        ok.mechanics[0].effects.push(EffectSpec::ModifyRule {
+            target_rule: "damage".into(),
+            patch: Default::default(),
+            priority: 0,
+        });
+        assert!(collect_extended_violations(&ok).is_empty());
+    }
+
+    /// 嵌套（Schedule 内层）的 ModifyRule 悬空同样被拦。
+    #[test]
+    fn nested_modify_rule_dangling_target_is_flagged() {
+        let mut spec = minimal_spec();
+        spec.mechanics[0].effects.push(EffectSpec::Schedule {
+            timing: Default::default(),
+            amount_expr: "1".into(),
+            unit: Default::default(),
+            inner: vec![EffectSpec::ModifyRule {
+                target_rule: "ghost_rule".into(),
+                patch: Default::default(),
+                priority: 0,
+            }],
+        });
+        assert!(
+            collect_extended_violations(&spec)
+                .iter()
+                .any(|violation| violation.contains("c1_modify_rule_dangling"))
+        );
+    }
+
+    /// Custom GWT 三段不全被复检拦截（C0 拦截的兜底）。
+    #[test]
+    fn custom_incomplete_gwt_is_flagged() {
+        let mut spec = minimal_spec();
+        spec.mechanics[0].effects.push(EffectSpec::Custom {
+            verb: "merge".into(),
+            operands: Default::default(),
+            given: "g".into(),
+            when_: String::new(),
+            then: "t".into(),
+        });
+        assert!(
+            collect_extended_violations(&spec)
+                .iter()
+                .any(|violation| violation.contains("c1_custom_gwt_incomplete"))
+        );
+    }
+
+    /// 验收场景引用不存在的图被拦；引用存在的图放行。
+    #[test]
+    fn dangling_graph_ref_in_acceptance_is_flagged() {
+        let mut spec = minimal_spec();
+        spec.acceptance.push(AcceptanceScenario {
+            id: "s1".into(),
+            capability_id: "cap_damage".into(),
+            given: vec!["g".into()],
+            when: vec!["w".into()],
+            then: vec!["t".into()],
+            source_refs: vec![SpecRef::new("graphs/ghost_map")],
+        });
+        assert!(
+            collect_extended_violations(&spec)
+                .iter()
+                .any(|violation| violation.contains("c1_graph_ref_dangling")
+                    && violation.contains("ghost_map"))
+        );
+    }
+
+    /// custom 机制（含嵌套内 Custom）进红队必审清单；无 custom 项目清单为空。
+    #[test]
+    fn custom_mechanics_enter_review_targets() {
+        let spec = minimal_spec();
+        assert!(collect_custom_review_targets(&spec).is_empty());
+
+        let mut with_custom = minimal_spec();
+        with_custom.mechanics[0].effects.push(EffectSpec::Schedule {
+            timing: Default::default(),
+            amount_expr: "1".into(),
+            unit: Default::default(),
+            inner: vec![EffectSpec::Custom {
+                verb: "merge".into(),
+                operands: Default::default(),
+                given: "g".into(),
+                when_: "w".into(),
+                then: "t".into(),
+            }],
+        });
+        assert_eq!(
+            collect_custom_review_targets(&with_custom),
+            vec!["damage".to_string()]
+        );
     }
 }

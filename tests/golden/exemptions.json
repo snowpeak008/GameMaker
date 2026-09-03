@@ -1,1 +1,39 @@
-[]
+{
+  "exemptions": [
+    {
+      "path_pattern": "$.graphs",
+      "allow": "empty_array"
+    },
+    {
+      "path_pattern": "*.design_notes",
+      "allow": "any"
+    },
+    {
+      "path_pattern": "$.custom_review_targets",
+      "allow": "empty_array"
+    }
+  ],
+  "_log": [
+    {
+      "date": "2026-09-03",
+      "card": "T-W7-1a",
+      "entry": "$.graphs (C0/contract.json)",
+      "reason": "GameSpec 新增 graphs section（W7 定稿 §5.4）；lane_defense 无图参数，恒为空数组。金样基于 v1.0.7 固化时无此键。",
+      "allow_rationale": "empty_array：Graph 编译入口未交付（schema 侧无 Graph 变体，结构化申报），任何非空值都应报违例。"
+    },
+    {
+      "date": "2026-09-03",
+      "card": "T-W7-1a",
+      "entry": "*.design_notes (C0/contract.json 的 systems/mechanics/tables/content 元素)",
+      "reason": "design_notes 五挂点收集（W7 定稿 §5.5）：金样项目的选择带非空 rationale（换皮改写理由与访谈确认理由），重放产物中该键为非空数组。",
+      "allow_rationale": "any：注记文本来自冻结集 rationale 原文，内容随选择理由变化属预期；既有键值仍零漂移比对，仅此新增键放行。"
+    },
+    {
+      "date": "2026-09-03",
+      "card": "T-W7-1a（代 T-W7-1b 申报，键属 1b 交付面）",
+      "entry": "$.custom_review_targets (C1/contract.json)",
+      "reason": "C1 契约新增 custom 红队必审清单字段（W7 定稿 §5.7）；lane_defense 无 Custom 机制，恒为空数组。",
+      "allow_rationale": "empty_array：该样本不应出现 custom 机制，非空即违例。"
+    }
+  ]
+}
