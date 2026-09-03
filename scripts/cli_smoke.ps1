@@ -150,7 +150,7 @@ Write-Utf8NoBom $AiAllPath @'
     {"decision_id":"ld.deploy_cost","verdict":"consistent","reason":"返还比例与引文一致"},
     {"decision_id":"ld.income_rule","verdict":"consistent","reason":"回复节奏与引文一致"}
   ]],
-  "freeze_red_team": [{"findings":[],"per_category":[{"category":"consistency","checked":"全部决策交叉复核","conclusion":"未发现矛盾"}]}],
+  "freeze_red_team": [{"findings":[{"id":"smoke_cf1","severity":"warning","target":"custom.ld.combat_system.programmable_targeting","text":"条件-动作规则的求值顺序需要在实现期定义确定性 tie-break"}],"per_category":[{"category":"consistency","checked":"全部决策交叉复核（含 1 个自定义机制）","conclusion":"未发现矛盾，自定义机制留观察项"}]}],
   "c1_redteam": [{"findings":[{"id":"w1","severity":"warning","target":"mechanics/ld.income_rule","text":"回复节奏与部署成本的匹配需要试玩验证"}],"per_category":[{"category":"feasibility","checked":"3 条机制逐条","conclusion":"均可实现"}]}],
   "c2_narrative": [{"text":"基于规格的玩法叙述：玩家在通道上部署守卫，利用克制系数放大伤害，抵御脚本化波次。"}],
   "c3_asset_description": [{"description":"扁平卡通风格的角色立绘，正面站姿，边缘描边，适配 2D 序列帧。"}],
@@ -390,10 +390,71 @@ $progress = $json | ConvertFrom-Json
 if ($null -ne $progress.current_level) { Fail "访谈进度：current_level 应为 null，实际 $($progress.current_level)" }
 
 # ---------------------------------------------------------------------------
+# 6b. T-W7-2 机制级 custom 一等入口：草案登记 -> 用户确认 -> 红队留 finding 逐条处置
+#
+# 草案挂 ld.combat_system（第 5 节已确认该 L3 点），effects 是一个 GWT 三段齐全的
+# Custom 效果；登记后合成点自动选中但未确认（AI 永不代确认），确认走 authoring confirm。
+# 红队应答（上方 freeze_red_team 脚本）对该机制留了一条 warning finding——custom 是
+# 红队必审项，finding 未处置时冻结门第 4 道必须拦（负例可见），dispose 署名处置后放行。
+# ---------------------------------------------------------------------------
+$CustomDraftPath = Join-Path $AiDir 'custom_draft.json'
+Write-Utf8NoBom $CustomDraftPath @'
+{
+  "host_system_id": "ld.combat_system",
+  "slug": "programmable_targeting",
+  "label_zh": "可编程索敌",
+  "rule_text": "玩家用条件-动作规则自定义塔的索敌逻辑（如血量低于50%的敌人优先）",
+  "effects": [
+    {
+      "effect": "custom",
+      "verb": "programmable_targeting",
+      "given": "场上存在多个敌人且玩家已配置条件-动作规则",
+      "when": "塔进行索敌判定",
+      "then": "按规则优先级选出目标（血量低于50%的敌人优先）"
+    }
+  ],
+  "rationale": "把索敌从固定规则变成玩家的策略创作空间，是本作构筑深度的核心来源"
+}
+'@
+
+# 负例：缺 then 的草案必须被门面层校验器当场拒（GWT 三段缺一不可，R2）。
+$CustomBadDraftPath = Join-Path $AiDir 'custom_draft_bad.json'
+Write-Utf8NoBom $CustomBadDraftPath @'
+{
+  "host_system_id": "ld.combat_system",
+  "slug": "half_baked",
+  "label_zh": "半成品机制",
+  "rule_text": "缺验收模板的机制",
+  "effects": [{"effect": "custom", "verb": "half_baked", "given": "有前置", "when": "触发"}],
+  "rationale": "用于验证缺段拒收"
+}
+'@
+Invoke-Adm4 'T-W7-2 负例：Custom 效果缺 then 必须被拒（错误见上方 stderr）' @('custom', 'add', $ArchiveId, '--draft', $CustomBadDraftPath) -ExpectFailure | Out-Null
+
+$out = Invoke-Adm4 'T-W7-2：登记自定义机制（custom add）' @('custom', 'add', $ArchiveId, '--draft', $CustomDraftPath)
+Assert-Contains $out '已登记自定义机制：custom.ld.combat_system.programmable_targeting' 'custom add 回执'
+Assert-Contains $out '未确认' 'custom add 提示确认是用户手势'
+
+$out = Invoke-Adm4 'T-W7-2：自定义机制清单（custom list）' @('custom', 'list', $ArchiveId)
+Assert-Contains $out 'custom.ld.combat_system.programmable_targeting' 'custom list 决策点 id'
+Assert-Contains $out '可编程索敌' 'custom list 机制名'
+Assert-Contains $out '共 1 个自定义机制' 'custom list 总数'
+
+Invoke-Adm4 'T-W7-2：用户确认自定义机制点（AI 永不代确认）' @('authoring', 'confirm', $ArchiveId, 'custom.ld.combat_system.programmable_targeting') | Out-Null
+
+# ---------------------------------------------------------------------------
 # 7. 冻结门五道全绿 -> 冻结
 # ---------------------------------------------------------------------------
-$out = Invoke-Adm4 '红队评审（脚本应答）' @('freeze', 'red-team', $ArchiveId, '--scripted-file', $AiAllPath)
+$out = Invoke-Adm4 '红队评审（脚本应答，对 custom 机制留 1 条 finding）' @('freeze', 'red-team', $ArchiveId, '--scripted-file', $AiAllPath)
 Assert-Contains $out '红队评审完成' '红队'
+
+# T-W7-2 负例：custom 机制的 finding 未处置时，冻结门第 4 道必须拦。
+$out = Invoke-Adm4 'T-W7-2 负例：custom finding 未处置时 freeze check 应 [BLOCK]' @('freeze', 'check', $ArchiveId) -ExpectFailure
+Assert-Contains $out 'custom_finding_undisposed' 'gate4 点名未处置的 custom finding'
+
+$out = Invoke-Adm4 'T-W7-2：署名处置 custom finding（freeze dispose）' @('freeze', 'dispose', $ArchiveId, 'smoke_cf1', 'accept', '--actor', '冒烟评审员', '--note', 'tie-break 交实现期定义，风险可接受')
+Assert-Contains $out '已处置红队发现 smoke_cf1' 'dispose 回执'
+Assert-Contains $out '冒烟评审员' 'dispose 署名在案（R3）'
 
 $out = Invoke-Adm4 '冻结检查：五道门应全绿' @('freeze', 'check', $ArchiveId)
 Assert-NotContains $out '[BLOCK]' '冻结门'
@@ -422,6 +483,12 @@ foreach ($stage in @('C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6')) {
 Assert-NotContains $out '失败' '流水线终态'
 Assert-NotContains $out '阻塞' '流水线终态'
 Assert-NotContains $out '等待' '流水线终态'
+
+# T-W7-2：C4 文档必须含该 custom 机制的能力契约与转录 GWT（custom 走全链零特殊分支）。
+$out = Invoke-Adm4 'T-W7-2：C4 文档应含自定义机制的能力契约' @('pipeline', 'artifacts', $ArchiveId, '--stage', 'C4', '--show-document')
+Assert-Contains $out 'cap_custom.ld.combat_system.programmable_targeting' 'C4 能力契约锚定 custom 机制'
+Assert-Contains $out '玩家用条件-动作规则自定义塔的索敌逻辑' 'C4 的 When 含 custom 规则文本'
+Assert-Contains $out '血量低于50%' 'C4 的 Then 誊写设计者自己写的 GWT（转录投影）'
 
 # ---------------------------------------------------------------------------
 # 8c. F4a 流水线控制：阶段产物查询 + 强制重跑（连带下游失效 + 人工门重新署名）

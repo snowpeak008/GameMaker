@@ -360,6 +360,33 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             println!("红队评审完成，发现 {findings} 项（blocker 需逐条处置后方可冻结）");
             Ok(())
         }
+        (Some("freeze"), Some("dispose")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let finding_id = required(rest.next(), "红队发现 id")?;
+            let verdict = required(rest.next(), "处置结论（accept|revise）")?;
+            let disposition = match verdict {
+                "accept" => adm4_authoring::FindingDisposition::RiskAccepted,
+                "revise" => adm4_authoring::FindingDisposition::Fixed,
+                other => {
+                    return Err(Adm4Error::invalid_input(format!(
+                        "处置结论只接受 accept（接受风险）或 revise（已修改设计），得到：{other}"
+                    )));
+                }
+            };
+            let remaining: Vec<&str> = rest.collect();
+            let actor = required(flag_value(&remaining, "--actor"), "--actor <署名>")?;
+            let note = flag_value(&remaining, "--note").unwrap_or("");
+            services.freeze_dispose(archive_id, finding_id, disposition, actor, note)?;
+            println!(
+                "已处置红队发现 {finding_id}：{}（署名 {actor}）",
+                if disposition == adm4_authoring::FindingDisposition::RiskAccepted {
+                    "接受风险"
+                } else {
+                    "已修改设计"
+                }
+            );
+            Ok(())
+        }
         (Some("freeze"), Some("run")) => {
             let archive_id = required(rest.next(), "archive_id")?;
             let frozen = services.freeze_run(archive_id)?;
@@ -453,6 +480,10 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
         (Some("interview"), sub) => {
             let remaining: Vec<&str> = rest.collect();
             interview_command(&services, sub, &remaining)
+        }
+        (Some("custom"), sub) => {
+            let remaining: Vec<&str> = rest.collect();
+            custom_command(&services, sub, &remaining)
         }
         (Some("ai"), sub) => {
             let remaining: Vec<&str> = rest.collect();
@@ -1591,6 +1622,75 @@ fn interview_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -
 }
 
 // ---------------------------------------------------------------------------
+// custom 子命令组：机制级 custom 一等入口（W7 §5.6）
+// ---------------------------------------------------------------------------
+
+fn custom_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -> Adm4Result<()> {
+    match sub {
+        Some("add") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let path = required(
+                flag_value(args, "--draft"),
+                "--draft <机制草案 JSON 文件路径>",
+            )?;
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| Adm4Error::io(format!("读取草案文件 {path} 失败：{error}")))?;
+            let draft: adm4_authoring::CustomMechanicDraft = serde_json::from_str(&text)
+                .map_err(|error| {
+                    Adm4Error::invalid_input(format!(
+                        "草案文件 {path} 不是合法 CustomMechanicDraft JSON（字段见 custom --help）：{error}"
+                    ))
+                })?;
+            let decision_id = services.custom_add(archive_id, draft)?;
+            println!("已登记自定义机制：{decision_id}");
+            println!(
+                "提示：合成点已自动选中但**未确认**——确认是用户手势（AI 永不代确认），\
+                 请执行 adm4 authoring confirm {archive_id} {decision_id}"
+            );
+            Ok(())
+        }
+        Some("list") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let records = services.custom_list(archive_id)?;
+            if records.is_empty() {
+                println!("（无自定义机制）");
+                return Ok(());
+            }
+            for record in &records {
+                println!(
+                    "{}  {}  归属 {}  效果 {} 条  登记于 {}",
+                    record.decision_id,
+                    record.draft.label_zh,
+                    record.draft.host_system_id,
+                    record.draft.effects.len(),
+                    record.created_at
+                );
+            }
+            println!("共 {} 个自定义机制", records.len());
+            Ok(())
+        }
+        Some("remove") => {
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let decision_id = required(args.get(1).copied(), "自定义机制决策点 id")?;
+            let force = args.contains(&"--force");
+            services.custom_remove(archive_id, decision_id, force)?;
+            println!("已删除自定义机制：{decision_id}");
+            Ok(())
+        }
+        None => {
+            println!("{CUSTOM_HELP}");
+            Ok(())
+        }
+        Some(other) => {
+            println!("{CUSTOM_HELP}");
+            Err(Adm4Error::invalid_input(format!(
+                "未知 custom 子命令：{other}（可用：add/list/remove）"
+            )))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 共用辅助
 // ---------------------------------------------------------------------------
 
@@ -2053,6 +2153,7 @@ fn print_help(args: &[String]) {
         Some("deliver") => println!("{DELIVER_HELP}"),
         Some("template") => println!("{TEMPLATE_HELP}"),
         Some("interview") => println!("{INTERVIEW_HELP}"),
+        Some("custom") => println!("{CUSTOM_HELP}"),
         Some("ai") => println!("{AI_HELP}"),
         _ => print_usage(),
     }
@@ -2060,7 +2161,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] [--mock-engine] | rerun <id> <阶段> [--to P5] [--mock-engine] | status <id> | p1-status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P1/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | dispose <id> <发现id> accept|revise --actor <署名> | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] [--mock-engine] | rerun <id> <阶段> [--to P5] [--mock-engine] | status <id> | p1-status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P1/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  custom add <id> --draft <草案JSON文件> | list <id> | remove <id> <机制点id> [--force]（项目私有机制一等入口）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -2174,6 +2275,11 @@ const FREEZE_HELP: &str = r#"冻结门（freeze）——各道门全绿才能冻
   adm4 freeze red-team <项目存档id> [--scripted-file <应答文件>]
       运行 AI 红队评审（冻结门之一），结果持久化到项目状态；
       blocker 级发现需逐条处置后方可冻结。
+
+  adm4 freeze dispose <项目存档id> <发现id> accept|revise --actor <署名> [--note <说明>]
+      逐条处置红队发现：accept=接受风险（记录在案）、revise=已修改设计。
+      署名必填（R3）。blocker 级发现与自定义机制（custom）的每条发现
+      都必须显式处置，否则冻结门第 4 道拦截。
 
   adm4 freeze run <项目存档id>
       执行冻结：全门通过 → 生成 frozen/v{N} 产物，打印版本号与内容哈希；
@@ -2502,6 +2608,38 @@ AI 只提案，确认/拒绝是用户手势（AI 永不代提交）；CLI 不提
   adm4 interview progress <项目存档id>
       查询分层进度（只读），输出 JSON：current_level 为当前层（null=全部完成），
       levels 为各层「已确认/适用」计数。"#;
+
+const CUSTOM_HELP: &str = r#"自定义机制（custom）——项目私有机制的一等入口（W7 §5.6）
+
+预设选项都不是你要的机制时，从这里录入自定义机制草案。草案与内建机制同信息密度：
+归属系统、规则文本、效果（EffectSpec）、设计理由缺一不可，登记时当场校验（悬空即拒）。
+登记成功即合成一个项目私有 L4 单选点（id 形如 custom.<归属系统>.<slug>），自动选中
+但**未确认**——确认是用户手势（AI 永不代确认），未确认不进完成度分母。
+登记后走全部既有链路：红队必审（每个 custom 机制的 finding 逐条处置后方可冻结）、
+冻结产物、C0-C6 文档编译，零特殊分支。
+
+用法：
+  adm4 custom add <项目存档id> --draft <草案JSON文件>
+      登记自定义机制。草案 JSON 字段：
+        host_system_id  归属系统的 L3 决策点 id（必须已在项目里被选择）
+        slug            机制短名（小写字母/数字/下划线）
+        label_zh        中文机制名
+        rule_text       规则文本（进 C0 的机制规格与 C4 的能力契约）
+        effects         效果清单（EffectSpec JSON 数组，支持 {param:KEY} 占位符；
+                        Custom 变体必须写全 given/when/then 三段验收模板）
+        parameters      标量参数值（可选，键值对）
+        new_nouns       显式申报的新名词（可选；effects 引用空间外名词时必填）
+        rationale       设计理由（进 design_notes，是 C2 叙述与红队评审的素材）
+      成功打印合成决策点 id，并提示用 authoring confirm 完成用户确认。
+
+  adm4 custom list <项目存档id>
+      列出已登记的自定义机制（每行：决策点 id、机制名、归属系统、效果数、登记时间），
+      末行打印总数；无登记时打印「（无自定义机制）」。
+
+  adm4 custom remove <项目存档id> <机制点id> [--force]
+      删除自定义机制（未冻结前可删；连同其选择一并移除）。
+      已被用户确认的机制必须加 --force（显式知道自己在删已确认的设计）；
+      被其它 custom 机制 ModifyRule 指向时拒绝（删了会让那条机制悬空）。"#;
 
 #[cfg(test)]
 mod tests {

@@ -1,3 +1,4 @@
+use crate::custom::CustomMechanicRecord;
 use adm4_contracts::ReviewProof;
 use adm4_decision::{DecisionId, DepthProfile, GenrePackId, NaJustification, NodeId, Selection};
 use serde::{Deserialize, Serialize};
@@ -108,6 +109,14 @@ pub struct AuthoringState {
     pub node_risk_notes: BTreeMap<NodeId, String>,
     #[serde(default)]
     pub interview: InterviewState,
+    /// 项目私有 custom 机制登记簿（键 = 合成决策点 id `custom.<host>.<slug>`）。
+    ///
+    /// 引擎构造时据此增广设计空间（合成 `is_custom: true` 的 L4 单选点），冻结时
+    /// 合成点随 `FrozenDesign::custom_points` 落产物供流水线增广——两侧共用同一份
+    /// 合成函数（`custom::synthesize_point`），不存在第二份口径。
+    /// 旧存档没有该键（`serde(default)` → 空 map），行为与扩展前逐字节一致（I2）。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub custom_mechanics: BTreeMap<DecisionId, CustomMechanicRecord>,
     #[serde(default)]
     pub template_mode: TemplateMode,
     #[serde(default)]
@@ -138,6 +147,7 @@ impl AuthoringState {
             node_design_notes: BTreeMap::new(),
             node_risk_notes: BTreeMap::new(),
             interview: InterviewState::default(),
+            custom_mechanics: BTreeMap::new(),
             template_mode: TemplateMode::None,
             red_team: None,
             revision: 0,

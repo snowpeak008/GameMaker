@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 /// 红队发现的合法严重度枚举；缺失或超出枚举一律拒收（不得默认降级为 warning）。
 const FINDING_SEVERITIES: [&str; 2] = ["blocker", "warning"];
 
+/// custom 占比警告阈值（W7 §5.6，试用制：advisory 不 block；数值交开放问题 4 标定）。
+const CUSTOM_RATIO_ADVISORY_THRESHOLD: f64 = 0.4;
+
 // ---------------------------------------------------------------------------
 // 门禁结果结构
 // ---------------------------------------------------------------------------
@@ -143,6 +146,45 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
                 completeness.optional_skipped
             ),
         });
+    }
+    // custom 占比 >40% 警告（W7 §5.6，试用制）：advisory 不拦截、不参与通过判定。
+    // 口径：已确认且任一已选选项 is_custom 的点数 / 已确认点数。
+    let confirmed_total = state
+        .selections
+        .values()
+        .filter(|selection| selection.confirmed_by_user)
+        .count();
+    let confirmed_custom = state
+        .selections
+        .values()
+        .filter(|selection| selection.confirmed_by_user)
+        .filter(|selection| {
+            engine
+                .space()
+                .graph
+                .point(&selection.decision_id)
+                .is_some_and(|point| {
+                    selection.selected_options().into_iter().any(|item| {
+                        point
+                            .option(item.option_id)
+                            .is_some_and(|option| option.is_custom)
+                    })
+                })
+        })
+        .count();
+    if confirmed_total > 0 {
+        let ratio = confirmed_custom as f64 / confirmed_total as f64;
+        if ratio > CUSTOM_RATIO_ADVISORY_THRESHOLD {
+            gate1_findings.push(GateFinding {
+                code: "custom_ratio_advisory".into(),
+                message: format!(
+                    "已确认选择中自定义（custom）占比 {:.0}%（{confirmed_custom}/{confirmed_total}）超过 {:.0}% 参考线：\
+                     偏离预设选项过多可能意味着选错了品类包或该沉淀新系统模块（试用制警告，不拦截冻结）",
+                    ratio * 100.0,
+                    CUSTOM_RATIO_ADVISORY_THRESHOLD * 100.0
+                ),
+            });
+        }
     }
     gates.push(GateResult {
         gate: "gate1_completeness".into(),
@@ -339,6 +381,31 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
                     });
                 }
             }
+            // custom 选项不豁免 R5（W7 §5.6，A 的豁免论作废）：custom 是整段抄袭现成机制
+            // 的最大通道，其 id/label（换皮比对词表面）与 rule_text 全部进扫描——内建选项
+            // 的 label/summary 出自 pack 作者（认证时已查），custom 的出自项目作者，必须
+            // 在这里设防。rationale 与 is_skin 文本参数已由上方通用扫描覆盖（custom 的
+            // 参数值同样走 collect_text_values，不存在豁免通道）。
+            if let Some(option) = point.and_then(|point| point.option(item.option_id))
+                && option.is_custom
+            {
+                for hit in scanner.scan_fields(
+                    &format!("custom:{}", selection.decision_id),
+                    &[
+                        ("id", selection.decision_id.as_str()),
+                        ("label", option.label.as_str()),
+                        ("rule_text", option.summary.as_str()),
+                    ],
+                ) {
+                    gate3_findings.push(GateFinding {
+                        code: "reference_name_hit".into(),
+                        message: format!(
+                            "{} 命中参考名 {}（custom 机制不豁免换皮门）",
+                            hit.location, hit.matched_word
+                        ),
+                    });
+                }
+            }
         }
     }
     gates.push(GateResult {
@@ -381,6 +448,38 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
                             finding.id, finding.target, finding.text
                         ),
                     });
+                }
+            }
+            // custom 逐条强制处置（W7 §5.6）：每个 custom 机制必须有指向它的红队
+            // finding 且已显式处置（accept/revise + 署名），缺失即 block 点名机制 id。
+            // scripted 通道走同一条路（红队应答无论出自谁，处置留痕一条不能少）。
+            for decision_id in state.custom_mechanics.keys() {
+                let targeted: Vec<&Finding> = record
+                    .findings
+                    .iter()
+                    .filter(|finding| finding.target.contains(decision_id.as_str()))
+                    .collect();
+                if targeted.is_empty() {
+                    gate4_findings.push(GateFinding {
+                        code: "custom_finding_missing".into(),
+                        message: format!(
+                            "自定义机制 {decision_id} 没有任何红队发现指向它：custom 是红队必审项，\
+                             红队应答必须对每个 custom 机制出具至少一条 finding（哪怕是 warning 级的审查结论）"
+                        ),
+                    });
+                    continue;
+                }
+                for finding in targeted {
+                    if finding.disposition.is_none() {
+                        gate4_findings.push(GateFinding {
+                            code: "custom_finding_undisposed".into(),
+                            message: format!(
+                                "自定义机制 {decision_id} 的红队发现 {} 未处置：custom 机制的每条 finding \
+                                 都必须显式处置（freeze dispose <发现id> accept|revise --actor <署名>）",
+                                finding.id
+                            ),
+                        });
+                    }
                 }
             }
         }
@@ -434,14 +533,31 @@ pub fn execute_freeze(
         .iter()
         .map(|(id, justification)| (id.clone(), justification.clone()))
         .collect();
-    let payload = serde_json::json!({
-        "project_name": state.project_name,
-        "decisions": decisions,
-        "not_applicable": not_applicable,
-        "genre_pack": state.genre_pack,
-        "pack_version": state.pack_version,
-        "depth_profile": state.depth_profile,
-    });
+    // custom 合成点进哈希载荷（冻结内容真相必须覆盖 custom 机制的全部结构），
+    // 但**不进 FrozenDesign 结构**：合成点由门面层落盘为 frozen/v{N}/custom_points.json，
+    // 流水线运行前据此增广设计空间——pipeline crate 因此零改动、零特殊分支。
+    // 无 custom 时哈希载荷不带该键，产物与扩展前逐字节一致（金样零漂移）。
+    let custom_points = engine.custom_points();
+    let payload = if custom_points.is_empty() {
+        serde_json::json!({
+            "project_name": state.project_name,
+            "decisions": decisions,
+            "not_applicable": not_applicable,
+            "genre_pack": state.genre_pack,
+            "pack_version": state.pack_version,
+            "depth_profile": state.depth_profile,
+        })
+    } else {
+        serde_json::json!({
+            "project_name": state.project_name,
+            "decisions": decisions,
+            "not_applicable": not_applicable,
+            "genre_pack": state.genre_pack,
+            "pack_version": state.pack_version,
+            "depth_profile": state.depth_profile,
+            "custom_points": custom_points,
+        })
+    };
     let content_hash = ContentHash::of_canonical_json(&payload)?.0;
     let red_team_proof = state.red_team.as_ref().map(|record| record.proof.clone());
     let frozen = FrozenDesign {

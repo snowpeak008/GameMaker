@@ -12,9 +12,11 @@ use adm4_archive::{
     ArchiveLock, ArchiveManifest, ArchiveStore, DataRoot, export_package, import_package,
 };
 use adm4_authoring::{
-    AuthoringEngine, AuthoringState, FreezeGateReport, FrozenDesign, GateFinding,
+    AuthoringEngine, AuthoringState, CustomMechanicDraft, CustomMechanicRecord,
+    EffectTemplateValidator, FindingDisposition, FreezeGateReport, FrozenDesign, GateFinding,
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
-    WorkbenchResetReport, evaluate_freeze_gates, execute_freeze, run_red_team,
+    WorkbenchResetReport, augment_space_with_points, evaluate_freeze_gates, execute_freeze,
+    run_red_team,
 };
 use adm4_build::art::budget::AssetBudget;
 use adm4_build::art::style_anchor::{
@@ -44,7 +46,7 @@ use adm4_pipeline::{
     PipelineRunner, RunnerContext, StageStatus, phase2_registry,
 };
 use adm4_space::{DesignSpace, DesignSpaceRoot, load_design_space};
-use adm4_spec::GameSpec;
+use adm4_spec::{EffectSpec, GameSpec};
 use adm4_template::{
     Certification, CrossCheckReport, CrossCheckService, EvidenceCandidate, EvidenceQuery,
     EvidenceSearchChannel, FileCorpusChannel, MappingService, Template, TemplateAnswer,
@@ -676,6 +678,63 @@ impl AppServices {
     }
 
     // ------------------------------------------------------------------
+    // 机制级 custom 一等入口（W7 §5.6，T-W7-2）
+    // ------------------------------------------------------------------
+
+    /// 登记一个项目私有 custom 机制：草案校验（含 EffectSpec 全集反序列化与
+    /// Custom 变体 GWT 三段非空校验，
+    /// 见 [`SpecEffectTemplateValidator`]）→ 合成 `is_custom: true` 的 L4 单选点 →
+    /// 自动选中但**不确认**（确认是用户手势，AI 永不代确认）。
+    /// 返回合成决策点 id（`custom.<host>.<slug>`）。
+    pub fn custom_add(&self, archive_id: &str, draft: CustomMechanicDraft) -> Adm4Result<String> {
+        let decision_id = self.with_project(archive_id, |engine| {
+            engine.add_custom_mechanic(draft, &SpecEffectTemplateValidator)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!(
+                "项目 {archive_id} 登记自定义机制 {decision_id}（合成点已自动选中，待用户确认）"
+            ),
+        )?;
+        Ok(decision_id)
+    }
+
+    /// 已登记的 custom 机制清单（按合成决策点 id 排序）。
+    pub fn custom_list(&self, archive_id: &str) -> Adm4Result<Vec<CustomMechanicRecord>> {
+        let engine = self.open_engine(archive_id)?;
+        Ok(engine
+            .list_custom_mechanics()
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+
+    /// 删除一个 custom 机制（连同其选择）。已确认的机制必须显式 `force`；
+    /// 被其它 custom 机制 ModifyRule 指向时拒绝（守卫在引擎层，见
+    /// [`AuthoringEngine::remove_custom_mechanic`]）。
+    pub fn custom_remove(
+        &self,
+        archive_id: &str,
+        decision_id: &str,
+        force: bool,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.remove_custom_mechanic(decision_id, force)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!(
+                "项目 {archive_id} 删除自定义机制 {decision_id}{}",
+                if force {
+                    "（force：该机制曾被用户确认）"
+                } else {
+                    ""
+                }
+            ),
+        )
+    }
+
+    // ------------------------------------------------------------------
     // 工作台只读聚合查询（左栏领域卡片 / 画像卡片 / 右栏四页签）
     // ------------------------------------------------------------------
 
@@ -995,6 +1054,33 @@ impl AppServices {
         Ok(evaluate_freeze_gates(&engine, &scanner))
     }
 
+    /// 逐条处置红队发现（冻结门第 4 道；custom 机制的每条 finding 必须显式处置）。
+    ///
+    /// `disposition` 语义：revise=已修改设计（Fixed）、accept=接受风险（RiskAccepted）；
+    /// 署名必填（R3），处置写在红队记录上、不推进 revision（见引擎方法说明）。
+    pub fn freeze_dispose(
+        &self,
+        archive_id: &str,
+        finding_id: &str,
+        disposition: FindingDisposition,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<()> {
+        self.with_project(archive_id, |engine| {
+            engine.dispose_red_team_finding(finding_id, disposition, actor, note)
+        })?;
+        self.log.append(
+            "freeze",
+            &format!(
+                "项目 {archive_id} 红队发现 {finding_id} 处置为 {}（署名 {actor}）：{note}",
+                match disposition {
+                    FindingDisposition::Fixed => "已修改设计",
+                    FindingDisposition::RiskAccepted => "接受风险",
+                }
+            ),
+        )
+    }
+
     /// 冻结门第 4 道：运行 AI 红队（结果持久化到项目状态）。
     pub fn freeze_red_team(&self, archive_id: &str) -> Adm4Result<usize> {
         let provider = self.build_provider()?;
@@ -1014,13 +1100,14 @@ impl AppServices {
 
     /// 执行冻结（全门通过才成功）；冻结产物写入 frozen/v{N}/。
     pub fn freeze_run(&self, archive_id: &str) -> Adm4Result<FrozenDesign> {
-        let frozen = self.with_project(archive_id, |engine| {
+        let (frozen, custom_points) = self.with_project(archive_id, |engine| {
             let scanner = self.skin_scanner_for_project(
                 engine.space(),
                 archive_id,
                 &engine.state().project_name,
             )?;
-            execute_freeze(engine, &scanner)
+            let frozen = execute_freeze(engine, &scanner)?;
+            Ok((frozen, engine.custom_points()))
         })?;
         // 写冻结产物（在事务外补写：冻结文件本身只读追加，不影响 authoring_state 一致性）。
         let frozen_dir = self
@@ -1031,6 +1118,11 @@ impl AppServices {
         ensure_dir(&frozen_dir)?;
         write_json_file(&frozen_dir.join("frozen_design.json"), &frozen)?;
         write_json_file(&frozen_dir.join("gate_report.json"), &frozen.gate_report)?;
+        // custom 合成点落产物（无 custom 不写文件：目录内容与扩展前逐字节一致，金样零漂移）。
+        // 流水线运行前据此增广设计空间（见 [`Self::frozen_space`]），pipeline crate 不感知 custom。
+        if !custom_points.is_empty() {
+            write_json_file(&frozen_dir.join("custom_points.json"), &custom_points)?;
+        }
         self.archives.refresh_fingerprint(archive_id)?;
         self.log.append(
             "freeze",
@@ -1051,6 +1143,29 @@ impl AppServices {
                 .join(format!("v{version}"))
                 .join("frozen_design.json"),
         )
+    }
+
+    /// 某冻结版本的**生效**设计空间：pack 空间 + 该版本落盘的 custom 合成点
+    /// （`frozen/v{N}/custom_points.json`，冻结时写入）。无 custom 时文件不存在，
+    /// 直接返回缓存共享句柄——与扩展前行为逐字节一致（金样零漂移）。
+    fn frozen_space(
+        &self,
+        archive_id: &str,
+        version: u32,
+        pack_id: &str,
+    ) -> Adm4Result<Arc<DesignSpace>> {
+        let base = self.load_space_shared(pack_id)?;
+        let path = self
+            .archives
+            .content_dir(archive_id)
+            .join("frozen")
+            .join(format!("v{version}"))
+            .join("custom_points.json");
+        if !path.is_file() {
+            return Ok(base);
+        }
+        let custom_points: Vec<DecisionPoint> = read_json_file(&path)?;
+        Ok(Arc::new(augment_space_with_points(&base, &custom_points)?))
     }
 
     pub fn latest_frozen_version(&self, archive_id: &str) -> Adm4Result<u32> {
@@ -1138,7 +1253,7 @@ impl AppServices {
     ) -> Adm4Result<PipelineRunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let frozen = self.load_frozen(archive_id, version)?;
-        let space = self.load_space_shared(&frozen.genre_pack)?;
+        let space = self.frozen_space(archive_id, version, &frozen.genre_pack)?;
         let store = self.artifact_store(archive_id, version)?;
         let runner = PipelineRunner::new();
         let ctx = RunnerContext {
@@ -1194,7 +1309,7 @@ impl AppServices {
     ) -> Adm4Result<PipelineRerunOutcome> {
         let version = self.latest_frozen_version(archive_id)?;
         let frozen = self.load_frozen(archive_id, version)?;
-        let space = self.load_space_shared(&frozen.genre_pack)?;
+        let space = self.frozen_space(archive_id, version, &frozen.genre_pack)?;
         let store = self.artifact_store(archive_id, version)?;
         let runner = PipelineRunner::new();
         let ctx = RunnerContext {
@@ -3386,6 +3501,88 @@ pub struct TemplateComparison {
     pub template_id: String,
     pub game_name: String,
     pub entries: Vec<TemplateCompareEntry>,
+}
+
+/// 基于真 EffectSpec 的效果模板校验器（[`EffectTemplateValidator`] 的 adm4-app 实现，
+/// authoring crate 不依赖 adm4-spec，故实现落在门面层）：逐条模板当场反序列化
+/// EffectSpec 全集，并递归检查 Custom 变体 GWT 三段非空、ModifyRule 目标不悬空
+/// （目标可以是空间内决策点、本机制自身或草案申报的新名词）。
+struct SpecEffectTemplateValidator;
+
+impl EffectTemplateValidator for SpecEffectTemplateValidator {
+    fn validate_template(
+        &self,
+        space: &DesignSpace,
+        decision_id: &str,
+        new_nouns: &[String],
+        template: &serde_json::Value,
+        position: usize,
+    ) -> Adm4Result<()> {
+        let effect: EffectSpec = serde_json::from_value(template.clone()).map_err(|error| {
+            Adm4Error::invalid_input(format!(
+                "custom 机制 {decision_id} 的第 {position} 个效果不是合法 EffectSpec\
+                 （effect tag 与字段见 adm4-spec 封闭枚举）：{error}"
+            ))
+        })?;
+        check_effect_tree(space, decision_id, new_nouns, position, &effect)
+    }
+}
+
+/// 递归走查一棵效果树（嵌套容器：AreaApply/Schedule 的 inner、RollCheck 的成败分支）。
+fn check_effect_tree(
+    space: &DesignSpace,
+    decision_id: &str,
+    new_nouns: &[String],
+    position: usize,
+    effect: &EffectSpec,
+) -> Adm4Result<()> {
+    match effect {
+        EffectSpec::Custom {
+            given, when_, then, ..
+        } => {
+            let mut missing = Vec::new();
+            for (segment, value) in [("given", given), ("when", when_), ("then", then)] {
+                if value.trim().is_empty() {
+                    missing.push(segment);
+                }
+            }
+            if missing.is_empty() {
+                Ok(())
+            } else {
+                Err(Adm4Error::invalid_input(format!(
+                    "custom 机制 {decision_id} 的第 {position} 个效果里 Custom 变体缺 GWT 段 \
+                     [{}]：转录投影只誊写设计者自己写的验收模板，三段缺一不可（R2）",
+                    missing.join(", ")
+                )))
+            }
+        }
+        EffectSpec::ModifyRule { target_rule, .. } => {
+            let known = target_rule == decision_id
+                || space.graph.point(target_rule).is_some()
+                || new_nouns.iter().any(|noun| noun == target_rule);
+            if known {
+                Ok(())
+            } else {
+                Err(Adm4Error::invalid_input(format!(
+                    "custom 机制 {decision_id} 的第 {position} 个效果 ModifyRule 指向的 \
+                     {target_rule} 不在设计空间内也未在 new_nouns 申报（悬空即拒）"
+                )))
+            }
+        }
+        EffectSpec::AreaApply { inner, .. } | EffectSpec::Schedule { inner, .. } => {
+            inner.iter().try_for_each(|nested| {
+                check_effect_tree(space, decision_id, new_nouns, position, nested)
+            })
+        }
+        EffectSpec::RollCheck {
+            on_success,
+            on_failure,
+            ..
+        } => on_success.iter().chain(on_failure).try_for_each(|nested| {
+            check_effect_tree(space, decision_id, new_nouns, position, nested)
+        }),
+        _ => Ok(()),
+    }
 }
 
 /// 模板/包 id 进入路径拼接前的护栏：拒绝 `..`、根、盘符等越界成分。

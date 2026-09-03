@@ -1793,6 +1793,16 @@ fn frozen_lane_defense_project_named(
     ai: &ScriptedProvider,
     project_name: &str,
 ) -> String {
+    let archive_id = confirmed_lane_defense_project_named(services, project_name);
+    services.freeze_red_team_with(&archive_id, ai).unwrap();
+    let frozen = services.freeze_run(&archive_id).unwrap();
+    assert_eq!(frozen.version, 1);
+    archive_id
+}
+
+/// 冻结前形态：15 个内建决策点全部选定/填参/确认（红队与冻结留给调用方）。
+/// custom 机制回归钉子要在「已确认完备、尚未红队」的档口登记 custom 点，故单独成段。
+fn confirmed_lane_defense_project_named(services: &AppServices, project_name: &str) -> String {
     let archive_id = services
         .project_new(project_name, "lane_defense", DesignLevel::L6, None)
         .unwrap();
@@ -1913,10 +1923,6 @@ fn frozen_lane_defense_project_named(
             Ok(())
         })
         .unwrap();
-
-    services.freeze_red_team_with(&archive_id, ai).unwrap();
-    let frozen = services.freeze_run(&archive_id).unwrap();
-    assert_eq!(frozen.version, 1);
     archive_id
 }
 
@@ -1932,6 +1938,331 @@ fn assert_stage_statuses(state: &adm4_pipeline::PipelineRunState, expected: &[(&
         };
         assert_eq!(&actual, wanted, "阶段 {stage_id} 状态");
     }
+}
+
+/// 转发型 Provider：记录每次 AI 调用的 (purpose, user_prompt)，应答转发内层脚本。
+///
+/// C2 的叙述素材（source_text）只进 user_prompt 不落盘，「rationale 进了 C2 素材」
+/// 这一事实只有在调用现场才观察得到——探针因此挂在 Provider 上。
+struct PromptSpy<'a> {
+    inner: &'a ScriptedProvider,
+    prompts: std::sync::Mutex<Vec<(String, String)>>,
+}
+
+impl adm4_ai::AiProvider for PromptSpy<'_> {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+
+    fn capabilities(&self) -> &[adm4_ai::AiCapability] {
+        self.inner.capabilities()
+    }
+
+    fn invoke(
+        &self,
+        request: &adm4_ai::AiRequest,
+    ) -> adm4_foundation::Adm4Result<adm4_ai::AiResponse> {
+        self.prompts
+            .lock()
+            .expect("提示词记录锁")
+            .push((request.purpose.clone(), request.user_prompt.clone()));
+        self.inner.invoke(request)
+    }
+}
+
+/// 审计回归钉子（T-W7-2）：两个 custom 机制走完整链（登记 → 用户确认 → 红队逐条
+/// 处置 → 冻结 → C0-C6），钉住三处产物事实：
+/// - C4：每个 custom 机制各有能力契约，GWT 三段非空（Custom 转录 / ModifyRule 模式投影）；
+/// - C6：每个 custom 机制各有对应程序任务，且 ModifyRule 产生跨机制依赖边；
+/// - C2：两条机制的 rationale 都进了叙述素材（design_notes → source_text → user_prompt）。
+#[test]
+fn audit_regression_custom_mechanics_reach_c4_and_c6() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_w7_custom_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+    let ai = scripted_ai();
+    // 冻结门红队：对两个 custom 机制各出一条 finding（custom 是红队必审项，缺了 gate4 拦截）。
+    ai.script(
+        "freeze_red_team",
+        vec![
+            r#"{"findings":[
+                {"id":"cf1","severity":"warning","target":"custom.ld.combat_system.programmable_targeting","text":"条件-动作规则的求值顺序需要在实现时定义确定性 tie-break"},
+                {"id":"cf2","severity":"warning","target":"custom.ld.wave_system.wave_adaptive_mutation","text":"波次学习的强度系数需要试玩标定，防止针对性变异过强"}
+            ],"per_category":[{"category":"custom_mechanics","checked":"2 个自定义机制逐条","conclusion":"均可实现，留观察项"}]}"#
+                .into(),
+        ],
+    );
+    let archive_id = confirmed_lane_defense_project_named(&services, "自定义机制回归钉子项目");
+    let rationale_targeting = "让玩家用自己的策略表达构筑防线，把索敌从固定规则变成玩家创作空间";
+    let rationale_mutation = "波次侧的自适应对抗让重复通关也保持紧张感";
+
+    // 负例先钉：Custom 效果缺 then → 门面层校验器当场拒绝（GWT 三段缺一不可）。
+    let mut bad_draft = adm4_authoring::CustomMechanicDraft {
+        host_system_id: "ld.combat_system".into(),
+        slug: "programmable_targeting".into(),
+        label_zh: "可编程索敌".into(),
+        rule_text: "玩家用条件-动作规则自定义塔的索敌逻辑（如血量低于50%的敌人优先）".into(),
+        effects: vec![serde_json::json!({
+            "effect": "custom",
+            "verb": "programmable_targeting",
+            "given": "场上存在多个敌人且玩家已配置条件-动作规则",
+            "when": "塔进行索敌判定"
+        })],
+        parameters: None,
+        new_nouns: Vec::new(),
+        rationale: rationale_targeting.into(),
+    };
+    let error = services
+        .custom_add(&archive_id, bad_draft.clone())
+        .expect_err("Custom 缺 then 必须被拒");
+    assert!(error.message.contains("then"), "{}", error.message);
+
+    // ① 可编程索敌（挂战斗系统，Custom GWT 转录）。
+    bad_draft.effects = vec![serde_json::json!({
+        "effect": "custom",
+        "verb": "programmable_targeting",
+        "given": "场上存在多个敌人且玩家已配置条件-动作规则",
+        "when": "塔进行索敌判定",
+        "then": "按规则优先级选出目标（如血量低于50%的敌人优先）"
+    })];
+    let targeting_id = services.custom_add(&archive_id, bad_draft).unwrap();
+    assert_eq!(
+        targeting_id,
+        "custom.ld.combat_system.programmable_targeting"
+    );
+
+    // ② 波次自适应变异（挂波次系统，ModifyRule 指向机制 ①——跨 custom 引用真校验）。
+    let mutation_id = services
+        .custom_add(
+            &archive_id,
+            adm4_authoring::CustomMechanicDraft {
+                host_system_id: "ld.wave_system".into(),
+                slug: "wave_adaptive_mutation".into(),
+                label_zh: "波次自适应变异".into(),
+                rule_text: "敌人波次学习玩家上一局布阵并针对性变异".into(),
+                effects: vec![serde_json::json!({
+                    "effect": "modify_rule",
+                    "target_rule": targeting_id.clone(),
+                    "patch": {"patch": "scale_coefficient", "expr": "wave_learning_factor"},
+                    "priority": 1
+                })],
+                parameters: None,
+                new_nouns: Vec::new(),
+                rationale: rationale_mutation.into(),
+            },
+        )
+        .unwrap();
+    assert_eq!(mutation_id, "custom.ld.wave_system.wave_adaptive_mutation");
+
+    // 合成点自动选中但未确认（AI 永不代确认）；确认是显式用户手势。
+    let state = services.load_authoring_state(&archive_id).unwrap();
+    for decision_id in [&targeting_id, &mutation_id] {
+        let selection = state.selections.get(decision_id.as_str()).unwrap();
+        assert!(
+            !selection.confirmed_by_user,
+            "{decision_id} 登记后不得自动确认"
+        );
+    }
+    assert_eq!(services.custom_list(&archive_id).unwrap().len(), 2);
+    services
+        .with_project(&archive_id, |engine| {
+            engine.confirm_selection(&targeting_id)?;
+            engine.confirm_selection(&mutation_id)
+        })
+        .unwrap();
+
+    // 被 ModifyRule 指向的机制 ① 不许删（删了机制 ② 在 C1 悬空）。
+    let error = services
+        .custom_remove(&archive_id, &targeting_id, true)
+        .expect_err("被引用的 custom 机制必须拒删");
+    assert!(error.message.contains(&mutation_id), "{}", error.message);
+
+    // 红队 → 对两条 custom finding 逐条处置（gate4 强制）→ 冻结。
+    assert_eq!(services.freeze_red_team_with(&archive_id, &ai).unwrap(), 2);
+    let report = services.freeze_check(&archive_id).unwrap();
+    assert!(!report.all_passed(), "custom finding 未处置时 gate4 必须拦");
+    services
+        .freeze_dispose(
+            &archive_id,
+            "cf1",
+            adm4_authoring::FindingDisposition::RiskAccepted,
+            "回归评审员",
+            "tie-break 交实现期定义，风险可接受",
+        )
+        .unwrap();
+    services
+        .freeze_dispose(
+            &archive_id,
+            "cf2",
+            adm4_authoring::FindingDisposition::RiskAccepted,
+            "回归评审员",
+            "标定留到试玩期，风险可接受",
+        )
+        .unwrap();
+    let report = services.freeze_check(&archive_id).unwrap();
+    assert!(
+        report.all_passed(),
+        "处置后五门应全绿：{:?}",
+        report
+            .gates
+            .iter()
+            .filter(|gate| !gate.passed)
+            .collect::<Vec<_>>()
+    );
+    let frozen = services.freeze_run(&archive_id).unwrap();
+    assert_eq!(frozen.version, 1);
+    // custom 合成点随冻结落产物（流水线据此增广空间）。
+    let content = services.archives.content_dir(&archive_id);
+    assert!(content.join("frozen/v1/custom_points.json").is_file());
+
+    // C0-C6 全链（PromptSpy 记录 C2 素材）；两道人工门署名确认后全绿。
+    let spy = PromptSpy {
+        inner: &ai,
+        prompts: std::sync::Mutex::new(Vec::new()),
+    };
+    let state = services
+        .pipeline_run_with(&archive_id, "C0", "C6", &spy)
+        .unwrap();
+    assert!(matches!(
+        state.stage_status("C5"),
+        StageStatus::WaitingHuman { .. }
+    ));
+    services
+        .pipeline_confirm(&archive_id, "C5", "回归评审员", "风格方向确认")
+        .unwrap();
+    let state = services
+        .pipeline_run_with(&archive_id, "C0", "C6", &spy)
+        .unwrap();
+    assert!(matches!(
+        state.stage_status("C6"),
+        StageStatus::WaitingHuman { .. }
+    ));
+    let state = services
+        .pipeline_confirm(&archive_id, "C6", "回归评审员", "Phase 1 文档集签收")
+        .unwrap();
+    for stage in ["C0", "C1", "C2", "C3", "C4", "C5", "C6"] {
+        assert!(
+            matches!(state.stage_status(stage), StageStatus::Succeeded),
+            "{stage}: {:?}",
+            state.stage_status(stage)
+        );
+    }
+
+    // --- C4：两个 custom 机制各有能力契约，GWT 三段非空 ---
+    let c4: adm4_pipeline::CapabilitiesContract = serde_json::from_str(
+        &std::fs::read_to_string(content.join("pipeline/v1/C4/contract.json")).unwrap(),
+    )
+    .unwrap();
+    for (mechanic_id, rule_fragment) in [
+        (&targeting_id, "条件-动作规则自定义塔的索敌逻辑"),
+        (&mutation_id, "学习玩家上一局布阵"),
+    ] {
+        let capability = c4
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == format!("cap_{mechanic_id}"))
+            .unwrap_or_else(|| panic!("C4 缺 cap_{mechanic_id}"));
+        assert!(!capability.scenarios.is_empty(), "{mechanic_id} 缺 GWT");
+        let scenario = &capability.scenarios[0];
+        assert!(!scenario.given.is_empty(), "{mechanic_id} Given 空");
+        assert!(!scenario.when.is_empty(), "{mechanic_id} When 空");
+        assert!(!scenario.then.is_empty(), "{mechanic_id} Then 空");
+        assert!(
+            scenario
+                .when
+                .iter()
+                .any(|line| line.contains(rule_fragment)),
+            "{mechanic_id} 的 When 应含规则文本：{:?}",
+            scenario.when
+        );
+    }
+    // 机制 ① 的 Then 是 Custom 转录（誊写设计者自己写的三段）；② 是 ModifyRule 模式投影。
+    let targeting_then = &c4
+        .capabilities
+        .iter()
+        .find(|capability| capability.id == format!("cap_{targeting_id}"))
+        .unwrap()
+        .scenarios[0]
+        .then;
+    assert!(
+        targeting_then
+            .iter()
+            .any(|line| line.contains("血量低于50%") && line.contains("Given")),
+        "Custom 转录应含设计者 GWT 原文：{targeting_then:?}"
+    );
+    let mutation_then = &c4
+        .capabilities
+        .iter()
+        .find(|capability| capability.id == format!("cap_{mutation_id}"))
+        .unwrap()
+        .scenarios[0]
+        .then;
+    assert!(
+        mutation_then
+            .iter()
+            .any(|line| line.contains(&targeting_id) && line.contains("缩放")),
+        "ModifyRule 投影应点名目标规则：{mutation_then:?}"
+    );
+    // C4 文档正文可读地含两个机制名。
+    let c4_document = std::fs::read_to_string(content.join("pipeline/v1/C4/document.md")).unwrap();
+    assert!(
+        c4_document.contains(&format!("cap_{targeting_id}")),
+        "{c4_document}"
+    );
+    assert!(
+        c4_document.contains(&format!("cap_{mutation_id}")),
+        "{c4_document}"
+    );
+    assert!(c4_document.contains("血量低于50%"), "C4 文档应含转录 GWT");
+
+    // --- C6：各有对应程序任务，且 ModifyRule 产跨机制依赖边 ---
+    let c6: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(content.join("pipeline/v1/C6/contract.json")).unwrap(),
+    )
+    .unwrap();
+    let tasks = c6.get("tasks").and_then(|tasks| tasks.as_array()).unwrap();
+    let task_of = |mechanic_id: &str| {
+        tasks
+            .iter()
+            .find(|task| {
+                task.get("id").and_then(|id| id.as_str())
+                    == Some(format!("task_cap_{mechanic_id}").as_str())
+            })
+            .unwrap_or_else(|| panic!("C6 缺 task_cap_{mechanic_id}"))
+    };
+    let targeting_task = task_of(&targeting_id);
+    assert_eq!(
+        targeting_task.get("kind").and_then(|kind| kind.as_str()),
+        Some("program")
+    );
+    let mutation_task = task_of(&mutation_id);
+    let depends: Vec<&str> = mutation_task
+        .get("depends_on")
+        .and_then(|deps| deps.as_array())
+        .unwrap()
+        .iter()
+        .filter_map(|dep| dep.as_str())
+        .collect();
+    assert!(
+        depends.contains(&format!("task_cap_{targeting_id}").as_str()),
+        "机制 ② 的任务应依赖机制 ① 的任务：{depends:?}"
+    );
+
+    // --- C2：两条 rationale 都进了叙述素材（design_notes → source_text）---
+    let prompts = spy.prompts.lock().unwrap();
+    let c2_prompts: Vec<&str> = prompts
+        .iter()
+        .filter(|(purpose, _)| purpose == "c2_narrative")
+        .map(|(_, prompt)| prompt.as_str())
+        .collect();
+    assert!(!c2_prompts.is_empty(), "C2 应至少发过一次叙述请求");
+    for rationale in [rationale_targeting, rationale_mutation] {
+        assert!(
+            c2_prompts.iter().any(|prompt| prompt.contains(rationale)),
+            "C2 叙述素材应含 rationale「{rationale}」"
+        );
+    }
+
+    std::fs::remove_dir_all(&temp).ok();
 }
 
 #[test]

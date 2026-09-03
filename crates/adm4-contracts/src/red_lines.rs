@@ -240,6 +240,20 @@ impl SkinScanner {
             })
             .collect()
     }
+
+    /// 多字段扫描（W7 §5.6 的 R5 扩展面）：逐字段扫描并把字段名并入命中位置
+    /// （`<location>#<字段名>`），让「custom 机制的 id/名称/规则文本/理由哪一处
+    /// 命中了哪个参考名」在门报告里一眼可辨——custom 是整段抄袭现成机制的最大
+    /// 通道，命中报告必须定位到字段级，否则用户只能逐字段猜。
+    ///
+    /// 判定口径与 [`SkinScanner::scan`] 完全一致（同一词表、同一归一化），
+    /// 本方法只是批量与定位的封装，不引入第二套匹配规则。
+    pub fn scan_fields(&self, location: &str, fields: &[(&str, &str)]) -> Vec<SkinHit> {
+        fields
+            .iter()
+            .flat_map(|(field, text)| self.scan(&format!("{location}#{field}"), text))
+            .collect()
+    }
 }
 
 /// 单个换皮词的归一化口径：trim + 小写。
@@ -408,6 +422,29 @@ mod tests {
         // 无豁免构造与扩展前逐字等价。
         assert_eq!(SkinScanner::new(wordlist()).wordlist().len(), 2);
         assert!(SkinScanner::new(wordlist()).exempted().is_empty());
+    }
+
+    /// R5 扩展面：多字段扫描把字段名并入命中位置（custom 机制的字段级定位）。
+    #[test]
+    fn r5_scan_fields_labels_hits_per_field() {
+        let scanner = SkinScanner::new(vec!["Kingdom Rush".into()]);
+        let hits = scanner.scan_fields(
+            "custom:custom.ld.combat_system.auto_target",
+            &[
+                ("id", "custom.ld.combat_system.auto_target"),
+                ("label", "kingdom rush 式索敌"),
+                ("rule_text", "条件-动作规则决定索敌"),
+                ("rationale", "参考 Kingdom Rush 的优先级"),
+            ],
+        );
+        assert_eq!(hits.len(), 2, "{hits:?}");
+        assert!(
+            hits.iter()
+                .any(|hit| hit.location.ends_with("#label") && hit.matched_word == "kingdom rush")
+        );
+        assert!(hits.iter().any(|hit| hit.location.ends_with("#rationale")));
+        // 未命中的字段不产条目（rule_text/id 干净）。
+        assert!(!hits.iter().any(|hit| hit.location.ends_with("#rule_text")));
     }
 
     #[test]

@@ -1,6 +1,11 @@
-use crate::state::{AuthoringState, TemplateMode};
+use crate::custom::{
+    CUSTOM_ENTRY_LABEL, CUSTOM_ENTRY_OPTION_ID, CUSTOM_RULE_OPTION_ID, CustomMechanicDraft,
+    CustomMechanicRecord, EffectTemplateValidator, augment_space, template_references_rule,
+    validate_draft,
+};
+use crate::state::{AuthoringState, FindingDisposition, TemplateMode};
 use adm4_decision::{
-    ApplicabilityMap, CompletenessReport, DecisionId, NaJustification, OptionId,
+    ApplicabilityMap, CompletenessReport, DecisionId, DecisionPoint, NaJustification, OptionId,
     OrganizationProgress, ParameterValues, PointRequirement, Provenance, SelectedOption, Selection,
     aggregate_progress, compute_applicability, compute_completeness, counts_toward_completeness,
     validate_option_parameters, validate_parameters,
@@ -65,6 +70,9 @@ pub struct WorkbenchResetReport {
     pub cleared_node_design_notes: usize,
     /// 清除的节点风险说明条数。
     pub cleared_node_risk_notes: usize,
+    /// 清除的项目私有 custom 机制登记数（旧存档无该键 → 0，I2 守恒）。
+    #[serde(default)]
+    pub cleared_custom_mechanics: usize,
     /// 重置执行者署名（R3）。
     pub actor: String,
     pub at: String,
@@ -74,13 +82,14 @@ impl WorkbenchResetReport {
     /// 一行摘要（日志与 CLI/GUI 提示共用）。
     pub fn summary(&self) -> String {
         format!(
-            "清空 {} 个决策点选择（含 {} 处主选、{} 处参数值）、{} 处不适用豁免、{} 处设计说明、{} 处风险说明",
+            "清空 {} 个决策点选择（含 {} 处主选、{} 处参数值）、{} 处不适用豁免、{} 处设计说明、{} 处风险说明、{} 个自定义机制",
             self.cleared_selections,
             self.cleared_primary_marks,
             self.cleared_parameter_values,
             self.cleared_exemptions,
             self.cleared_node_design_notes,
-            self.cleared_node_risk_notes
+            self.cleared_node_risk_notes,
+            self.cleared_custom_mechanics
         )
     }
 
@@ -90,6 +99,7 @@ impl WorkbenchResetReport {
             && self.cleared_exemptions == 0
             && self.cleared_node_design_notes == 0
             && self.cleared_node_risk_notes == 0
+            && self.cleared_custom_mechanics == 0
     }
 }
 
@@ -100,22 +110,48 @@ impl WorkbenchResetReport {
 /// 每开一个引擎就深拷一遍整张决策图。`new` 接受 `impl Into<Arc<DesignSpace>>`，
 /// 因此既可以传 `DesignSpace`（自动装箱）也可以传门面缓存里的 `Arc`（零拷贝）。
 pub struct AuthoringEngine {
+    /// 未增广的 pack 空间（custom add/remove 后据此重建增广空间，不叠加增广）。
+    base_space: Arc<DesignSpace>,
+    /// 生效空间 = base + 项目私有 custom 合成点；无 custom 时与 base 是同一个 Arc。
     space: Arc<DesignSpace>,
     state: AuthoringState,
 }
 
 impl AuthoringEngine {
     pub fn new(space: impl Into<Arc<DesignSpace>>, mut state: AuthoringState) -> Adm4Result<Self> {
-        let space = space.into();
-        if state.genre_pack != space.pack.pack_id {
+        let base_space: Arc<DesignSpace> = space.into();
+        if state.genre_pack != base_space.pack.pack_id {
             return Err(Adm4Error::conflict(format!(
                 "项目品类包 {} 与加载的设计空间 {} 不一致",
-                state.genre_pack, space.pack.pack_id
+                state.genre_pack, base_space.pack.pack_id
             )));
         }
         // 旧存档的豁免署名并行 map 就地合并进 NaJustification（署名只留一个真相源）。
         state.adopt_legacy_na_signoffs();
-        Ok(Self { space, state })
+        // 项目私有 custom 机制并入生效空间（无 custom 时零拷贝共享 base）。
+        let space = if state.custom_mechanics.is_empty() {
+            Arc::clone(&base_space)
+        } else {
+            Arc::new(augment_space(&base_space, &state.custom_mechanics)?)
+        };
+        Ok(Self {
+            base_space,
+            space,
+            state,
+        })
+    }
+
+    /// custom 登记簿变化后重建生效空间（base 不变，不叠加增广）。
+    fn rebuild_augmented_space(&mut self) -> Adm4Result<()> {
+        self.space = if self.state.custom_mechanics.is_empty() {
+            Arc::clone(&self.base_space)
+        } else {
+            Arc::new(augment_space(
+                &self.base_space,
+                &self.state.custom_mechanics,
+            )?)
+        };
+        Ok(())
     }
 
     pub fn space(&self) -> &DesignSpace {
@@ -172,6 +208,7 @@ impl AuthoringEngine {
         option_id: &str,
         provenance: Provenance,
     ) -> Adm4Result<()> {
+        Self::reject_custom_entry_placeholder(option_id)?;
         self.check_option_dependencies(decision_id, option_id)?;
         let confirmed = matches!(provenance, Provenance::UserManual);
         self.state.selections.insert(
@@ -195,6 +232,7 @@ impl AuthoringEngine {
 
     /// 多选点追加一个已选选项（单选点拒绝）。首个选项仍走 `select_option`。
     pub fn add_option(&mut self, decision_id: &str, option_id: &str) -> Adm4Result<()> {
+        Self::reject_custom_entry_placeholder(option_id)?;
         let point = self.space.graph.require_point(decision_id)?;
         if !point.is_multi() {
             return Err(Adm4Error::invalid_input(format!(
@@ -409,6 +447,176 @@ impl AuthoringEngine {
             .ok_or_else(|| Adm4Error::not_found(format!("决策点 {decision_id} 未选择")))?;
         selection.rationale = rationale.to_string();
         self.state.bump_revision();
+        Ok(())
+    }
+
+    /// 占位选项守卫：呈现层注入的「自定义答案」不可被选择/追加，只引导走 custom 流。
+    fn reject_custom_entry_placeholder(option_id: &str) -> Adm4Result<()> {
+        if option_id == CUSTOM_ENTRY_OPTION_ID {
+            return Err(Adm4Error::invalid_input(format!(
+                "「{CUSTOM_ENTRY_LABEL}」是引导入口不是可选项：请用 add_custom_mechanic\
+                 （CLI：custom add）录入完整机制草案，登记后的机制点会自动选中待确认"
+            )));
+        }
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // 机制级 custom（W7 §5.6：项目私有 L4 单选点，走全部既有链路）
+    // ------------------------------------------------------------------
+
+    /// 登记一个 custom 机制：校验草案（信息密度与内建 L4 同级）→ 合成
+    /// `is_custom: true` 的项目私有单选点 → 自动选中唯一选项但**不确认**——
+    /// 确认是用户手势（`confirm_selection`），AI 永不代确认，未确认不进完成度分母。
+    ///
+    /// 返回合成决策点 id（`custom.<host>.<slug>`）。
+    pub fn add_custom_mechanic(
+        &mut self,
+        draft: CustomMechanicDraft,
+        validator: &dyn EffectTemplateValidator,
+    ) -> Adm4Result<String> {
+        // 用当前**已增广**空间校验：ModifyRule 可指向此前登记的 custom 机制。
+        let decision_id = validate_draft(&self.space, &self.state.selections, &draft, validator)?;
+        let record = CustomMechanicRecord {
+            decision_id: decision_id.clone(),
+            draft,
+            created_at: UtcTimestamp::now().to_iso8601(),
+        };
+        self.state
+            .custom_mechanics
+            .insert(decision_id.clone(), record);
+        self.rebuild_augmented_space()?;
+        // 参数值直接落 Selection（schema 由登记时的值类型推断，二者同源必然匹配）。
+        let parameters = match &self
+            .state
+            .custom_mechanics
+            .get(&decision_id)
+            .and_then(|record| record.draft.parameters.clone())
+        {
+            Some(entries) if !entries.is_empty() => ParameterValues::Scalars {
+                entries: entries.clone(),
+            },
+            _ => ParameterValues::None,
+        };
+        let rationale = self
+            .state
+            .custom_mechanics
+            .get(&decision_id)
+            .map(|record| record.draft.rationale.clone())
+            .unwrap_or_default();
+        self.state.selections.insert(
+            decision_id.clone(),
+            Selection {
+                decision_id: decision_id.clone(),
+                option_id: CUSTOM_RULE_OPTION_ID.to_string(),
+                parameters,
+                rationale,
+                provenance: Provenance::UserManual,
+                // 单选点恰一个选项自动选中，但确认必须是显式用户手势。
+                confirmed_by_user: false,
+                template_original: None,
+                additional_options: Vec::new(),
+                primary_option: None,
+            },
+        );
+        self.invalidate_red_team();
+        Ok(decision_id)
+    }
+
+    /// 已登记的 custom 机制清单（按决策点 id 排序，BTreeMap 天然有序）。
+    pub fn list_custom_mechanics(&self) -> Vec<&CustomMechanicRecord> {
+        self.state.custom_mechanics.values().collect()
+    }
+
+    /// 全部 custom 合成点（从生效空间取，冻结时随 `FrozenDesign::custom_points` 落产物）。
+    pub fn custom_points(&self) -> Vec<DecisionPoint> {
+        self.state
+            .custom_mechanics
+            .keys()
+            .filter_map(|decision_id| self.space.graph.point(decision_id).cloned())
+            .collect()
+    }
+
+    /// 删除一个 custom 机制（未冻结前可删；连同其选择一并移除）。
+    ///
+    /// 两道守卫：已确认的机制不许静默删（先 `clear_selection` 语义上说不通——
+    /// 这里要求调用方显式知道自己在删一个已确认的设计，用 `force` 表达）；
+    /// 被其它 custom 机制 ModifyRule 指向时拒绝（删了会让那条机制在 C1 悬空）。
+    pub fn remove_custom_mechanic(&mut self, decision_id: &str, force: bool) -> Adm4Result<()> {
+        if !self.state.custom_mechanics.contains_key(decision_id) {
+            return Err(Adm4Error::not_found(format!(
+                "custom 机制 {decision_id} 未登记（custom list 可查现有清单）"
+            )));
+        }
+        let dependents: Vec<String> = self
+            .state
+            .custom_mechanics
+            .values()
+            .filter(|record| record.decision_id != decision_id)
+            .filter(|record| {
+                record
+                    .draft
+                    .effects
+                    .iter()
+                    .any(|template| template_references_rule(template, decision_id))
+            })
+            .map(|record| record.decision_id.clone())
+            .collect();
+        if !dependents.is_empty() {
+            return Err(Adm4Error::conflict(format!(
+                "不能删除 {decision_id}：以下 custom 机制的 ModifyRule 指向它：{}",
+                dependents.join(", ")
+            )));
+        }
+        let confirmed = self
+            .state
+            .selections
+            .get(decision_id)
+            .is_some_and(|selection| selection.confirmed_by_user);
+        if confirmed && !force {
+            return Err(Adm4Error::conflict(format!(
+                "custom 机制 {decision_id} 已被用户确认：删除已确认的设计请显式加 force（CLI：--force）"
+            )));
+        }
+        self.state.custom_mechanics.remove(decision_id);
+        self.state.selections.remove(decision_id);
+        self.rebuild_augmented_space()?;
+        self.invalidate_red_team();
+        Ok(())
+    }
+
+    /// 逐条处置红队发现（gate4：每个 custom 机制的 finding 必须显式 accept/revise + 署名）。
+    ///
+    /// `disposition` 的语义沿用既有 [`FindingDisposition`]：revise=已修改设计（Fixed）、
+    /// accept=接受风险（RiskAccepted）。处置写在红队记录上，不推进 revision——
+    /// 处置本身不是设计变更，推了 revision 反而会把刚处置完的红队记录标成过期。
+    pub fn dispose_red_team_finding(
+        &mut self,
+        finding_id: &str,
+        disposition: FindingDisposition,
+        actor: &str,
+        note: &str,
+    ) -> Adm4Result<()> {
+        let actor = actor.trim();
+        if actor.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "红队发现处置必须署名（actor）：R3 要求人工判断可追责",
+            ));
+        }
+        let record = self.state.red_team.as_mut().ok_or_else(|| {
+            Adm4Error::conflict("尚未执行红队评审，没有可处置的发现（先 freeze red-team）")
+        })?;
+        let finding = record
+            .findings
+            .iter_mut()
+            .find(|finding| finding.id == finding_id)
+            .ok_or_else(|| {
+                Adm4Error::not_found(format!(
+                    "红队发现 {finding_id} 不存在（freeze check 可查明细）"
+                ))
+            })?;
+        finding.disposition = Some(disposition);
+        finding.disposition_note = format!("{}（署名 {actor}）", note.trim());
         Ok(())
     }
 
@@ -737,6 +945,7 @@ impl AuthoringEngine {
             cleared_exemptions: self.state.not_applicable.len(),
             cleared_node_design_notes: self.state.node_design_notes.len(),
             cleared_node_risk_notes: self.state.node_risk_notes.len(),
+            cleared_custom_mechanics: self.state.custom_mechanics.len(),
             actor: actor.to_string(),
             at: UtcTimestamp::now().to_iso8601(),
             ..Default::default()
@@ -753,7 +962,10 @@ impl AuthoringEngine {
         self.state.not_applicable.clear();
         self.state.node_design_notes.clear();
         self.state.node_risk_notes.clear();
+        self.state.custom_mechanics.clear();
         self.state.template_mode = TemplateMode::None;
+        // custom 登记清空 → 生效空间退回未增广的 base（合成点随登记一起消失）。
+        self.rebuild_augmented_space()?;
         self.invalidate_red_team();
         Ok(report)
     }

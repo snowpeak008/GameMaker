@@ -2727,6 +2727,7 @@ mod tests {
             cleared_exemptions: 3,
             cleared_node_design_notes: 2,
             cleared_node_risk_notes: 1,
+            cleared_custom_mechanics: 0,
             actor: "主策划".into(),
             at: "2026-08-31T12:00:00Z".into(),
         };
@@ -2742,6 +2743,7 @@ mod tests {
             cleared_exemptions: 0,
             cleared_node_design_notes: 0,
             cleared_node_risk_notes: 0,
+            cleared_custom_mechanics: 0,
             actor: "主策划".into(),
             at: "t".into(),
         };
