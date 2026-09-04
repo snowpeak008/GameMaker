@@ -1,12 +1,27 @@
-﻿//! V4 创作引擎：项目创作状态、双模式作业（手动 / AI 访谈分层确认）、
+//! V4 创作引擎：项目创作状态、双模式作业（手动 / AI 访谈分层确认）、
 //! 模板预填与对照、冻结门五道、FrozenDesign。
 
+mod compose;
+mod compose_fix;
+mod concept;
 mod custom;
 mod engine;
 mod freeze;
 mod interview;
 mod state;
 
+pub use compose::{
+    CompositionAssessment, MissingTierSelection, assess_composition, composition_finding_code,
+};
+pub use compose_fix::{
+    CompositionFixOption, CompositionFixProposal, FixActionKind, PURPOSE_COMPOSITION,
+    propose_composition_fix,
+};
+pub use concept::{
+    ConceptProposal, ConceptSystem, ExternalSystemNote, FusionCore, FusionDecomposition,
+    HEAVY_CORE_THRESHOLD, PURPOSE_CONCEPT, PURPOSE_CONCEPT_TIER, TierClarification, clarify_tier,
+    proposal_to_refs, propose_concept, tier_question,
+};
 pub use custom::{
     CUSTOM_ENTRY_LABEL, CUSTOM_ENTRY_OPTION_ID, CUSTOM_ENTRY_SUMMARY, CUSTOM_RULE_OPTION_ID,
     CustomMechanicDraft, CustomMechanicRecord, EffectTemplateValidator, augment_space_with_points,
@@ -19,8 +34,9 @@ pub use freeze::{
 };
 pub use interview::{
     InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, LevelProgress,
+    PURPOSE_MECHANISM, PURPOSE_MECHANISM_CUSTOM,
 };
 pub use state::{
-    AuthoringState, Finding, FindingDisposition, InterviewEntry, InterviewState, NaSignoff,
-    RedTeamRecord, TemplateMode,
+    AuthoringState, CompositionFormConfirmation, CoreLoopVerb, Finding, FindingDisposition,
+    InterviewEntry, InterviewState, NaSignoff, RedTeamRecord, TemplateMode,
 };

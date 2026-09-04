@@ -1,0 +1,490 @@
+{
+  "module_id": "sys.loot",
+  "semver": "1.0.0",
+  "label_zh": "掉落",
+  "summary": "战斗/行为产出实体与资源的概率规则（系统库 #17）。阶梯三档：基础掉落表（表结构/判定时机/概率口径）→ 品质词条权重（装备 E1 传导的目标档：掉落表含品质与词条权重列）→ 保底与定向（保底计数与智能偏置）。本模块是首批四件套的名词供给中枢：drop_table/gem_entity/material_entity/skill_effect_def 皆由此 provides。",
+  "nouns": [
+    {
+      "id": "drop_table",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "掉落表",
+      "summary": "行标识为掉落条目的表实体：产物引用、概率/权重、品质与词条权重列（quality_affix_weights 档起）。装备系统 consumes 它决定词条从哪来。"
+    },
+    {
+      "id": "gem_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "宝石实体",
+      "summary": "可镶嵌进装备孔位的宝石实例，行标识 + 等级/效果列。装备 E3 传导点名的析取名词——本模块按掉落口径提供。"
+    },
+    {
+      "id": "material_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "材料实体",
+      "summary": "合成/强化的原料实例（可堆叠）。装备 E4 传导点名的析取名词——掉落与分解回收共同供给。"
+    },
+    {
+      "id": "skill_effect_def",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "技能效果定义",
+      "summary": "技能石承载的效果定义（触发条件+效果模板引用）。装备 E2 传导点名的析取名词——按 PoE 口径技能石走掉落，故由本模块提供。遗留声明：正式技能系统入库后成为析取第二源。"
+    },
+    {
+      "id": "drop_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "掉落事件",
+      "summary": "一次掉落结算完成的时点信号，载荷为产物清单；供任务计数、拾取流程、智能掉落统计监听。"
+    },
+    {
+      "id": "pity_counter",
+      "kind": { "kind": "resource" },
+      "label_zh": "保底计数",
+      "summary": "未出目标稀有度的累积计数，有余额语义（累满必出，出货清零）；保底档起存在。"
+    },
+    {
+      "id": "drop_rate_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "掉率规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的掉率规则位（如装备幸运词条、活动双倍掉落对掉率的修改）。"
+    }
+  ],
+  "interface": {
+    "provides": [
+      "drop_table",
+      "gem_entity",
+      "material_entity",
+      "skill_effect_def",
+      "drop_signal",
+      "drop_rate_rule_slot"
+    ],
+    "consumes": [],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "掉落表结构/判定时机/概率口径/品质权重/词条权重联动/保底计数/定向偏置的机制群。",
+    "dynamics_notes": [
+      "掉落结算瞬间的期待峰值是本系统的核心情绪节拍（信号：开箱/击杀后的界面停留时长）",
+      "quality_affix_weights 档起玩家开始阅读掉落而非只看颜色（信号：掉落物 tooltip 展开率）",
+      "保底档起刷宝行为从赌运气变为可规划的工期（信号：连续未出货会话的留存率拐点）"
+    ],
+    "aesthetics_primary": ["探索", "幻想"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "basic_table",
+        "label_zh": "T0 基础掉落表",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 2 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.loot.table_structure",
+          "sys.loot.roll_timing",
+          "sys.loot.rate_model"
+        ],
+        "inductions": [],
+        "summary": "掉落表 + 判定时机 + 概率口径：击杀出货的最小闭环。O2——掉落表天生是内容量大户。"
+      },
+      {
+        "id": "quality_affix_weights",
+        "label_zh": "T1 +品质词条权重",
+        "rating": { "m": 1, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 4,
+        "activates": [
+          "sys.loot.table_structure",
+          "sys.loot.roll_timing",
+          "sys.loot.rate_model",
+          "sys.loot.quality_weights",
+          "sys.loot.affix_weight_link"
+        ],
+        "inductions": [],
+        "summary": "掉落表增加品质权重列与词条权重联动：装备 E1 传导点名的目标档（『词条从哪来必须有规则』的规则就在这一档）。宝石/技能石/材料条目随本档进入掉落表。"
+      },
+      {
+        "id": "pity_directed",
+        "label_zh": "T2 +保底与定向",
+        "rating": { "m": 2, "d": 3, "c": 2, "p": 2, "o": 3 },
+        "p_floor": 2,
+        "interface_floor": 5,
+        "activates": [
+          "sys.loot.table_structure",
+          "sys.loot.roll_timing",
+          "sys.loot.rate_model",
+          "sys.loot.quality_weights",
+          "sys.loot.affix_weight_link",
+          "sys.loot.pity_rule",
+          "sys.loot.smart_bias"
+        ],
+        "inductions": [],
+        "summary": "保底计数 + 定向偏置：极端非酋被制度性消灭，掉落从纯随机变成受控随机。D/O 推高——保底状态与偏置统计都是持久数据。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.loot.table_structure",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "掉落表按什么结构组织？",
+      "design_question": "一只怪的掉落是查一张平表，还是先掉『袋子』再开袋？嵌套层数决定掉落调参的粒度与心智成本。",
+      "tier_gate": "basic_table",
+      "options": [
+        {
+          "id": "flat_per_source",
+          "label": "来源平表",
+          "summary": "每个掉落来源（怪/箱子/任务）一张平表，行=具体产物+概率，一层查完",
+          "implications": [
+            "掉落链路一眼可审计：来源→产物概率是单跳映射，调参与排查都最快",
+            "跨来源共享的产物组（如全区通用材料包）要在每张表重复维护，表间漂移是长期债务",
+            "来源数 × 产物数的行数积在内容后期爆炸，运营改一件产物掉率要批量改表"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "entry_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "source_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "output_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "drop_chance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "entry_id", "cardinality_key": "drop_table_rows" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "drop_table", "draw_count_expr": "1", "draw_rule": "independent_chance_per_row(source_id)", "destination": "pending_drops" },
+            { "effect": "emit_signal", "signal": "drop_signal" }
+          ]
+        },
+        {
+          "id": "nested_group_table",
+          "label": "嵌套组表",
+          "summary": "来源引用掉落组，组可再嵌套组（怪→稀有度组→部位组→具体物品），逐层 roll",
+          "implications": [
+            "共享组只改一处全局生效：『全区材料包加量 10%』是一行改动",
+            "嵌套即间接：一件产物的最终掉率是各层概率连乘，审计需要工具展开而非肉眼",
+            "组的复用诱惑会催生过深嵌套，需要层数上限纪律（一般 ≤3 层）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "group_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "member_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "member_kind", "kind": { "kind": "enum", "variants": ["item", "group"] }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true }
+          ], "row_key": "group_id", "cardinality_key": "drop_group_rows" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "drop_group", "draw_count_expr": "1", "draw_rule": "weighted_recursive(max_depth=3)", "destination": "pending_drops" },
+            { "effect": "emit_signal", "signal": "drop_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.roll_timing",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "掉落在什么时机判定与呈现？",
+      "design_question": "宝箱里的东西是开箱那一刻才决定，还是击杀瞬间就落地？即时落地卖过程爽感，结算发放卖开箱悬念。",
+      "tier_gate": "basic_table",
+      "options": [
+        {
+          "id": "instant_on_kill",
+          "label": "击杀即时落地",
+          "summary": "击杀/破坏瞬间 roll 并在现场生成掉落物实体，玩家走过去拾取",
+          "implications": [
+            "掉落是战斗节拍的一部分：金光落地的瞬间反馈直接强化清怪动力",
+            "地面实体有存留与满包问题——与背包满包规则（sys.inventory）强耦合",
+            "多人场景下归属规则（个人 roll / 竞拾）必须显式定义，否则社交冲突失控"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "ground_persist_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 10.0, "max": 3600.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "ground_drop" },
+            { "effect": "emit_signal", "signal": "drop_signal" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:ground_persist_seconds}", "unit": "seconds", "inner": [
+              { "effect": "despawn_entity", "entity": "ground_drop" }
+            ] }
+          ]
+        },
+        {
+          "id": "settlement_batch",
+          "label": "结算统一发放",
+          "summary": "局内只记账不落地，通关/失败结算界面统一 roll 并直接入包",
+          "implications": [
+            "战斗零打断，掉落悬念集中在结算一屏爆发——适合按局切分的肉鸽/关卡制",
+            "『打得好不好影响掉多少』要靠结算系数表达，过程与奖励的因果感变弱",
+            "失败时掉落如何折算（全无/减半）是留存敏感参数，惩罚过狠会放大弃坑"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "clear_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 5.0 }, "required": true },
+            { "key": "fail_retain_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "drop_table", "draw_count_expr": "accumulated_credits * {param:clear_multiplier}", "draw_rule": "weighted_without_replacement", "destination": "settlement_rewards" },
+            { "effect": "grant_resource", "resource": "settlement_rewards", "formula": "if(failed, rewards * {param:fail_retain_ratio}, rewards)" },
+            { "effect": "emit_signal", "signal": "drop_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.rate_model",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "掉落概率按什么口径建模？",
+      "design_question": "每行各自掷骰子，还是全表分蛋糕？独立概率下多掉与空手都可能，权重份额下每次必出恰好一件。",
+      "tier_gate": "basic_table",
+      "options": [
+        {
+          "id": "independent_chance",
+          "label": "逐行独立概率",
+          "summary": "表内每行独立 roll 自己的概率，单次掉落可能出多件也可能空手",
+          "implications": [
+            "空手是合法结果：掉落方差大，欧非差距即话题性，也即挫败源",
+            "行间概率互不牵制，新增条目不稀释旧条目——运营加新掉落零回归成本",
+            "期望产出=各行概率之和，通胀控制要审计全表而非单行"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "max_drops_per_roll", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - drop_chance(entry_id)", "on_success": [
+              { "effect": "spawn_entity", "entity": "drop_output" }
+            ], "on_failure": [] },
+            { "effect": "modify_property", "entity": "drop_batch", "property": "output_count", "formula": "min(successes, {param:max_drops_per_roll})" }
+          ]
+        },
+        {
+          "id": "weighted_share",
+          "label": "权重份额抽取",
+          "summary": "全表按权重归一化为份额，每次掉落必出恰好一件（或固定 N 件）",
+          "implications": [
+            "掉落数量恒定，产出速率精确可控——经济建模的最友好口径",
+            "新增条目会稀释全表其他条目的实际概率，每次加内容都是一次隐性全局调参",
+            "『必出一件』消灭空手挫败，也消灭了『一次爆三件』的峰值惊喜"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "draws_per_roll", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "drop_table", "draw_count_expr": "{param:draws_per_roll}", "draw_rule": "weighted_normalized_share", "destination": "pending_drops" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.quality_weights",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "品质权重列如何随情境缩放？",
+      "design_question": "同一张表，普通怪和 Boss 的橙装概率差在哪里体现——每个来源抄一份表，还是一列难度系数动态放大？",
+      "tier_gate": "quality_affix_weights",
+      "options": [
+        {
+          "id": "static_quality_columns",
+          "label": "静态品质权重列",
+          "summary": "掉落表每行带各品质档的固定权重列，不同来源用不同的表行组合表达差异",
+          "implications": [
+            "权重即所见：任何一行的品质分布静态可读，QA 抽查与社区考据都容易",
+            "来源差异靠复制行实现，Boss 表与小怪表的同名条目权重漂移要靠纪律防",
+            "赛季调整品质分布 = 批量改列，改动面大但每处改动都显式可审"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "entry_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "quality_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true }
+          ], "row_key": "entry_id", "cardinality_key": "quality_weight_rows" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "quality_weight_table", "draw_count_expr": "1", "draw_rule": "weighted_by_column(quality_key)", "destination": "drop_output.quality" }
+          ]
+        },
+        {
+          "id": "tier_scaling_curve",
+          "label": "难度系数缩放",
+          "summary": "表内只存基准权重，来源带难度系数，高品质权重按系数乘算放大（怪越难橙越多）",
+          "implications": [
+            "一条系数曲线管全部来源：新副本定难度系数即完成掉落配置，扩展成本极低",
+            "基准权重 × 系数的乘算结果不直观，玩家与 QA 都需要展开工具核实际概率",
+            "系数上限必须封顶，否则最高难度的高品质权重放大会击穿品质稀缺性"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "scale_per_tier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true },
+            { "key": "scale_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "drop_table", "property": "effective_quality_weight", "formula": "base_weight * min({param:scale_per_tier} ^ source_difficulty, {param:scale_cap})" },
+            { "effect": "draw_from_pool", "pool_table": "drop_table", "draw_count_expr": "1", "draw_rule": "weighted_by(effective_quality_weight)", "destination": "drop_output.quality" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.affix_weight_link",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "掉落侧的词条权重与装备词条池怎么联动？",
+      "design_question": "装备落地时的词条是掉落系统说了算还是装备系统说了算？这条系统边界划错，后续每次词条调整都要跨两个系统改。",
+      "tier_gate": "quality_affix_weights",
+      "options": [
+        {
+          "id": "delegate_to_equipment_pool",
+          "label": "委托装备词条池",
+          "summary": "掉落只决定品质与词条条数，具体抽哪条词条委托给装备系统的词条池（sys.equipment.affix_roll 的池与权重）",
+          "implications": [
+            "词条真相单一：池与权重只在装备侧维护一份，掉落侧零词条数据",
+            "掉落系统无法做『本副本定向掉攻击词条』这类来源级词条倾斜——倾斜手段被让渡",
+            "装备 E1 传导（sys.loot ≥ quality_affix_weights）由本选项的品质/条数列兑现，权重列在装备池"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "drop_output", "property": "affix_count", "formula": "affix_count_by_quality(quality_key)" },
+            { "effect": "emit_signal", "signal": "affix_roll_delegated" }
+          ]
+        },
+        {
+          "id": "source_side_affix_bias",
+          "label": "来源侧词条偏置",
+          "summary": "掉落表带词条偏置列（标签→权重乘数），装备侧抽词条前先应用来源偏置",
+          "implications": [
+            "『火焰副本掉火系词条』成为可配置的内容钩子，副本主题与产出闭环",
+            "词条实际权重=装备池权重×来源偏置，两处真相相乘，平衡审计要联查两系统",
+            "偏置乘数失控会让定向刷取碾压全局随机，乘数上限是必须写死的红线"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "bias_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "source_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "affix_tag", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true }
+          ], "row_key": "bias_id", "cardinality_key": "affix_bias_rows" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "drop_rate_rule_slot", "patch": { "patch": "scale_coefficient", "expr": "weight_multiplier(source_id, affix_tag)" }, "priority": 0 },
+            { "effect": "emit_signal", "signal": "affix_bias_applied" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.pity_rule",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "保底机制按什么曲线兜底？",
+      "design_question": "第 99 次没出货的玩家，第 100 次是必出（硬保底）还是概率悄悄涨到快必出（软保底）？前者可倒计时，后者保悬念。",
+      "tier_gate": "pity_directed",
+      "options": [
+        {
+          "id": "hard_pity_counter",
+          "label": "硬保底计数",
+          "summary": "未出目标稀有度累计计数，到阈值必出并清零；计数公开可见",
+          "implications": [
+            "最坏情况有界且公示，玩家可以倒排工期规划投入——付费语境下几乎是合规刚需",
+            "接近阈值时的期望值陡增会扭曲行为：玩家攒着不抽等保底，投放节奏被玩家反向调度",
+            "保底继承规则（跨池/跨赛季是否清零）是舆情高危参数，必须显式定义"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pity_threshold", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 10.0, "max": 500.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "pity_counter", "formula": "+1 per miss" },
+            { "effect": "roll_check", "formula": "pity_counter", "difficulty_expr": "{param:pity_threshold}", "on_success": [
+              { "effect": "spawn_entity", "entity": "guaranteed_rare_drop" },
+              { "effect": "consume_resource", "resource": "pity_counter", "formula": "reset_to_zero" }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "soft_pity_ramp",
+          "label": "软保底递增",
+          "summary": "未出货每次失败给基础概率叠加递增量，出货后回落基础值；曲线不公示也可公示",
+          "implications": [
+            "无肉眼可见的必出点，悬念保留到出货瞬间——欧皇体验与保底兜底并存",
+            "期望出货次数由递增斜率决定，斜率是比阈值更隐蔽也更灵活的调参位",
+            "不公示时被玩家实测拆穿的成本极高（大样本统计），公示与否要在合规与神秘感间定夺"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_rare_chance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.001, "max": 0.5 }, "required": true },
+            { "key": "ramp_per_miss", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0001, "max": 0.1 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "pity_counter", "formula": "+1 per miss" },
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - ({param:base_rare_chance} + pity_counter * {param:ramp_per_miss})", "on_success": [
+              { "effect": "spawn_entity", "entity": "rare_drop" },
+              { "effect": "consume_resource", "resource": "pity_counter", "formula": "reset_to_zero" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.loot.smart_bias",
+      "domain": "loot",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "定向掉落对玩家构筑做多大程度的偏置？",
+      "design_question": "法师满地捡到大剑是随机的公平还是体验的浪费？智能掉落越聪明，跨构筑尝试的火种越少。",
+      "tier_gate": "pity_directed",
+      "options": [
+        {
+          "id": "class_weighted_bias",
+          "label": "职业/构筑加权",
+          "summary": "掉落 roll 前按当前职业/主属性给相关条目加权，无关条目降权但不清零",
+          "implications": [
+            "可用掉落占比显著上升，刷宝的单位时间正反馈变密",
+            "降权不清零保留跨构筑火种：法师还是可能捡到大剑，只是更少",
+            "加权系数是隐藏规则，被拆穿后『系统故意不给我掉XX』的阴谋论会指向它"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "on_build_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "off_build_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "drop_rate_rule_slot", "patch": { "patch": "scale_coefficient", "expr": "if(matches_build, {param:on_build_multiplier}, {param:off_build_multiplier})" }, "priority": 5 },
+            { "effect": "emit_signal", "signal": "drop_signal" }
+          ]
+        },
+        {
+          "id": "pure_random_no_bias",
+          "label": "纯随机无偏置",
+          "summary": "掉落对玩家状态零感知，所有构筑面对同一张表；跨构筑物资靠交易/仓库消化",
+          "implications": [
+            "掉落系统零隐藏规则，社区考据结果与表面概率一致，信任成本最低",
+            "off-build 掉落的价值出口（交易行/装备提炼）必须存在，否则大半产出是废纸",
+            "多角色/多构筑玩家受益最大——今天的废件是小号的毕业装"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.loot" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "drop_table", "draw_count_expr": "1", "draw_rule": "weighted_uniform_no_context", "destination": "pending_drops" },
+            { "effect": "emit_signal", "signal": "drop_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "drop_table_rows": { "min": 10, "max": 500 },
+    "drop_group_rows": { "min": 5, "max": 200 },
+    "quality_weight_rows": { "min": 6, "max": 100 },
+    "affix_bias_rows": { "min": 4, "max": 80 }
+  },
+  "consistency_rules": [
+    {
+      "id": "quality_and_affix_link_answered_together",
+      "kind": "answered_together",
+      "first": "sys.loot.quality_weights",
+      "second": "sys.loot.affix_weight_link"
+    }
+  ],
+  "skin_fields": ["rarity_color_scheme", "drop_vfx_style"]
+}

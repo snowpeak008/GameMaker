@@ -74,6 +74,8 @@ fn engine(pack_id: &str) -> AuthoringEngine {
             consistency_rules: Vec::new(),
             nodes: Vec::new(),
             decision_points: Vec::new(),
+            system_refs: Vec::new(),
+            core_nouns: Vec::new(),
         },
         graph: match DecisionGraph::new(vec![
             point(
@@ -88,6 +90,7 @@ fn engine(pack_id: &str) -> AuthoringEngine {
             Err(error) => panic!("测试图构造失败：{}", error.message),
         },
         organization: DesignOrganization::default(),
+        system_instances: Vec::new(),
     };
     let state = AuthoringState::new(
         "F3 项目",

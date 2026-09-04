@@ -213,6 +213,10 @@ pub fn validate_option_parameters(
         (ParameterSchema::Matrix(_), _) => {
             problems.push("矩阵参数未填写格数据".to_string());
         }
+        // W7 §5.4 机械新增臂（T-W7-3a 编译豁免申报）：Graph/Curve 值沿 Curve 先例
+        // 以标量 `graph`/`curve` 键装 JSON 文本（ParameterValues 现有形态零改动），
+        // 结构校验（端点/环/入口）由 C0 编译前置拦截（I3）——本函数零行为改动。
+        (ParameterSchema::Graph(_), _) | (ParameterSchema::Curve(_), _) => {}
     }
     problems
 }

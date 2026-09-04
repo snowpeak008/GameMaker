@@ -1,0 +1,304 @@
+{
+  "entries": [
+    {
+      "id": "pl.equipment.01",
+      "domain": "sys.equipment",
+      "question_zh": "同档装备的词条上下限差距拉多大，才既保留刷取惊喜又不让数值方差毁掉关卡平衡？",
+      "follow_ups": [
+        "极品词条允许超出普通上限多少倍——1.2 倍安全、2 倍刺激但难调，你押哪边？",
+        "差距拉大之后，关卡数值按平均装等调还是按词条天花板调？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.zhuang_bei_cheng_zhang.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.equipment.02",
+      "domain": "sys.equipment",
+      "question_zh": "强化失败要不要付出代价——无代价刷到满会稀释成就感，掉级碎装又可能把玩家直接劝退，代价定在哪一档？",
+      "follow_ups": [
+        "若采用掉级，保护符之类的止损道具是修复体验还是变相付费点？",
+        "失败率曲线公开还是隐藏——公开损伤幻想，隐藏损伤信任？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.zhuang_bei_cheng_zhang.gameplay_failure_boundary"
+    },
+    {
+      "id": "pl.equipment.03",
+      "domain": "sys.equipment",
+      "question_zh": "稀有度层级切几档——档多了每档的价值感被稀释，档少了长线追求撑不满，几档才配得上你的内容寿命？",
+      "follow_ups": [
+        "最高档首发就放出，还是留作后续版本的抬升空间？",
+        "相邻两档的强度差拉多大，才让升档有感但不把旧档瞬间作废？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.jia_zhi_ceng_ji.content_experience"
+    },
+    {
+      "id": "pl.equipment.04",
+      "domain": "sys.equipment",
+      "question_zh": "装备穿戴门槛卡多严——严了低级号捡到神装只能干看着，掉落兴奋被没收；松了越级装备碾平成长曲线，卡在哪？",
+      "follow_ups": [
+        "门槛用等级还是属性需求——属性需求能引导构筑但更难读？",
+        "越级穿戴做效果衰减还是一刀切禁止？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.shi_yong_tiao_jian.content_consumption_dynamic"
+    },
+    {
+      "id": "pl.equipment.05",
+      "domain": "sys.equipment",
+      "question_zh": "套装效果绑多紧——强套装奖励收集但挤死散件混搭，弱套装保多样但收集动机塌掉，绑定强度取哪档？",
+      "follow_ups": [
+        "套装件数阈值给阶梯式部分奖励，还是全有全无？",
+        "散件构筑的天花板允许超过套装吗——超过则套装沦为过渡，不超则构筑单一化？"
+      ],
+      "source_ref": "v2:v2.build_system_decision.gou_zhu_yue_shu.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.inventory.01",
+      "domain": "sys.inventory",
+      "question_zh": "背包容量给多紧——紧了拾取决策有张力但玩家频繁中断战斗去清包，松了拾取变无脑全捡，压力定多大？",
+      "follow_ups": [
+        "被塞满打断的频率多高算骚扰——每小时几次的红线画在哪？",
+        "容量升级放成长线还是付费点——放付费会不会把设计张力直接卖掉？"
+      ],
+      "source_ref": "v2:v2.balance_economy_decision.chu_bei_shang_xian.balance_goal"
+    },
+    {
+      "id": "pl.inventory.02",
+      "domain": "sys.inventory",
+      "question_zh": "允许玩家囤积到什么程度——囤积既是安全感也是通胀弹药，仓库上限画在哪才不至于版本更新时旧库存直接兑成碾压？",
+      "follow_ups": [
+        "新版本投放新材料时，旧库存按打折兑换还是原价通行？",
+        "上限对囤积型玩家是惩罚——给他们付费扩容出口算不算与虎谋皮？"
+      ],
+      "source_ref": "v2:v2.balance_economy_decision.chu_bei_shang_xian.balance_break_boundary"
+    },
+    {
+      "id": "pl.inventory.03",
+      "domain": "sys.inventory",
+      "question_zh": "仓储扩容走游玩产出还是付费直购——前者把容量做成成长奖励但拖慢节奏，后者变现直接但等于把不便感明码标价，走哪条？",
+      "follow_ups": [
+        "混合方案里，免费路径的获取速度压到付费的几分之一才不算逼氪？",
+        "扩容最终封不封顶——无限扩容会不会让容量压力设计整体失效？"
+      ],
+      "source_ref": "v2:v2.economy_loop_decision.zi_yuan_chu_bei.economy_resource_dynamic"
+    },
+    {
+      "id": "pl.inventory.04",
+      "domain": "sys.inventory",
+      "question_zh": "清理背包的操作成本压到多低——一键分解爽快但会误伤极品，逐件确认安全但把整理变成第二份工作，折中点在哪？",
+      "follow_ups": [
+        "自动分解规则开放给玩家自己配置吗——配置自由和误操作风险怎么换？",
+        "误分解给不给回购窗口——窗口多长不会被当成第二仓库用？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.xiao_hao_gui_ze.content_cost_boundary"
+    },
+    {
+      "id": "pl.loot.01",
+      "domain": "sys.loot",
+      "question_zh": "保底进度对玩家公开还是隐藏——公开把惊喜变成可计算的里程碑，期待感前移但揭晓感衰减；隐藏保住揭晓瞬间却赌上信任，选哪边？",
+      "follow_ups": [
+        "公开到哪个粒度——只提示『快出了』还是精确计数？",
+        "隐藏保底被玩家逆向出来之后，官方要不要追认？"
+      ],
+      "source_ref": "v2:v2.randomness_system_decision.bao_di_gui_ze.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.loot.02",
+      "domain": "sys.loot",
+      "question_zh": "定向掉落开多大口子——全随机保住每次开出的悬念，定向选择尊重玩家时间但把刷宝变成购物清单，口子开在哪？",
+      "follow_ups": [
+        "定向的代价用更低掉率还是额外货币——哪种对刷宝动机的伤害更小？",
+        "赛季初收紧、赛季末放开的动态口径，值不值得为它引入规则复杂度？"
+      ],
+      "source_ref": "v2:v2.randomness_system_decision.ke_kong_sui_ji.gameplay_control_experience"
+    },
+    {
+      "id": "pl.loot.03",
+      "domain": "sys.loot",
+      "question_zh": "顶级掉落的出货率压到多低——低到传说才有社交货币价值，但低过阈值多数玩家一辈子见不到、游戏就成了别人的游戏，率定在哪？",
+      "follow_ups": [
+        "『见过别人出货』算不算体验覆盖——全服出货公示能不能部分替代亲手出货？",
+        "顶级出货后要不要衰减该玩家后续掉率来控制存量？"
+      ],
+      "source_ref": "v2:v2.reward_experience_decision.xi_you_jiang_li.core_feeling_target"
+    },
+    {
+      "id": "pl.loot.04",
+      "domain": "sys.loot",
+      "question_zh": "开箱揭晓演出拉多长——演出越长仪式感越足，但批量开箱时长演出立刻从仪式变成折磨，时长和跳过权怎么配？",
+      "follow_ups": [
+        "跳过按钮从第几次开箱开始出现——立刻给会不会教玩家跳过仪式？",
+        "批量开箱只给高稀有度单独演出，会不会反过来提前剧透结果？"
+      ],
+      "source_ref": "v2:v2.randomness_system_decision.sui_ji_jie_guo_fan_kui.gameplay_playability_signal"
+    },
+    {
+      "id": "pl.loot.05",
+      "domain": "sys.loot",
+      "question_zh": "关键掉落绑唯一来源还是多来源——唯一来源让特定副本有身份但会堵车，体验被单点绑架；多来源分流却稀释地点记忆，怎么绑？",
+      "follow_ups": [
+        "唯一来源的产能瓶颈用每周锁次数还是掉率控制？",
+        "多来源时各来源掉率差拉多大，才保得住『最优刷点』的攻略乐趣？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.huo_qu_lai_yuan.content_supply_mechanic"
+    },
+    {
+      "id": "pl.economy.01",
+      "domain": "sys.economy",
+      "question_zh": "货币间兑换开多大口子——全打通等于实际只有一种货币，各系统产出失去独立调节阀；全隔离则玩家库存错配的挫败无处释放，开到哪档？",
+      "follow_ups": [
+        "单向兑换（贵换贱）能不能兼顾两头——代价是玩家读得懂这套单行道吗？",
+        "兑换汇率定死还是随服务器存量浮动？"
+      ],
+      "source_ref": "v2:v2.currency_system_decision.huo_bi_dui_huan_guan_xi.economy_mechanic"
+    },
+    {
+      "id": "pl.economy.02",
+      "domain": "sys.economy",
+      "question_zh": "稀有货币的投放节奏掐多紧——紧了付费转化有动机但免费玩家长期饥饿流失，松了大额付费点失去意义，节奏定在哪？",
+      "follow_ups": [
+        "免费玩家攒满一次大额兑换的周期压在几周才算『饿而不死』？",
+        "版本大促临时放水之后，超发的部分要不要想办法回收？"
+      ],
+      "source_ref": "v2:v2.currency_system_decision.xi_you_huo_bi.economy_resource_dynamic"
+    },
+    {
+      "id": "pl.economy.03",
+      "domain": "sys.economy",
+      "question_zh": "通胀回收的手段做多硬——修理费手续费这类软回收温和但杯水车薪，装备损毁强制税这类硬回收有效但痛感直接，硬度取哪档？",
+      "follow_ups": [
+        "回收藏进玩家主动行为（强化改造的消耗）还是做成被动扣除——主动消耗的回收量够堵通胀吗？",
+        "对囤积大户做累进式回收值不值得——更公平但规则复杂度暴涨？"
+      ],
+      "source_ref": "v2:v2.economy_loop_decision.zi_yuan_tong_zhang_kong_zhi.economy_mechanic"
+    },
+    {
+      "id": "pl.economy.04",
+      "domain": "sys.economy",
+      "question_zh": "产出速率的热调杠杆放在哪一层——调单次产量玩家立刻有感但易反弹，调掉落频率隐蔽但数据反馈滞后，优先动哪个？",
+      "follow_ups": [
+        "活动加权（双倍产出）和基础参数的调节责任怎么分——长期靠活动放水算不算逃避调基础值？",
+        "热调的生效粒度到全服还是分服分层——分层更精准但玩家横向对比后的公平质疑怎么接？"
+      ],
+      "source_ref": "v2:v2.balance_economy_decision.chan_chu_su_lv.balance_tuning_lever"
+    },
+    {
+      "id": "pl.economy.05",
+      "domain": "sys.economy",
+      "question_zh": "资源转换（合成分解）的损耗率定多高——零损耗玩家无脑互转、套利空间毁掉产出设计，损耗过高转换功能沦为摆设，率定在哪？",
+      "follow_ups": [
+        "双向转换要不要做不对称损耗，防『合了又拆』的套利循环？",
+        "限时活动里损耗打折，会不会训练玩家平时囤着不转？"
+      ],
+      "source_ref": "v2:v2.economy_loop_decision.zi_yuan_zhuan_huan.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.combat.01",
+      "domain": "combat",
+      "question_zh": "核心行动的资源成本定多高——高成本让每次出手都是决策但节奏变谨慎，低成本爽快但选择退化成刷屏，张力点定在哪？",
+      "follow_ups": [
+        "成本高低和恢复速度哪个当主调节阀——同样的压制感两条路手感完全不同？",
+        "零成本的基础行动保不保留——保留则成本决策只在高阶行动发生，删掉则新手期就要学资源管理？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_cheng_ben.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.combat.02",
+      "domain": "combat",
+      "question_zh": "失败重试的摩擦给多大——即点即重开尊重时间但失败变得廉价、紧张感塌陷，重开代价太重玩家不敢试错，摩擦定在哪？",
+      "follow_ups": [
+        "摩擦用时间（读条跑图）还是资源（门票耐久）承担——哪种更不容易积累怨气？",
+        "高难内容和日常内容的重试摩擦要不要分档？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.zhong_shi_gui_ze.gameplay_failure_boundary"
+    },
+    {
+      "id": "pl.combat.03",
+      "domain": "combat",
+      "question_zh": "风险选项的赔率差摆多开——稳健路线收益压太低等于没得选，激进路线期望值反超稳健则风险沦为伪装的最优解，差距怎么摆？",
+      "follow_ups": [
+        "赔率信息透明到什么程度——全明牌变成算术题，全暗牌变成赌运气？",
+        "连续激进成功后要不要动态抬高风险，防滚雪球？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.feng_xian_xuan_ze_ya_li.core_loop_dynamic"
+    },
+    {
+      "id": "pl.progression.01",
+      "domain": "progression",
+      "question_zh": "惩罚结算咬多深——只罚本局收益玩家无痛、风险决策失去分量，侵蚀局外积累则一次失败的阴影拖过夜，咬到哪层？",
+      "follow_ups": [
+        "惩罚做成『少赚』还是『真亏』——利用损失厌恶的边界画在哪？",
+        "新手期和后期的惩罚深度要不要分档——统一规则易读，分档保护前期留存？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.cheng_fa_jie_suan.gameplay_control_experience"
+    },
+    {
+      "id": "pl.progression.02",
+      "domain": "progression",
+      "question_zh": "延迟奖励的兑现周期拉多长——长周期目标撑起留存骨架，但超过玩家的耐心地平线就从动力变成账单，周期上限画在哪？",
+      "follow_ups": [
+        "长周期目标切成阶段性里程碑之后，『大满足』会不会被稀释成流水账？",
+        "兑现前允许中途折现退出吗——折现率定多少不至于人人提前套现？"
+      ],
+      "source_ref": "v2:v2.reward_experience_decision.yan_chi_jiang_li.core_rhythm_boundary"
+    },
+    {
+      "id": "pl.meta.01",
+      "domain": "meta",
+      "question_zh": "会话中断的恢复成本压到多低——随时断随时续适配碎片时间，但零成本中断也削掉了『一局打完』的承诺重量，成本定在哪？",
+      "follow_ups": [
+        "中断处理对竞技局和单人局要不要双标？",
+        "自动托管做到多智能才不至于被当成挂机工具用？"
+      ],
+      "source_ref": "v2:v2.session_rhythm_decision.hui_hua_zhong_duan_hui_fu.core_behavior_mechanic"
+    },
+    {
+      "id": "pl.balance.01",
+      "domain": "balance",
+      "question_zh": "开局难度立多高——立高了筛出目标玩家但转化漏斗当场漏穿，立低了大盘留住但核心玩家嫌淡、开局就弃坑，杆子立在哪？",
+      "follow_ups": [
+        "前 30 分钟允许玩家死亡吗——第一次死亡摆在哪个节点本身就是设计声明？",
+        "难度选项前置到开局，还是等玩家碰壁后再浮现？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.chu_qi_nan_du.balance_goal"
+    },
+    {
+      "id": "pl.balance.02",
+      "domain": "balance",
+      "question_zh": "失败后的恢复坡度定多陡——秒回满状态让失败没有余味，恢复期太长则挫败叠加成弃坑，坡度怎么定？",
+      "follow_ups": [
+        "恢复期给不给可加速的主动手段（花资源换时间）——给了会不会变成变相罚款？",
+        "连败时要不要隐性放缓惩罚坡度——保护被玩家发现后会不会反噬胜利的真实感？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.shi_bai_hui_fu.balance_tuning_lever"
+    },
+    {
+      "id": "pl.balance.03",
+      "domain": "balance",
+      "question_zh": "峰值难度的天花板对准哪个分位——照顶尖玩家定则大多数人永远看不到结局内容，照中位数定则高手通关即毕业，对准谁？",
+      "follow_ups": [
+        "超高难内容给不给独占奖励——独占强化荣誉也制造相对剥夺感？",
+        "天花板随版本抬升的幅度怎么控，防止旧天花板沦为新玩家的入场门槛？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.feng_zhi_nan_du.balance_break_boundary"
+    },
+    {
+      "id": "pl.content.01",
+      "domain": "content",
+      "question_zh": "内容模板复用到什么程度——复用率高供给才跟得上消耗，但玩家识破模板的那一刻、所有同模板内容一起贬值，复用边界画在哪？",
+      "follow_ups": [
+        "同一模板换皮几次后必须注入新机制——次数红线定多少？",
+        "刻意暴露模板让玩家可预测，在哪些品类反而是优点？"
+      ],
+      "source_ref": "v2:v2.content_supply_structure_decision.ke_fu_yong_nei_rong_mu_ban.content_cost_boundary"
+    },
+    {
+      "id": "pl.content.02",
+      "domain": "content",
+      "question_zh": "过版本内容淘汰还是回收——直接下架保新内容聚光但老玩家的付出作废，永久保留则内容池摊薄新内容存在感，处置线怎么画？",
+      "follow_ups": [
+        "回收进轮换池的旧内容要不要按当前数值重制——重制成本和新内容成本怎么权衡？",
+        "下架预告期给多长——太短玩家来不及清目标，太长下架前的冲刺变成肝度峰值？"
+      ],
+      "source_ref": "v2:v2.content_supply_structure_decision.nei_rong_tao_tai_yu_hui_shou.content_experience"
+    }
+  ]
+}

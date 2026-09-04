@@ -9,6 +9,12 @@ mod runlog;
 mod sdk;
 mod services;
 
+/// 三段访谈的提案类型（W7 3d），经门面再导出：CLI 的「提案原样传回」纪律
+/// 需要在呈现层反序列化这些结构。
+pub use adm4_authoring::{
+    CompositionFixOption, CompositionFixProposal, ConceptProposal, CustomMechanicDraft,
+    FixActionKind, TierClarification,
+};
 /// 设计阶段风格门的契约与只读投影。
 ///
 /// 类型定义在 `adm4-build`（那里才是 Phase 2 美术线的家），经门面**再导出**：
@@ -41,9 +47,9 @@ pub use runlog::{RunLog, RunLogEntry};
 pub use sdk::{SdkKnowledgeBase, SdkRecord, SdkReviewStatus, SdkSnapshot};
 pub use services::{
     AI_INVOKE_CHECK_PURPOSE, AiDoctorReport, AiInvokeCheckReport, AppServices, BuildStageView,
-    DecisionOptionView, DecisionPointView, ExemptionView, GateSummary, InterviewTurnDto,
-    MissingByDomain, MissingEntry, NodeRiskNote, P1Summary, ProfileField, ProfileOption,
-    ProjectDoctorReport, ProjectProfile, RedTeamFinding, RedTeamSummary, RowReferenceIssue,
-    TemplateCompareEntry, TemplateComparison, TemplateExportReport, WorkbenchOverview,
-    WorkbenchRisk, WorkbenchSummary, WorkbenchValidation,
+    ConceptConfirmReport, DecisionOptionView, DecisionPointView, ExemptionView, GateSummary,
+    InterviewTurnDto, MissingByDomain, MissingEntry, NodeRiskNote, P1Summary, ProfileField,
+    ProfileOption, ProjectDoctorReport, ProjectProfile, ProjectSystemModule, RedTeamFinding,
+    RedTeamSummary, RowReferenceIssue, TemplateCompareEntry, TemplateComparison,
+    TemplateExportReport, WorkbenchOverview, WorkbenchRisk, WorkbenchSummary, WorkbenchValidation,
 };

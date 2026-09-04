@@ -26,6 +26,14 @@ fn design_space_root() -> PathBuf {
         .join("design_space")
 }
 
+fn system_modules_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("knowledge")
+        .join("systems")
+}
+
 /// 二版十六领域检查单的领域入口点（W6 T10 迁移进通用层的内容）。
 ///
 /// 迁移把二版 16 领域 / 103 节点 / 515 检查单项 × L4 选项组落成 2575 个通用层决策点，
@@ -148,6 +156,7 @@ fn full_chain_from_space_to_signed_phase1() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -415,6 +424,7 @@ fn red_lines_hold_in_end_to_end_paths() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -526,6 +536,7 @@ fn services_with_isolated_space(temp: &Path) -> AppServices {
         &data_root,
         &AppConfig {
             design_space_root: space_root.to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -1010,6 +1021,7 @@ fn dangling_row_reference_blocks_completeness_and_consistency_gate() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -1166,6 +1178,7 @@ fn workbench_aggregates_work_on_migrated_space() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -1644,6 +1657,7 @@ fn project_rename_validates_and_logs() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,
@@ -1715,6 +1729,7 @@ fn design_space_cache_is_hit_and_behaviourally_equivalent() {
         &data_root,
         &AppConfig {
             design_space_root: design_space_root().to_string_lossy().into_owned(),
+            system_modules_root: system_modules_root().to_string_lossy().into_owned(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,

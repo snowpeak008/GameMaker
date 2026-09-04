@@ -4,8 +4,19 @@
 
 mod loader;
 mod model;
+mod system_loader;
 mod validate;
 
-pub use loader::{DesignSpaceRoot, load_design_space, load_pack_file};
-pub use model::{ConsistencyRule, ConsistencyRuleKind, DesignSpace, GenrePack, UniversalLayer};
+pub use loader::{
+    DesignSpaceRoot, assemble_design_space, load_design_space, load_design_space_customized,
+    load_design_space_with_modules, load_pack_file,
+};
+pub use model::{
+    ConsistencyRule, ConsistencyRuleKind, DesignSpace, GenrePack, SystemInstanceInfo, SystemRef,
+    UniversalLayer,
+};
+pub use system_loader::{
+    SystemInstantiation, instantiate_system_refs, load_module_file, load_modules_from_dirs,
+    semver_matches,
+};
 pub use validate::{SpaceViolation, validate_design_space};

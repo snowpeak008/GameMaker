@@ -384,6 +384,8 @@ mod tests {
             consistency_rules: rules,
             nodes: Vec::new(),
             decision_points: pack_points,
+            system_refs: Vec::new(),
+            core_nouns: Vec::new(),
         };
         (
             DesignSpace {
@@ -391,6 +393,7 @@ mod tests {
                 pack,
                 graph,
                 organization: DesignOrganization::new(domains, nodes),
+                system_instances: Vec::new(),
             },
             universal,
         )

@@ -1,0 +1,957 @@
+{
+  "module_id": "sys.equipment",
+  "semver": "1.0.0",
+  "label_zh": "装备",
+  "summary": "可穿戴实体对角色属性/能力的修饰。全谱系 E0-E6：纯属性加成 → 品质词条 → 技能BD → 宝石镶嵌 → 合成/冶炼 → 升级/强化 → 套装/幻化（幻化为纯皮层，落 skin_fields 不占机制点）。",
+  "nouns": [
+    {
+      "id": "equipment_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "装备实体",
+      "summary": "有行标识与属性列的装备实例：槽位、品质、词条、孔位、强化等级都是它的列。"
+    },
+    {
+      "id": "combat_attribute",
+      "kind": { "kind": "property", "of": "combat_unit" },
+      "label_zh": "战斗属性",
+      "summary": "装备修改的角色属性（攻击/防御/速度等），宿主为战斗单位。"
+    },
+    {
+      "id": "equip_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "穿戴事件",
+      "summary": "穿脱装备的时点信号，载荷为装备实体与槽位；供任务/成就/套装聚合监听。"
+    },
+    {
+      "id": "drop_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "掉落规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的装备掉落规则位（如幸运词条提升掉落品质权重）。"
+    },
+    {
+      "id": "enhance_pity",
+      "kind": { "kind": "resource" },
+      "label_zh": "强化保底计数",
+      "summary": "强化失败累积的保底进度，有余额语义（累满必成，成功后清零）。"
+    }
+  ],
+  "interface": {
+    "provides": ["equipment_entity", "equip_signal", "drop_rule_slot"],
+    "consumes": [
+      "sys.loot.drop_table",
+      "sys.loot.gem_entity",
+      "sys.loot.material_entity",
+      "sys.economy.currency_main"
+    ],
+    "modifies": ["combat_attribute"]
+  },
+  "mda": {
+    "mechanics_summary": "穿戴槽位/品质分层/词条随机/技能触发与绑定/孔位镶嵌/配方合成/分解回收/强化概率与保护/套装聚合的机制群。",
+    "dynamics_notes": [
+      "玩家在新旧装备对比中反复触发替换决策（信号：装备替换率、背包内滞留装备数）",
+      "E2 档以上出现围绕技能触发条件的构筑成型（信号：同一 build 标签下装备组合的重复出现率）",
+      "E4 档以上分解-合成回路驱动拾取行为从『捡好的』变为『全都捡』（信号：拾取率、材料库存曲线）"
+    ],
+    "aesthetics_primary": ["挑战", "表达"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "e0_stat_bonus",
+        "label_zh": "E0 纯属性加成",
+        "rating": { "m": 0, "d": 0, "c": 1, "p": 1, "o": 1 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": ["sys.equipment.slot_rule"],
+        "inductions": [],
+        "summary": "穿戴槽位规则一条：装备进槽、属性生效。C≥2（consumes 装备实体来源；modifies 战斗属性）。"
+      },
+      {
+        "id": "e1_quality_affix",
+        "label_zh": "E1 +品质与随机词条",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll"
+        ],
+        "inductions": [
+          {
+            "when_tier": "e1_quality_affix",
+            "target": { "module": "sys.loot" },
+            "min_tier": "quality_affix_weights",
+            "reason": "词条从哪来必须有规则（掉落表含品质/词条权重列，写进 sys.loot 该档定义）"
+          }
+        ],
+        "summary": "品质分层 + 词条随机生成：装备从固定属性变成带随机卷轴的比较对象，P 升至会话级重复决策。"
+      },
+      {
+        "id": "e2_skill_build",
+        "label_zh": "E2 +技能 BD",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll",
+          "sys.equipment.skill_trigger",
+          "sys.equipment.skill_bind"
+        ],
+        "inductions": [
+          {
+            "when_tier": "e2_skill_build",
+            "target": { "noun_provided": "skill_effect_def" },
+            "min_tier": "",
+            "reason": "任一实例 provides 技能效果定义；无则 E2 档非法（析取语义：技能系统或掉落技能石任一来源即满足）"
+          }
+        ],
+        "summary": "技能触发条件 + 技能效果绑定：谱系拐点，P 由 2 跳 3——装备选择互相组合出新价值（构筑级承诺）。"
+      },
+      {
+        "id": "e3_socket",
+        "label_zh": "E3 +宝石镶嵌",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 6,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll",
+          "sys.equipment.skill_trigger",
+          "sys.equipment.skill_bind",
+          "sys.equipment.socket_slots",
+          "sys.equipment.socket_ops"
+        ],
+        "inductions": [
+          {
+            "when_tier": "e3_socket",
+            "target": { "noun_provided": "gem_entity" },
+            "min_tier": "",
+            "reason": "宝石必须有源（掉落或商店任一提供即满足——析取语义）"
+          },
+          {
+            "when_tier": "e3_socket",
+            "target": { "module": "sys.inventory" },
+            "min_tier": "classify",
+            "reason": "新名词必须有存放：宝石作为独立实体入包，背包须达到分类档"
+          }
+        ],
+        "summary": "孔位生成 + 镶嵌/拆卸：引入宝石实体作为装备的可插拔组件，构筑维度再加一层。"
+      },
+      {
+        "id": "e4_craft",
+        "label_zh": "E4 +合成/冶炼",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 9,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll",
+          "sys.equipment.skill_trigger",
+          "sys.equipment.skill_bind",
+          "sys.equipment.socket_slots",
+          "sys.equipment.socket_ops",
+          "sys.equipment.craft_recipe",
+          "sys.equipment.salvage"
+        ],
+        "inductions": [
+          {
+            "when_tier": "e4_craft",
+            "target": { "noun_provided": "material_entity" },
+            "min_tier": "",
+            "reason": "材料必须有源（掉落、分解回收或商店任一提供即满足）"
+          },
+          {
+            "when_tier": "e4_craft",
+            "target": { "module": "sys.inventory" },
+            "min_tier": "batch_ops",
+            "reason": "材料是批量名词：背包须达到分类/堆叠/批量档，否则材料淹没背包"
+          },
+          {
+            "when_tier": "e4_craft",
+            "target": { "module": "sys.economy" },
+            "min_tier": "recycle_loop",
+            "reason": "材料经济成环：分解回收产出的材料与货币必须有回收回路承接，否则通胀无阀"
+          }
+        ],
+        "summary": "配方合成 + 分解回收：装备实体作为材料回炉，C/O 推满进入极重档。"
+      },
+      {
+        "id": "e5_enhance",
+        "label_zh": "E5 +升级/强化",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 9,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll",
+          "sys.equipment.skill_trigger",
+          "sys.equipment.skill_bind",
+          "sys.equipment.socket_slots",
+          "sys.equipment.socket_ops",
+          "sys.equipment.craft_recipe",
+          "sys.equipment.salvage",
+          "sys.equipment.enhance_odds",
+          "sys.equipment.enhance_guard",
+          "sys.equipment.enhance_cost"
+        ],
+        "inductions": [],
+        "summary": "强化概率 + 失败保护 + 强化消耗。W 饱和续记：机制累计 12。传导要求与 E4 相同（含以上语义，不重复声明）。"
+      },
+      {
+        "id": "e6_set_transmog",
+        "label_zh": "E6 +套装/幻化",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 9,
+        "activates": [
+          "sys.equipment.slot_rule",
+          "sys.equipment.quality_tier",
+          "sys.equipment.affix_roll",
+          "sys.equipment.skill_trigger",
+          "sys.equipment.skill_bind",
+          "sys.equipment.socket_slots",
+          "sys.equipment.socket_ops",
+          "sys.equipment.craft_recipe",
+          "sys.equipment.salvage",
+          "sys.equipment.enhance_odds",
+          "sys.equipment.enhance_guard",
+          "sys.equipment.enhance_cost",
+          "sys.equipment.set_bonus"
+        ],
+        "inductions": [],
+        "summary": "套装聚合修饰器；幻化是纯皮层进 skin_fields 不占机制点。W 饱和续记：机制累计 14。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.equipment.slot_rule",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "装备槽位按什么规则划分与互斥？",
+      "design_question": "玩家一次能穿多少件、按什么规则互斥？这决定『换装』这个动词的最小操作单元。",
+      "tier_gate": "e0_stat_bonus",
+      "options": [
+        {
+          "id": "fixed_part_slots",
+          "label": "固定部位槽",
+          "summary": "每个身体部位一个槽（武器/头/胸/腿/饰品），穿戴即替换同槽旧装备",
+          "implications": [
+            "换装决策被切成逐部位的两两比较，认知负担低",
+            "部位数即装备维度数，属性预算按部位切分",
+            "双持/双戒指等例外要在槽表里显式建模而不是硬编码"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "slot_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "combat_unit", "property": "combat_attribute", "formula": "attribute + sum(equipped_bonus_by_slot, slots={param:slot_count})" },
+            { "effect": "emit_signal", "signal": "equip_signal" }
+          ]
+        },
+        {
+          "id": "shared_budget_slots",
+          "label": "通用预算槽",
+          "summary": "不分部位，装备占用负重/格数预算，预算内可自由混搭同类多件",
+          "implications": [
+            "构筑自由度显著高于部位槽：三件戒指流、全饰品流成为合法构筑",
+            "平衡从『逐部位对比』变成『预算内背包问题』，数值组合爆炸需要预算上限压制",
+            "UI 必须展示预算余量，否则玩家无法做取舍"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "budget_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "combat_unit", "property": "combat_attribute", "formula": "attribute + sum(equipped_bonus) where total_weight <= {param:budget_cap}" },
+            { "effect": "emit_signal", "signal": "equip_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.quality_tier",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "品质分层如何定义各档强度差？",
+      "design_question": "白装到橙装之间隔着什么——是数值倍率还是可能性空间？",
+      "tier_gate": "e1_quality_affix",
+      "options": [
+        {
+          "id": "stat_multiplier_tiers",
+          "label": "数值倍率品质",
+          "summary": "品质档按属性倍率递增，高品质=同部位数值更高，词条数固定",
+          "implications": [
+            "品质即战力，掉落高亮瞬间可读，适合节奏快的刷宝循环",
+            "低品质装备在同等级下被严格支配，无保留价值，分解回收压力大",
+            "倍率步长决定档间跳变感：步长过小品质失去意义，过大则中间档形同虚设"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tier_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "stat_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 10.0 }, "required": true }
+          ], "row_key": "tier_key", "cardinality_key": "quality_tiers" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "stat_budget", "formula": "base_stats(slot, item_level) * stat_multiplier(tier_key)" }
+          ]
+        },
+        {
+          "id": "affix_capacity_tiers",
+          "label": "词条容量品质",
+          "summary": "品质不改基础数值，只决定随机词条的条数上限与可roll词条池层级",
+          "implications": [
+            "高品质是更大的可能性空间而非更大的数字，白装出极品词条仍可能毕业",
+            "装备评估从看颜色变成读词条，决策深度高、上手门槛也高",
+            "词条池分层表成为品质系统的真实载体，维护成本转移到词条池"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tier_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "max_affixes", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 8.0 }, "required": true }
+          ], "row_key": "tier_key", "cardinality_key": "quality_tiers" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "affix_capacity", "formula": "max_affixes(tier_key)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.affix_roll",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "随机词条按什么规则生成？",
+      "design_question": "一件装备落地那一刻，它的词条是怎么被决定的——纯权重抽取，还是受部位/类型约束？",
+      "tier_gate": "e1_quality_affix",
+      "options": [
+        {
+          "id": "weighted_pool_roll",
+          "label": "全池权重抽取",
+          "summary": "从统一词条池按权重抽 N 条，每条在自身数值区间内二次 roll",
+          "implications": [
+            "词条池单表维护，新词条入池即全装备生效",
+            "会产生法杖出格挡、弓出近战吸血这类语义错位组合，需要接受或靠数值淡化",
+            "双层随机（抽条+roll值）拉开极品与普通的距离，赌狗体验强"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "affix_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "quality", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true },
+            { "key": "min_value", "kind": { "kind": "float" }, "required": true },
+            { "key": "max_value", "kind": { "kind": "float" }, "required": true }
+          ], "row_key": "affix_id", "cardinality_key": "affix_pool_rows" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "affix_pool", "draw_count_expr": "affix_count(quality)", "draw_rule": "weighted_without_replacement", "destination": "equipment_entity.affixes" },
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "affix_value", "formula": "roll(min_value, max_value) per drawn affix" }
+          ]
+        },
+        {
+          "id": "tag_constrained_roll",
+          "label": "标签约束抽取",
+          "summary": "词条带部位/武器类型标签，抽取前先按装备标签过滤池，再按权重抽取",
+          "implications": [
+            "消灭语义错位组合，每个部位的词条空间可被单独设计与平衡",
+            "词条池要维护标签矩阵，新部位入库时全池标签需回查",
+            "过滤后子池变小，同部位词条重复率升高，需要更大的池子兜底多样性"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "affix_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "quality", "kind": { "kind": "text" }, "required": true },
+            { "key": "slot_tags", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true },
+            { "key": "min_value", "kind": { "kind": "float" }, "required": true },
+            { "key": "max_value", "kind": { "kind": "float" }, "required": true }
+          ], "row_key": "affix_id", "cardinality_key": "affix_pool_rows" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "affix_pool", "draw_count_expr": "affix_count(quality)", "draw_rule": "weighted_filtered_by(slot_tags)", "destination": "equipment_entity.affixes" },
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "affix_value", "formula": "roll(min_value, max_value) per drawn affix" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.skill_trigger",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "装备技能以什么条件触发？",
+      "design_question": "装备上的技能是玩家按出来的、打出来的、还是属性堆出来的？三种触发口径塑造完全不同的构筑方向。",
+      "tier_gate": "e2_skill_build",
+      "options": [
+        {
+          "id": "proc_on_event",
+          "label": "事件概率触发",
+          "summary": "命中/击杀/受击等战斗事件按概率触发装备技能（proc），带内置冷却防刷屏",
+          "implications": [
+            "构筑围绕触发频率成型：攻速流、多段命中流天然与 proc 装协同",
+            "概率触发的爽点是意外性，但关键时刻不触发的挫败也来自同一机制",
+            "内置冷却是平衡阀：没有它，攻速堆叠会让 proc 期望失控"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "proc_chance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "internal_cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 60.0 }, "required": true },
+            { "key": "effect_duration_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 30.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - {param:proc_chance}", "on_success": [
+              { "effect": "attach", "modifier_id": "equip_skill_effect", "target": "combat_unit", "duration_expr": "{param:effect_duration_seconds}", "priority": 0 },
+              { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:internal_cooldown_seconds}", "unit": "seconds", "inner": [
+                { "effect": "emit_signal", "signal": "proc_ready" }
+              ] }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "active_cooldown_skill",
+          "label": "主动冷却技能",
+          "summary": "装备赋予一个主动技能槽，玩家手动释放，按冷却时间约束频率",
+          "implications": [
+            "装备直接扩充玩家的操作动词表，技能装本身成为手感的一部分",
+            "主动技能槽数量有限时，带哪件技能装是真取舍",
+            "冷却时长是唯一节流阀，数值上要与自带技能的 CD 体系同表管理"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 300.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "equip_skill_cast" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:cooldown_seconds}", "unit": "seconds", "inner": [
+              { "effect": "emit_signal", "signal": "equip_skill_ready" }
+            ] }
+          ]
+        },
+        {
+          "id": "threshold_passive",
+          "label": "属性阈值被动",
+          "summary": "角色属性达到装备声明的阈值时被动效果自动生效，跌破即失效",
+          "implications": [
+            "构筑变成堆阈值的规划问题：玩家为了点亮被动而刻意配装",
+            "无操作成本、无随机性，强度全部前置在配装阶段",
+            "阈值检查是持续谓词而非时点事件，运行时需要属性变更监听"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "threshold_value", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "threshold_passive_effect", "target": "combat_unit", "duration_expr": "while(combat_attribute >= {param:threshold_value})", "priority": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.skill_bind",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "技能效果与装备实体如何绑定？",
+      "design_question": "技能长在装备上还是插在装备里？固有绑定卖装备，插拔绑定卖搭配。",
+      "tier_gate": "e2_skill_build",
+      "options": [
+        {
+          "id": "innate_fixed_bind",
+          "label": "固有绑定",
+          "summary": "技能在装备生成时固定写入，装备与技能是一体的（暗黑系传奇装口径）",
+          "implications": [
+            "追逐目标明确：想要这个技能就刷这件装备",
+            "技能与装备属性绑售，一件装备的强度=属性+技能的联合评估",
+            "技能池的扩充节奏被装备产出节奏锁死"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "bound_skill", "formula": "fixed_at_generation(skill_effect_def)" },
+            { "effect": "attach", "modifier_id": "innate_skill_effect", "target": "combat_unit", "duration_expr": "while_equipped", "priority": 0 }
+          ]
+        },
+        {
+          "id": "socketed_skill_bind",
+          "label": "技能石插拔绑定",
+          "summary": "技能来自可插拔的技能石，装备只提供承载孔与支持词条（流放之路口径）",
+          "implications": [
+            "技能与装备解耦：换装不丢技能，构筑迭代成本低",
+            "支持词条×技能石的组合空间是构筑深度的主要来源，也是平衡的主要噩梦",
+            "依赖外部提供技能效果定义（skill_effect_def）——E2 传导的直接消费方"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "support_link_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 6.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "socketed_skill", "target": "combat_unit", "duration_expr": "while_socketed", "priority": 0 },
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "skill_links", "formula": "min(link_count, {param:support_link_cap})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.socket_slots",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "孔位如何生成、上限由什么决定？",
+      "design_question": "孔数是装备的确定属性还是随机属性？随机孔数本身就是一层赌。",
+      "tier_gate": "e3_socket",
+      "options": [
+        {
+          "id": "fixed_by_slot_type",
+          "label": "部位固定孔数",
+          "summary": "每个装备部位的孔数由部位规则表固定（武器 3 孔、胸甲 2 孔），无随机",
+          "implications": [
+            "宝石规划是确定性问题，玩家可以离线排布宝石方案",
+            "孔位总量全局可控，宝石数值预算容易核算",
+            "装备之间少了孔数这一比较维度，同部位装备趋同"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "slot_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "socket_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 6.0 }, "required": true }
+          ], "row_key": "slot_type", "cardinality_key": "socket_rule_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "socket_count", "formula": "socket_count(slot_type)" }
+          ]
+        },
+        {
+          "id": "random_roll_sockets",
+          "label": "随机孔数",
+          "summary": "掉落时按品质上限随机 roll 孔数，孔数成为装备评估的一个随机维度",
+          "implications": [
+            "同名装备因孔数不同而价值悬殊，白装满孔可能贵过紫装少孔",
+            "孔数随机叠在词条随机上，极品定义变成多维联合事件，掉率体感变差",
+            "需要改孔手段兜底（钻孔服务/重roll），否则挫败感积压——该手段落在 socket_ops"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "max_sockets", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "socket_count", "formula": "min(roll(0, {param:max_sockets}), quality_socket_cap(tier_key))" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.socket_ops",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "镶嵌与拆卸遵循什么操作规则？",
+      "design_question": "宝石插进去还拿得出来吗？拆卸代价决定玩家敢不敢用好宝石。",
+      "tier_gate": "e3_socket",
+      "options": [
+        {
+          "id": "insert_free_remove_destroys",
+          "label": "镶嵌免费、拆卸毁石",
+          "summary": "镶嵌无成本，拆卸会摧毁宝石，装备腾孔的代价是宝石本身",
+          "implications": [
+            "好宝石不敢往过渡装上插，玩家囤石等毕业装——宝石消费被压抑",
+            "毁石是宝石经济最强的沉没阀，宝石产出可以放开",
+            "换装成本被抬高：换装=重新买/刷全套宝石"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "gem_effect", "target": "equipment_entity", "duration_expr": "while_socketed", "priority": 0 },
+            { "effect": "despawn_entity", "entity": "sys.loot.gem_entity" }
+          ]
+        },
+        {
+          "id": "paid_safe_removal",
+          "label": "付费保全拆卸",
+          "summary": "拆卸消耗货币，宝石完整取回，费用随宝石等级递增",
+          "implications": [
+            "宝石随人走不随装走，过渡装也敢镶好石，宝石使用率高",
+            "拆卸费是稳定的货币沉没点，费率表要与货币产出联动调平——E4 回收回路的组成部分",
+            "宝石丧失消耗品属性，产出端必须收紧或引入更高级合成吃掉存量"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "removal_base_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100000.0 }, "required": true },
+            { "key": "cost_per_gem_level", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "{param:removal_base_cost} + gem_level * {param:cost_per_gem_level}" },
+            { "effect": "detach", "modifier_id": "gem_effect", "target": "equipment_entity" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.craft_recipe",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "配方合成的产出是确定的还是概率的？",
+      "design_question": "玩家攒齐材料点下合成键，拿到的是承诺还是抽奖？",
+      "tier_gate": "e4_craft",
+      "options": [
+        {
+          "id": "deterministic_recipe",
+          "label": "确定配方",
+          "summary": "材料+费用→固定产物，配方表即承诺表，所见即所得",
+          "implications": [
+            "合成是保底通道：刷不到就攒材料做，长线目标永远有确定路径",
+            "配方产物即装备天花板的可计算下界，掉落端的极品必须显著超过配方产物才保得住刷宝动力",
+            "材料需求量是唯一调速阀，容易演变成纯肝度问题"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "recipe_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "output_item", "kind": { "kind": "text" }, "required": true },
+            { "key": "material_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+            { "key": "currency_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000000.0 }, "required": true }
+          ], "row_key": "recipe_id", "cardinality_key": "craft_recipe_rows" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "material_cost(recipe_id)" },
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "currency_cost(recipe_id)" },
+            { "effect": "spawn_entity", "entity": "equipment_entity" }
+          ]
+        },
+        {
+          "id": "probabilistic_recipe",
+          "label": "概率配方",
+          "summary": "配方产物的品质/词条在合成时随机 roll，材料是入场券不是承诺",
+          "implications": [
+            "合成本身成为赌点，材料消耗速度远高于确定配方——材料回收回路的主要吞吐来源",
+            "垫刀/玄学文化会自发生长，概率必须公示否则舆情风险",
+            "上限产物可以放得比确定配方更高，因为期望被概率稀释"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "high_roll_chance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "material_cost(recipe_id)" },
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - {param:high_roll_chance}", "on_success": [
+              { "effect": "spawn_entity", "entity": "equipment_entity" },
+              { "effect": "modify_property", "entity": "equipment_entity", "property": "tier_key", "formula": "promote(base_tier)" }
+            ], "on_failure": [
+              { "effect": "spawn_entity", "entity": "equipment_entity" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.salvage",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "分解回收按什么规则返还材料？",
+      "design_question": "一件不要的装备值多少材料？返还口径决定『垃圾装』在经济里是噪音还是燃料。",
+      "tier_gate": "e4_craft",
+      "options": [
+        {
+          "id": "fixed_yield_by_quality",
+          "label": "品质固定返还",
+          "summary": "按品质档查返还表，同品质装备分解产出相同材料包",
+          "implications": [
+            "分解收益一眼可算，批量分解无决策成本，适合海量掉落的刷宝节奏",
+            "材料供给速率=掉落速率×分解率，两端联动可精确建模",
+            "所有同品质装备残值相同，掉落多样性在分解口径下被抹平"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tier_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "material_yield", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
+          ], "row_key": "tier_key", "cardinality_key": "salvage_yield_rows" },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "equipment_entity" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "material_yield(tier_key)" }
+          ]
+        },
+        {
+          "id": "value_scaled_yield",
+          "label": "价值比例返还",
+          "summary": "按装备综合评分（等级×品质×词条数）乘返还系数折算材料，好装备拆得多",
+          "implications": [
+            "分解前多一步价值判断：卖、拆、留三选一成为会话级重复决策",
+            "高价值装备误拆的代价大，需要锁定/确认机制兜底",
+            "返还系数是材料通胀的总阀门，赛季内可动态调整"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "yield_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "equipment_entity" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "item_score(item_level, tier_key, affix_count) * {param:yield_ratio}" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.enhance_odds",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "强化成功率随等级怎么走？",
+      "design_question": "+1 到 +15 的成功率曲线是缓坡还是悬崖？悬崖在哪一级，哪一级就是全服的执念。",
+      "tier_gate": "e5_enhance",
+      "options": [
+        {
+          "id": "table_curve",
+          "label": "逐级成功率表",
+          "summary": "每个强化等级一行成功率，曲线形状完全由表驱动，可做出任意断点",
+          "implications": [
+            "断点级（如 +9→+10 陡降）会成为社区共识的分水岭，装备强度分层随之形成",
+            "逐级可调意味着运营期可以精准放水/收紧某一段",
+            "表行数=强化上限，上限扩展（+15→+20）就是加行，无需改机制"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 30.0 }, "required": true },
+            { "key": "success_rate", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "level", "cardinality_key": "enhance_level_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - success_rate(level)", "on_success": [
+              { "effect": "modify_property", "entity": "equipment_entity", "property": "enhance_level", "formula": "enhance_level + 1" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "enhance_failed" }
+            ] }
+          ]
+        },
+        {
+          "id": "formula_decay",
+          "label": "公式化衰减率",
+          "summary": "成功率=基础率×衰减系数^等级，单调平滑无断点，两个参数控全曲线",
+          "implications": [
+            "无断点意味着无执念级，强化体验平缓、话题性也弱",
+            "两参数调平极快，适合把设计精力留给别处的项目",
+            "高段成功率趋近于零的渐近线天然封顶，不需要显式强化上限"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_rate", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 1.0 }, "required": true },
+            { "key": "decay_factor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 0.99 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "roll(0,1)", "difficulty_expr": "1 - {param:base_rate} * {param:decay_factor} ^ enhance_level", "on_success": [
+              { "effect": "modify_property", "entity": "equipment_entity", "property": "enhance_level", "formula": "enhance_level + 1" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "enhance_failed" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.enhance_guard",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "强化失败时发生什么、有什么保护手段？",
+      "design_question": "失败只是没成，还是会毁掉玩家攒了一个月的东西？惩罚烈度与保护道具一起定义强化的情绪曲线。",
+      "tier_gate": "e5_enhance",
+      "options": [
+        {
+          "id": "fail_costs_only",
+          "label": "失败仅耗材",
+          "summary": "失败只损失本次投入的材料与货币，装备等级不变，可无限重试",
+          "implications": [
+            "强化是纯消耗竞赛，期望成本可精算，无情绪爆点也无炸装舆情",
+            "上限档最终人人可达，装备强度趋同，区分度转移到词条与宝石",
+            "材料回收回路（E4 传导）是该口径下唯一的强度节流阀"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "enhance_failed" }
+          ]
+        },
+        {
+          "id": "downgrade_with_protection",
+          "label": "失败降级+保护道具",
+          "summary": "失败使强化等级下降，可消耗保护道具抵消降级；保护道具本身是稀缺产出",
+          "implications": [
+            "高段强化变成带保险的赌局，保护道具成为硬通货——其产出口径直接进经济设计",
+            "降级的挫败感换来登顶者的稀缺光环，服务器第一把 +15 是事件",
+            "必须明确降级下限（如 +10 以下不降），否则弃坑率失控"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "downgrade_levels", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true },
+            { "key": "downgrade_floor", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 30.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "has_protection_item", "difficulty_expr": "0", "on_success": [
+              { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "1 protection_charm" }
+            ], "on_failure": [
+              { "effect": "modify_property", "entity": "equipment_entity", "property": "enhance_level", "formula": "max(enhance_level - {param:downgrade_levels}, {param:downgrade_floor})" }
+            ] }
+          ]
+        },
+        {
+          "id": "pity_accumulation",
+          "label": "失败保底累积",
+          "summary": "每次失败累积保底进度，累满本级必成并清零；失败被转化为确定性进展",
+          "implications": [
+            "最坏情况有界，强化从赌局变成可规划的工期，肝帅玩家的最爱",
+            "保底进度是新的账面资源，跨装备是否共享、重置时机都要显式定义",
+            "极端非酋故事消失，强化的传播话题性同步下降"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pity_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "enhance_pity", "formula": "+1 per failure" },
+            { "effect": "roll_check", "formula": "enhance_pity", "difficulty_expr": "{param:pity_cap}", "on_success": [
+              { "effect": "modify_property", "entity": "equipment_entity", "property": "enhance_level", "formula": "enhance_level + 1" },
+              { "effect": "consume_resource", "resource": "enhance_pity", "formula": "reset_to_zero" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.enhance_cost",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "强化消耗按什么口径计价？",
+      "design_question": "喂钱、喂材料，还是喂装备本身？消耗口径决定强化吃掉经济里的哪一段存量。",
+      "tier_gate": "e5_enhance",
+      "options": [
+        {
+          "id": "material_currency_dual",
+          "label": "材料+货币双消耗",
+          "summary": "每级消耗强化材料与货币，费用按等级指数增长，两条资源线同时被吃",
+          "implications": [
+            "同时给材料和货币两条产出线装上沉没阀，是回收回路最常用的终端",
+            "指数增长率决定强化在玩家生涯的哪一段变成主要开销",
+            "双资源口径下瓶颈会在两条线间漂移，需监控哪条先卡死"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_material_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "base_currency_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 1000000.0 }, "required": true },
+            { "key": "cost_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "{param:base_material_cost} * {param:cost_growth} ^ enhance_level" },
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "{param:base_currency_cost} * {param:cost_growth} ^ enhance_level" }
+          ]
+        },
+        {
+          "id": "equipment_burn",
+          "label": "同类装备吞噬",
+          "summary": "以同部位/同名装备作为强化材料喂给目标装备，装备本身即耗材",
+          "implications": [
+            "掉落的重复装备全部有用，拾取决策消失、清怪动力常青",
+            "装备产出速率直接等于强化速率，掉落表与强化曲线必须联合调参",
+            "吞噬口径天然抑制交易市场——装备都被喂掉了，流通盘变小"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "fodder_per_level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "equipment_entity" },
+            { "effect": "modify_property", "entity": "equipment_entity", "property": "enhance_level", "formula": "enhance_level + floor(fodder_count / {param:fodder_per_level})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.equipment.set_bonus",
+      "domain": "equipment",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "套装加成如何聚合与结算？",
+      "design_question": "凑齐几件亮一条效果，还是按标签自由混搭计数？前者卖成套的执念，后者卖搭配的聪明。",
+      "tier_gate": "e6_set_transmog",
+      "options": [
+        {
+          "id": "threshold_set_bonus",
+          "label": "件数阈值套装",
+          "summary": "同套装穿戴件数达到阈值（2/4/6 件）逐级点亮固定加成",
+          "implications": [
+            "毕业配装收敛为『集齐哪套』，目标清晰、追逐路径长",
+            "散件神装与套装阈值互相竞争槽位，2+2+散件是永恒的配装算术题",
+            "套装效果一旦超模，多样性塌缩为全服一套——阈值效果的强度上限要写进平衡红线"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "bonus_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "set_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "piece_threshold", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 8.0 }, "required": true },
+            { "key": "bonus_summary", "kind": { "kind": "text" }, "required": true, "is_skin": true }
+          ], "row_key": "bonus_id", "cardinality_key": "set_bonus_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "set_bonus_effect", "target": "combat_unit", "duration_expr": "while(equipped_pieces(set_id) >= piece_threshold)", "priority": 10 }
+          ]
+        },
+        {
+          "id": "tag_count_aggregation",
+          "label": "标签计数聚合",
+          "summary": "装备带流派标签，同标签件数按计数曲线聚合强度，跨套装自由混搭（幸存者/肉鸽口径）",
+          "implications": [
+            "没有『集齐』只有『堆多少』，配装是连续优化而非离散收集",
+            "标签维度可以正交叠加（火系×召唤系双修），组合空间指数增长，平衡走预算制",
+            "标签计数曲线（线性/边际递减）是唯一强度阀，比逐套调平衡便宜得多"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.equipment" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "per_tag_scaling", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "tag_aggregate_bonus", "target": "combat_unit", "duration_expr": "while_equipped", "priority": 10 },
+            { "effect": "modify_property", "entity": "combat_unit", "property": "combat_attribute", "formula": "attribute * (1 + tag_count * {param:per_tag_scaling})" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "quality_tiers": { "min": 3, "max": 7 },
+    "affix_pool_rows": { "min": 20, "max": 300 },
+    "socket_rule_rows": { "min": 3, "max": 12 },
+    "craft_recipe_rows": { "min": 8, "max": 120 },
+    "salvage_yield_rows": { "min": 3, "max": 20 },
+    "enhance_level_rows": { "min": 5, "max": 30 },
+    "set_bonus_rows": { "min": 4, "max": 60 }
+  },
+  "consistency_rules": [
+    {
+      "id": "affix_rows_reference_quality",
+      "kind": "row_reference",
+      "source_decision": "sys.equipment.affix_roll",
+      "source_column": "quality",
+      "target_decision": "sys.equipment.quality_tier",
+      "target_key_column": "tier_key"
+    },
+    {
+      "id": "enhance_odds_and_guard_answered_together",
+      "kind": "answered_together",
+      "first": "sys.equipment.enhance_odds",
+      "second": "sys.equipment.enhance_guard"
+    },
+    {
+      "id": "salvage_yield_references_quality",
+      "kind": "row_reference",
+      "source_decision": "sys.equipment.salvage",
+      "source_column": "tier_key",
+      "target_decision": "sys.equipment.quality_tier",
+      "target_key_column": "tier_key"
+    }
+  ],
+  "skin_fields": ["transmog_appearance"]
+}

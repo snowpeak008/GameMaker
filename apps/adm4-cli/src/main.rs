@@ -8,6 +8,7 @@
 use adm4_ai::{AiProvider, ImageProvider, ScriptedImageProvider, ScriptedProvider};
 use adm4_app::{AppServices, ChangeStatus, InterviewTurnDto};
 use adm4_authoring::InterviewProposal;
+use adm4_authoring::composition_finding_code as composition_code_label;
 use adm4_decision::ParameterValues;
 use adm4_foundation::{Adm4Error, Adm4Result};
 use adm4_template::CrossCheckVerdict;
@@ -394,6 +395,117 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
                 "冻结成功：v{}，哈希 {}",
                 frozen.version, frozen.content_hash
             );
+            Ok(())
+        }
+        (Some("compose"), Some("report")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let Some(assessment) = services.composition_report(archive_id)? else {
+                println!("组合校验：本项目未引用系统模块（无 system_refs），无组合可校验");
+                return Ok(());
+            };
+            let report = &assessment.report;
+            println!(
+                "重核集合 H：{}（|H|={}，{}）",
+                if report.h_set.is_empty() {
+                    "（空）".to_string()
+                } else {
+                    report.h_set.join("、")
+                },
+                report.h_set.len(),
+                if report.h_connected {
+                    "连通"
+                } else {
+                    "不连通"
+                }
+            );
+            println!("重度预算 B(G)：{:.2}", report.budget_total);
+            for missing in &assessment.missing_tiers {
+                println!("[BLOCK] tier_unselected {}", missing.detail);
+            }
+            for finding in &report.blocks {
+                println!(
+                    "[BLOCK] {} {}：{}",
+                    composition_code_label(finding.code),
+                    finding.subject,
+                    finding.detail
+                );
+            }
+            for finding in &report.advices {
+                println!(
+                    "[ADVICE] {} {}：{}",
+                    composition_code_label(finding.code),
+                    finding.subject,
+                    finding.detail
+                );
+            }
+            if report.form_confirmation_required {
+                println!(
+                    "[CONFIRM-REQUIRED] |H| 超参考线{}：需一次性署名形态确认\
+                     （adm4 compose confirm-form <项目id> --signer <署名> [--note <说明>]）",
+                    if assessment.confirmation_stale {
+                        "，且此前确认因重核集合变化已失效"
+                    } else {
+                        ""
+                    }
+                );
+            }
+            if let Some(confirmation) = &assessment.confirmation {
+                println!(
+                    "[CONFIRMED] {} 于 {} 署名确认 |H|={} 形态（{}）",
+                    confirmation.signer,
+                    confirmation.at,
+                    confirmation.h_set.len(),
+                    confirmation.h_set.join("、")
+                );
+            }
+            let block_count = assessment.missing_tiers.len() + report.blocks.len();
+            if block_count > 0 {
+                return Err(Adm4Error::blocked(format!(
+                    "组合校验存在 {block_count} 项硬违例（见上方 [BLOCK] 行；冻结门第 2 道将拦截）"
+                )));
+            }
+            println!("组合校验通过：无硬违例");
+            Ok(())
+        }
+        (Some("compose"), Some("confirm-form")) => {
+            let archive_id = required(rest.next(), "archive_id")?;
+            let remaining: Vec<&str> = rest.collect();
+            let signer = required(flag_value(&remaining, "--signer"), "--signer <署名>")?;
+            let note = flag_value(&remaining, "--note").unwrap_or("");
+            let record = services.compose_confirm_form(archive_id, signer, note)?;
+            println!(
+                "形态确认已署名：|H|={}（{}）由 {} 于 {} 确认（重核集合变化后自动失效需重签）",
+                record.h_set.len(),
+                record.h_set.join("、"),
+                record.signer,
+                record.at
+            );
+            Ok(())
+        }
+        (Some("compose"), Some("fix")) => {
+            // 组合访谈（W7 3d ②）：AI 解释违例并给结构化修复选项。
+            let archive_id = required(rest.next(), "archive_id")?;
+            let remaining: Vec<&str> = rest.collect();
+            let provider = choose_provider(&services, flag_value(&remaining, "--scripted-file"))?;
+            let proposal = services.interview_compose_fix_with(archive_id, provider.as_ref())?;
+            let json = serde_json::to_string(&proposal)
+                .map_err(|error| Adm4Error::internal(format!("序列化修复提案失败：{error}")))?;
+            println!("{json}");
+            Ok(())
+        }
+        (Some("compose"), Some("fix-apply")) => {
+            // 执行用户选定的修复选项（用户手势；提案原样传回）。
+            let archive_id = required(rest.next(), "archive_id")?;
+            let option_id = required(rest.next(), "修复选项 option_id")?;
+            let remaining: Vec<&str> = rest.collect();
+            let proposal: adm4_app::CompositionFixProposal = read_json_arg(
+                flag_value(&remaining, "--proposal-file"),
+                "修复提案（compose fix 的输出原样传回）",
+            )?;
+            let signer = flag_value(&remaining, "--signer");
+            let message =
+                services.interview_compose_fix_apply(archive_id, &proposal, option_id, signer)?;
+            println!("{message}");
             Ok(())
         }
         (Some("pipeline"), Some("run")) => {
@@ -1608,6 +1720,93 @@ fn interview_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -
             println!("{json}");
             Ok(())
         }
+        Some("concept") => {
+            // 概念访谈（W7 3d ①）：口述想法 → 结构化提案（只提案不落盘）。
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let pitch = required(flag_value(args, "--pitch"), "--pitch <口述游戏想法>")?;
+            let provider = choose_provider(services, flag_value(args, "--scripted-file"))?;
+            let proposal = services.interview_concept_with(archive_id, provider.as_ref(), pitch)?;
+            let json = serde_json::to_string(&proposal)
+                .map_err(|error| Adm4Error::internal(format!("序列化概念提案失败：{error}")))?;
+            println!("{json}");
+            Ok(())
+        }
+        Some("concept-clarify") => {
+            // 逐重核档位理清（大战略模式）：提案原样传回 + 用户回答 → 更新后的提案。
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let instance_id = required(args.get(1).copied(), "重核系统实例 id")?;
+            let answer = required(
+                flag_value(args, "--answer"),
+                "--answer <轻重需求与对标游戏的回答>",
+            )?;
+            let proposal: adm4_app::ConceptProposal = read_json_arg(
+                flag_value(args, "--proposal-file"),
+                "概念提案（interview concept 的输出原样传回）",
+            )?;
+            let provider = choose_provider(services, flag_value(args, "--scripted-file"))?;
+            let updated = services.interview_concept_clarify_with(
+                archive_id,
+                provider.as_ref(),
+                proposal,
+                instance_id,
+                answer,
+            )?;
+            let json = serde_json::to_string(&updated)
+                .map_err(|error| Adm4Error::internal(format!("序列化概念提案失败：{error}")))?;
+            println!("{json}");
+            Ok(())
+        }
+        Some("concept-confirm") => {
+            // 概念访谈确认落盘（用户手势，AI 永不代确认）。
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let proposal: adm4_app::ConceptProposal = read_json_arg(
+                flag_value(args, "--proposal-file"),
+                "概念提案（interview concept[-clarify] 的输出原样传回）",
+            )?;
+            let report = services.interview_concept_confirm(archive_id, &proposal)?;
+            println!(
+                "概念访谈确认落盘：{} 个系统实例、core_loop {} 动词",
+                report.instances.len(),
+                report.core_loop_len
+            );
+            for line in &report.tier_selections {
+                println!("  - {line}");
+            }
+            Ok(())
+        }
+        Some("mechanism") => {
+            // 机制访谈（W7 3d ③）：实例命名空间内逐点提案（弹药注入 AI 上下文）。
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let instance_id = required(args.get(1).copied(), "系统实例 id")?;
+            let provider = choose_provider(services, flag_value(args, "--scripted-file"))?;
+            let turn = services.interview_mechanism_next_with(
+                archive_id,
+                provider.as_ref(),
+                instance_id,
+            )?;
+            let json = serde_json::to_string(&turn)
+                .map_err(|error| Adm4Error::internal(format!("序列化访谈回合失败：{error}")))?;
+            println!("{json}");
+            Ok(())
+        }
+        Some("draft-custom") => {
+            // custom 机制草案 AI 起草（rule_text + effects + GWT 三段）；
+            // 产出草案不登记——登记走 custom add（用户确认手势）。
+            let archive_id = required(args.first().copied(), "项目存档 id")?;
+            let host = required(args.get(1).copied(), "归属系统决策点 id")?;
+            let idea = required(flag_value(args, "--idea"), "--idea <机制想法>")?;
+            let provider = choose_provider(services, flag_value(args, "--scripted-file"))?;
+            let draft = services.interview_mechanism_draft_custom_with(
+                archive_id,
+                provider.as_ref(),
+                host,
+                idea,
+            )?;
+            let json = serde_json::to_string(&draft)
+                .map_err(|error| Adm4Error::internal(format!("序列化草案失败：{error}")))?;
+            println!("{json}");
+            Ok(())
+        }
         None => {
             println!("{INTERVIEW_HELP}");
             Ok(())
@@ -1615,7 +1814,8 @@ fn interview_command(services: &AppServices, sub: Option<&str>, args: &[&str]) -
         Some(other) => {
             println!("{INTERVIEW_HELP}");
             Err(Adm4Error::invalid_input(format!(
-                "未知 interview 子命令：{other}（可用：next/confirm/reject/progress）"
+                "未知 interview 子命令：{other}（可用：next/confirm/reject/progress/\
+                 concept/concept-clarify/concept-confirm/mechanism/draft-custom）"
             )))
         }
     }
@@ -1841,6 +2041,19 @@ fn read_proposal(path: Option<&str>) -> Adm4Result<InterviewProposal> {
         Adm4Error::invalid_input(format!(
             "提案 JSON 结构不符（需 interview next 输出中的 proposal 原样传回）：{error}"
         ))
+    })
+}
+
+/// 读取「提案原样传回」类 JSON 文件（三段访谈的概念提案/修复提案共用）。
+///
+/// 路径必给（stdin 不适合多轮传回场景——理清会反复读改同一份文件）；
+/// 结构不符即拒，`what` 说明期望的来源命令。
+fn read_json_arg<T: serde::de::DeserializeOwned>(path: Option<&str>, what: &str) -> Adm4Result<T> {
+    let path = required(path, &format!("--proposal-file <{what}>"))?;
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| Adm4Error::io(format!("读取文件 {path} 失败：{error}")))?;
+    serde_json::from_str(&text).map_err(|error| {
+        Adm4Error::invalid_input(format!("文件 {path} 的 JSON 结构不符（需{what}）：{error}"))
     })
 }
 
@@ -2145,6 +2358,7 @@ fn print_help(args: &[String]) {
         Some("project") => println!("{PROJECT_HELP}"),
         Some("authoring") => println!("{AUTHORING_HELP}"),
         Some("freeze") => println!("{FREEZE_HELP}"),
+        Some("compose") => println!("{COMPOSE_HELP}"),
         Some("pipeline") => println!("{PIPELINE_HELP}"),
         Some("build") => println!("{BUILD_HELP}"),
         Some("style") => println!("{STYLE_HELP}"),
@@ -2161,7 +2375,7 @@ fn print_help(args: &[String]) {
 
 fn print_usage() {
     println!(
-        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | dispose <id> <发现id> accept|revise --actor <署名> | run <id>\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] [--mock-engine] | rerun <id> <阶段> [--to P5] [--mock-engine] | status <id> | p1-status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P1/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  custom add <id> --draft <草案JSON文件> | list <id> | remove <id> <机制点id> [--force]（项目私有机制一等入口）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
+        "adm4 用法（子命令加 --help 查看中文详情）：\n  space validate [pack]\n  project new <名称> --pack <包> [--depth L4|L5|L6] [--template <模板id>]\n  project list | rename <id> <新名称> | prefill <id> <模板id> | reset <id> --actor <署名> --note <理由> | doctor <id> | export <id> <路径> | import <路径> <名称>\n  authoring status <id> [--decision <决策点>] | select|set-param|set-rationale|confirm|na <id> ...\n  authoring add-option|remove-option|set-primary <id> <决策点> <选项>（多选点与主选）\n  freeze check <id> | red-team <id> [--scripted-file <应答文件>] | dispose <id> <发现id> accept|revise --actor <署名> | run <id>\n  compose report <id> | confirm-form <id> --signer <署名> [--note <说明>] | fix <id> | fix-apply <id> <选项> --proposal-file <文件>（组合校验、|H| 形态确认与组合访谈）\n  interview next|confirm|reject|progress <id> ... | concept <id> --pitch <想法> | concept-clarify <id> <实例> --answer <回答> --proposal-file <文件> | concept-confirm <id> --proposal-file <文件> | mechanism <id> <实例> | draft-custom <id> <系统点> --idea <想法>（三段访谈）\n  pipeline run <id> [--from C0 --to C6] [--scripted-file <应答文件>] | rerun <id> <阶段> [--to C6] | status <id> | artifacts <id> [--stage C2] [--show-document] | confirm <id> <阶段> <确认人> [备注]\n  build plan | run <id> [--from P0 --to P5] [--mock-engine] | rerun <id> <阶段> [--to P5] [--mock-engine] | status <id> | p1-status <id> | confirm <id> <阶段> <确认人> [备注] | budget <id> | budget-confirm <id> <署名> <结论>（Phase 2 构建产线；P0/P1/P2 已实现）\n  style generate <id> [--count 5] [--force] | regenerate <id> <方向id> [--prompt <文本>] | confirm <id> <方向id> --actor --note | status <id> | append-representatives <id>（设计阶段美术风格锚点门）\n  sdk list | add <名称> <URL> [--category --purpose] | approve|reject <记录id> --reviewer --note（SDK 三态审批）\n  change list <id> | add <id> <标题> --by <申请人> | set-impact <id> <变更id> --segments C2,C3 | advance <id> <变更id> --to <状态> --actor --note\n  deliver package|status <id> [--version <N>]（文档集交付清点）\n  template list|new-draft|save-as|search-corpus|map|cross-check|review|certify|compare ...（逆向模板产线 + 另存模板）\n  interview next|confirm|reject|progress ...（AI 访谈分层确认）\n  custom add <id> --draft <草案JSON文件> | list <id> | remove <id> <机制点id> [--force]（项目私有机制一等入口）\n  ai doctor（查配置，零网络） | invoke-check（真打一次） | secret-set <名字> --stdin | secret-list"
     );
 }
 
@@ -2284,6 +2498,42 @@ const FREEZE_HELP: &str = r#"冻结门（freeze）——各道门全绿才能冻
   adm4 freeze run <项目存档id>
       执行冻结：全门通过 → 生成 frozen/v{N} 产物，打印版本号与内容哈希；
       任一门未过则报错（非零退出码）。"#;
+
+const COMPOSE_HELP: &str = r#"系统组合校验（compose）——W7 组合合法性与 |H| 署名形态确认
+
+用法：
+  adm4 compose report <项目存档id>
+      打印当前组合校验报告（只读，authoring 期任何时刻可查；与冻结门第 2 道
+      消费同一纯函数，结论逐字节一致）。
+      未引用系统模块（无 system_refs）的项目打印提示并正常退出。
+      输出行前缀可脚本断言：
+        [BLOCK]   硬违例（连通/强耦合/传导/悬空消费等）——冻结门第 2 道拦截，
+                  不可署名豁免；档位合成点未选择也按 [BLOCK] 列出（前提数据不全）。
+        [ADVICE]  提示级（|H| 参考线 / 重度预算 / 双连通守卫）——不拦冻结。
+        [CONFIRM-REQUIRED]  |H| 超参考线且尚无生效署名确认。
+        [CONFIRMED]         生效确认的留痕（署名/时间/当时的重核集合）。
+      存在任何 [BLOCK] 行时以非零退出码结束（脚本可直接判退出码）。
+
+  adm4 compose confirm-form <项目存档id> --signer <署名> [--note <说明>]
+      |H| 超参考线的一次性署名形态确认：「我知道并接受这是 |H|=N 的超大玩法」。
+      署名必填（R3 留痕：署名+时间戳+当时的重核集合快照进项目存档）；
+      确认必须是用户手势，AI 永不代签（D11）。
+
+  adm4 compose fix <项目存档id> [--scripted-file <应答文件>]
+      组合访谈（W7 3d）：AI 用人话解释当前违例（传导链/连通缺陷）并给结构化
+      修复选项（kind：tier_change 升/降档、confirm_form 署名确认指路、
+      replace_system/add_binding 结构变更建议）。stdout 打印单行提案 JSON，
+      原样保存后 fix-apply 传回。零违例时被拒（无可访谈内容）。
+
+  adm4 compose fix-apply <项目存档id> <选项option_id> --proposal-file <提案文件>
+        [--signer <署名>]
+      执行用户选定的修复选项（用户手势）：tier_change 走既有档位选择链路并确认；
+      confirm_form 必须带 --signer（AI 不能代签）；replace_system/add_binding
+      不自动执行（指路系统清单变更通道）。
+      确认后 |H| 提示与预算提示仍照常产出，但不再要求确认；
+      重核集合变化（新增/更换重核）时确认自动失效、需重新署名。
+      当前组合未被要求确认（未超线或已有生效确认）时本命令被拒——
+      确认只在被要求时签署，防止预防性签名。"#;
 
 const PIPELINE_HELP: &str = r#"流水线（pipeline）——C0-C6 分阶段推进，C5/C6 为人工门
 
@@ -2607,7 +2857,43 @@ AI 只提案，确认/拒绝是用户手势（AI 永不代提交）；CLI 不提
 
   adm4 interview progress <项目存档id>
       查询分层进度（只读），输出 JSON：current_level 为当前层（null=全部完成），
-      levels 为各层「已确认/适用」计数。"#;
+      levels 为各层「已确认/适用」计数。
+
+三段访谈（W7 3d：概念/组合/机制——AI 只提案，确认/执行是用户手势）：
+
+  adm4 interview concept <项目存档id> --pitch <口述游戏想法> [--scripted-file <应答文件>]
+      概念访谈：AI 把口述分解为系统清单（从模块库选，库外系统如实标注）+
+      每系统建议重度档 + core_loop 动词序列草案。stdout 打印单行提案 JSON，
+      请原样保存，后续 concept-clarify / concept-confirm 原样传回。
+      大战略嗅探：重核候选（建议档 W≥9 且 κ∈core/strong）>4 时提案带
+      per_heavy_core_mode=true 与提示（只提示不设阻）——确认前须对每个重核
+      候选做 concept-clarify 落档位声明与理由。
+      融合型嗅探：识别「X+Y」口述时提案带 fusion 字段（双核并集分解 +
+      跨核转换说明）。
+
+  adm4 interview concept-clarify <项目存档id> <实例id> --answer <轻重需求与对标回答>
+        --proposal-file <提案文件> [--scripted-file <应答文件>]
+      逐重核轻重理清：回答「这个系统你要轻度还是重度？对标哪款游戏的哪个系统？」，
+      AI 据此落该系统的档位建议与 rationale。stdout 打印更新后的提案 JSON
+      （覆盖保存后继续理清下一个重核）。
+
+  adm4 interview concept-confirm <项目存档id> --proposal-file <提案文件>
+      概念访谈确认落盘（用户手势，AI 永不代确认）：实例引用写入项目存档
+      content/system_refs.json 并重装校验；逐实例在 <实例>.tier 落档位声明与
+      理由（理清档优先于建议档）；core_loop 落创作状态（组合校验 κ 推导数据源）。
+      逐重核模式下有重核候选未理清 → 拒绝并点名。
+
+  adm4 interview mechanism <项目存档id> <实例id> [--scripted-file <应答文件>]
+      机制访谈：进入某系统实例内部，按激活点逐点提案（范围限定 <实例id>. 命名
+      空间）。追问弹药（PromptLibrary 按该实例模块取）注入 AI 上下文。
+      输出与 interview next 同形（回合 JSON），确认/拒绝复用 interview
+      confirm / reject。
+
+  adm4 interview draft-custom <项目存档id> <归属系统决策点id> --idea <机制想法>
+        [--scripted-file <应答文件>]
+      custom 机制草案 AI 起草（rule_text + effects + GWT 三段验收模板）。
+      stdout 打印草案 JSON——**不登记**：保存为文件后走 adm4 custom add
+      --draft <文件> 完成登记与用户确认。"#;
 
 const CUSTOM_HELP: &str = r#"自定义机制（custom）——项目私有机制的一等入口（W7 §5.6）
 

@@ -1,0 +1,481 @@
+{
+  "module_id": "sys.economy",
+  "semver": "1.0.0",
+  "label_zh": "货币",
+  "summary": "一种或多种资源的获取、存量与汇兑（系统库 #15）。阶梯三档：基础产出（产出口径与成长曲线）→ 回收回路（沉没结构与回收定价：装备 E4 传导『材料经济成环』的目标档）→ 汇兑水位（多币种汇兑与货币供给调控）。",
+  "nouns": [
+    {
+      "id": "currency_main",
+      "kind": { "kind": "resource" },
+      "label_zh": "主货币",
+      "summary": "核心结算资源（金币），可计数、可增减、可转移；装备强化/拆卸、背包扩容的消费端都指向它。"
+    },
+    {
+      "id": "currency_secondary",
+      "kind": { "kind": "resource" },
+      "label_zh": "次级货币",
+      "summary": "限定用途的第二币种（荣誉/代币），与主货币按汇兑规则互通或隔离；汇兑档起进入设计。"
+    },
+    {
+      "id": "money_supply",
+      "kind": { "kind": "property", "of": "economy_world" },
+      "label_zh": "货币供给水位",
+      "summary": "全服（或单机存档）货币存量的水位读数，挂在经济世界上；水位调控机制的观测与作用对象。"
+    },
+    {
+      "id": "income_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "入账事件",
+      "summary": "一笔货币产出入账的时点信号，载荷为来源与数额；供水位统计、任务计数、反外挂风控监听。"
+    },
+    {
+      "id": "price_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "定价规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的定价规则位（如会员折扣、活动税率减免对价格公式的修改）。"
+    }
+  ],
+  "interface": {
+    "provides": ["currency_main", "currency_secondary", "income_signal", "price_rule_slot"],
+    "consumes": ["sys.loot.material_entity"],
+    "modifies": ["money_supply"]
+  },
+  "mda": {
+    "mechanics_summary": "产出口径/成长曲线/沉没结构/回收定价/多币种汇兑/供给水位调控的机制群。",
+    "dynamics_notes": [
+      "玩家在攒与花之间反复权衡（信号：货币持有量分布、单笔大额消费前的余额停留时长）",
+      "回收档起大额沉没点成为阶段目标，储蓄行为出现规划性（信号：扩容/强化前的连续攒钱会话数）",
+      "水位失衡时物价感知失真：通胀期新玩家被二级市场定价挤出（信号：全服货币存量斜率、新老玩家购买力比）"
+    ],
+    "aesthetics_primary": ["挑战"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "basic_income",
+        "label_zh": "T0 基础产出",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 1 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.economy.income_model",
+          "sys.economy.income_curve"
+        ],
+        "inductions": [],
+        "summary": "产出口径 + 成长曲线：钱从哪来、来多快。只产不收的单向水管，适合短流程游戏。"
+      },
+      {
+        "id": "recycle_loop",
+        "label_zh": "T1 +回收回路",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 4,
+        "activates": [
+          "sys.economy.income_model",
+          "sys.economy.income_curve",
+          "sys.economy.sink_structure",
+          "sys.economy.recycle_pricing"
+        ],
+        "inductions": [],
+        "summary": "沉没结构 + 回收定价：产出-消耗成环，材料与货币有了下水道。装备 E4 传导『材料经济成环』的目标档——分解回收的产物由本档的回收口径承接。"
+      },
+      {
+        "id": "exchange_reservoir",
+        "label_zh": "T2 +汇兑水位",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 5,
+        "activates": [
+          "sys.economy.income_model",
+          "sys.economy.income_curve",
+          "sys.economy.sink_structure",
+          "sys.economy.recycle_pricing",
+          "sys.economy.currency_split",
+          "sys.economy.exchange_rule",
+          "sys.economy.inflation_guard"
+        ],
+        "inductions": [],
+        "summary": "多币种分工 + 汇兑规则 + 供给水位调控：从记账系统升格为需要宏观治理的经济体。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.economy.income_model",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "货币产出挂在什么行为口径上？",
+      "design_question": "钱是打出来的还是熬出来的？行为产出奖励操作量，周期产出奖励在线与规划——两种口径养出完全不同的玩家作息。",
+      "tier_gate": "basic_income",
+      "options": [
+        {
+          "id": "action_bounty",
+          "label": "行为赏金产出",
+          "summary": "击杀/通关/任务完成等主动行为按赏金表即时入账，多做多得",
+          "implications": [
+            "货币产出与游玩强度线性挂钩，肝度即收入——工作室与脚本的首要攻击面",
+            "赏金表逐行为可调，新内容上线即挂新赏金行，投放粒度细",
+            "『刷最优副本』会自发收敛：单位时间收益最高的行为吞噬其他玩法的参与度"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "action_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "bounty_amount", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100000.0 }, "required": true }
+          ], "row_key": "action_key", "cardinality_key": "bounty_rows" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "currency_main", "formula": "bounty_amount(action_key)" },
+            { "effect": "emit_signal", "signal": "income_signal" }
+          ]
+        },
+        {
+          "id": "periodic_yield",
+          "label": "周期产业产出",
+          "summary": "产业/领地/离线挂机按时间周期结算产出，上限封顶，操作只影响系数",
+          "implications": [
+            "收入与在线时长解耦，轻度玩家跟得上大部队——留存友好、爆肝无收益",
+            "周期结算天然限速，通胀总闸好控；代价是『多玩多得』的正反馈被砍",
+            "离线收益上限与回收周期决定登录节拍，它实质上是个作息设计参数"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "yield_per_cycle", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100000.0 }, "required": true },
+            { "key": "cycle_hours", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.25, "max": 48.0 }, "required": true },
+            { "key": "offline_cap_cycles", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "{param:cycle_hours} * 3600", "unit": "seconds", "inner": [
+              { "effect": "grant_resource", "resource": "currency_main", "formula": "min(accrued_cycles, {param:offline_cap_cycles}) * {param:yield_per_cycle}" },
+              { "effect": "emit_signal", "signal": "income_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.income_curve",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "货币产出随进度按什么曲线增长？",
+      "design_question": "60 级玩家一小时挣的钱是 1 级玩家的几倍？产出曲线与物价曲线的差就是玩家体感的『变富速度』。",
+      "tier_gate": "basic_income",
+      "options": [
+        {
+          "id": "linear_progression",
+          "label": "线性温和增长",
+          "summary": "产出随等级/章节线性增长，前后期收入差控制在一个数量级内",
+          "implications": [
+            "全阶段物价可以共用一张表，前期道具后期仍有意义，经济语义稳定",
+            "后期内容的奖励体感平淡，大数字爽感缺位——需要非货币奖励补位",
+            "回档/代练对经济的破坏有限，运营容错高"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_income", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10000.0 }, "required": true },
+            { "key": "per_level_increment", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "economy_world", "property": "income_scale", "formula": "{param:base_income} + player_level * {param:per_level_increment}" }
+          ]
+        },
+        {
+          "id": "exponential_reset",
+          "label": "指数增长+段位重置",
+          "summary": "产出按进度段指数增长，跨段时物价同步跳档，旧段货币实质贬值（数值膨胀口径）",
+          "implications": [
+            "每个新段位都有『收入翻倍』的强爽感，数字膨胀本身成为奖励",
+            "旧段位物品与货币被系统性作废，玩家资产的跨段保值必须显式设计（兑换/折算）",
+            "指数底数是全局最敏感参数：偏大一点，三个版本后数值表就要科学计数法"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "growth_base", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.1, "max": 4.0 }, "required": true },
+            { "key": "levels_per_stage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 5.0, "max": 50.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "economy_world", "property": "income_scale", "formula": "base_income * {param:growth_base} ^ floor(player_level / {param:levels_per_stage})" },
+            { "effect": "emit_signal", "signal": "stage_price_rebase" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.sink_structure",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "货币回收以什么结构沉没？",
+      "design_question": "钱最终去哪死掉？换成服务死（修理/强化/扩容），还是按比例被税死？服务沉没卖价值感，税收沉没保水位。",
+      "tier_gate": "recycle_loop",
+      "options": [
+        {
+          "id": "service_sinks",
+          "label": "服务型沉没",
+          "summary": "货币消耗于换取确定价值的服务终端：强化/拆卸/扩容/修理/传送，逐项定价",
+          "implications": [
+            "每一笔沉没都换回可感知价值，玩家花钱无痛感——健康回收的主形态",
+            "沉没总量=Σ各服务吞吐，某个服务定价失衡（太贵没人用/太便宜收不到钱）都要单独调",
+            "装备 E4 的强化消耗、背包扩容费都是本结构的服务行——跨模块沉没端在此汇总建模"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "service_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "base_price", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 1000000.0 }, "required": true },
+            { "key": "price_scaling", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "service_key", "cardinality_key": "service_sink_rows" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "currency_main", "formula": "base_price(service_key) * scaling(price_scaling)" },
+            { "effect": "modify_property", "entity": "economy_world", "property": "money_supply", "formula": "money_supply - sunk_amount" }
+          ]
+        },
+        {
+          "id": "transaction_tax",
+          "label": "流转税沉没",
+          "summary": "货币在玩家间/系统间流转时按比例抽税销毁（交易税/上架费/汇兑手续费）",
+          "implications": [
+            "沉没量与经济活跃度自动成正比：越繁荣抽得越多，水位自稳定",
+            "对无交易行为的自闭玩家几乎收不到税，单机化玩法下此结构近乎失效",
+            "税率是玩家直接感知的『损耗』，超过心理阈值会把交易赶向场外（摆摊喊话以物易物）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "tax_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 0.5 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "currency_main", "formula": "transaction_amount * {param:tax_ratio}" },
+            { "effect": "modify_property", "entity": "economy_world", "property": "money_supply", "formula": "money_supply - tax_amount" },
+            { "effect": "emit_signal", "signal": "tax_collected" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.recycle_pricing",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "材料与旧物的回收价按什么口径结算？",
+      "design_question": "系统收破烂给不给保底价？固定回购价是永远在场的买家，也是货币产出的隐藏后门。",
+      "tier_gate": "recycle_loop",
+      "options": [
+        {
+          "id": "fixed_buyback_table",
+          "label": "固定回购价目表",
+          "summary": "系统按价目表无限量回购材料与旧装备，价格静态、随时可卖",
+          "implications": [
+            "任何产出都有确定的货币下界，『白捡的都是钱』让清怪动力永不落空",
+            "回购价×掉落速率=一条隐藏的货币产出管道，通胀审计必须把它并入产出端合算",
+            "价目表锚定了玩家间交易的地板价，玩家市场（若有）的定价自由度被系统托底压缩"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "item_class", "kind": { "kind": "text" }, "required": true },
+            { "key": "buyback_price", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100000.0 }, "required": true }
+          ], "row_key": "item_class", "cardinality_key": "buyback_rows" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "sold_quantity" },
+            { "effect": "grant_resource", "resource": "currency_main", "formula": "buyback_price(item_class) * sold_quantity" },
+            { "effect": "emit_signal", "signal": "income_signal" }
+          ]
+        },
+        {
+          "id": "supply_adjusted_price",
+          "label": "供给浮动回收价",
+          "summary": "回购价随该品类近期回收量浮动：卖得越多价越低，冷门材料价格回升",
+          "implications": [
+            "工作室刷单一材料的收益边际递减，脚本农场的最优策略被价格曲线自动惩罚",
+            "价格波动引入『何时卖』的时机决策，收破烂有了轻度交易博弈",
+            "浮动公式需要全服（或存档内）回收量统计管道，实现与审计成本双高"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "price_floor_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 1.0 }, "required": true },
+            { "key": "decay_per_volume", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0001, "max": 0.1 }, "required": true },
+            { "key": "recovery_hours", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 168.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "sold_quantity" },
+            { "effect": "grant_resource", "resource": "currency_main", "formula": "base_price * max({param:price_floor_ratio}, 1 - recent_volume * {param:decay_per_volume}) * sold_quantity" },
+            { "effect": "schedule", "timing": "over_time", "amount_expr": "{param:recovery_hours} * 3600", "unit": "seconds", "inner": [
+              { "effect": "modify_property", "entity": "economy_world", "property": "recycle_price_index", "formula": "recover_towards(1.0)" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.currency_split",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "多币种按什么维度分工？",
+      "design_question": "第二种货币是为了隔离什么而生的——隔离玩法（PvP 币买 PvP 装），还是隔离时间（周常币周清）？",
+      "tier_gate": "exchange_reservoir",
+      "options": [
+        {
+          "id": "domain_bound_currencies",
+          "label": "玩法域绑定币种",
+          "summary": "每个玩法域一种专属货币（PvP 荣誉/副本徽章/生活技能币），只能购买本域奖励",
+          "implications": [
+            "各玩法的投入产出闭环互不干扰，平衡某一域不会震荡全局——多玩法大盘的标准解",
+            "币种数量随玩法数增长，钱包页签膨胀；合服/砍玩法时的残币兑付是运营债",
+            "跨域玩家的富余币种没有出口，需要万能兑换（低比率）兜底回收"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "currency_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "bound_domain", "kind": { "kind": "text" }, "required": true },
+            { "key": "weekly_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100000.0 }, "required": true }
+          ], "row_key": "currency_key", "cardinality_key": "currency_rows" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "currency_secondary", "formula": "min(earned, {param:weekly_cap_remaining})" },
+            { "effect": "modify_rule", "target_rule": "price_rule_slot", "patch": { "patch": "add_precondition", "condition": "purchase.domain == currency.bound_domain" }, "priority": 0 }
+          ]
+        },
+        {
+          "id": "time_layered_currencies",
+          "label": "时间层级币种",
+          "summary": "币种按获取时限分层：永久主币 + 赛季币（赛季末折算回收），赛季币购买力更高",
+          "implications": [
+            "赛季币的周期性清零是天然的水位泄洪闸，每赛季经济近似重启",
+            "『赛季末花光它』的冲刺消费是可预期的活跃峰，商店投放可以踩点",
+            "折算比率宣布的瞬间等于给赛季币定了终值，比率失当会让囤币或摆烂提前发生"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "season_convert_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "season_length_days", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 14.0, "max": 180.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:season_length_days} * 86400", "unit": "seconds", "inner": [
+              { "effect": "grant_resource", "resource": "currency_main", "formula": "currency_secondary_balance * {param:season_convert_ratio}" },
+              { "effect": "consume_resource", "resource": "currency_secondary", "formula": "reset_to_zero" },
+              { "effect": "emit_signal", "signal": "season_settled" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.exchange_rule",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "币种间汇兑走什么规则？",
+      "design_question": "允许拿肝换氪、拿氪换肝吗？汇兑方向一旦打开就再也关不上——单向阀是经济设计里少数不可逆的决定。",
+      "tier_gate": "exchange_reservoir",
+      "options": [
+        {
+          "id": "one_way_fixed_rate",
+          "label": "单向固定汇率",
+          "summary": "只允许高级币→基础币单向兑换，固定汇率，反向永久关闭",
+          "implications": [
+            "基础币永不成为获取高级币的通道，高级币的稀缺性承诺可以长期兑现",
+            "固定汇率给高级币一个清晰的保底购买力，价值锚定简单可传播",
+            "单向阀意味着兑换是不可逆消费，误兑换客诉需要冷静期/确认设计兜底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "exchange_rate", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "currency_secondary", "formula": "exchange_amount" },
+            { "effect": "grant_resource", "resource": "currency_main", "formula": "exchange_amount * {param:exchange_rate}" },
+            { "effect": "emit_signal", "signal": "income_signal" }
+          ]
+        },
+        {
+          "id": "player_market_rate",
+          "label": "玩家市场浮动汇率",
+          "summary": "双向兑换走玩家挂单市场，汇率由供需实时决定，系统只收手续费（魔兽时光徽章/EVE PLEX 口径）",
+          "implications": [
+            "肝与氪在市场上互为流动性：付费玩家买时间、免费玩家挣付费货币，双边留存都受益",
+            "汇率是全服经济的体温计，也是被操纵的标的——大户坐庄与工作室洗钱都盯着它",
+            "需要完整的挂单/撮合/手续费基础设施，是所有选项里工程成本最高的一档"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "listing_fee_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.3 }, "required": true },
+            { "key": "rate_band_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "currency_main", "formula": "listed_amount * {param:listing_fee_ratio}" },
+            { "effect": "modify_property", "entity": "economy_world", "property": "exchange_rate_index", "formula": "clamp(market_clearing_rate, ref_rate * (1 - {param:rate_band_ratio}), ref_rate * (1 + {param:rate_band_ratio}))" },
+            { "effect": "emit_signal", "signal": "exchange_settled" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.economy.inflation_guard",
+      "domain": "economy",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "货币供给水位靠什么机制调控？",
+      "design_question": "水位超标的那一天，系统是提前不让水进来（产出衰减），还是事后开闸放水（阶梯税）？前者防患于未然，后者亡羊补牢但保正常玩家体感。",
+      "tier_gate": "exchange_reservoir",
+      "options": [
+        {
+          "id": "diminishing_faucet",
+          "label": "产出边际衰减",
+          "summary": "单账号日产出超过阈值后收益率阶梯衰减直至归零（疲劳/衰减机制），从源头限流",
+          "implications": [
+            "通胀被拦在产出端，全服水位曲线平滑可预测，宏观治理成本最低",
+            "重度玩家的超额游玩时间不再产生货币收益，肝的边际价值归零需要非货币奖励接棒",
+            "衰减阈值实质定义了『一天该玩多久』，它是伪装成经济参数的健康系统"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "daily_soft_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 100.0, "max": 1000000.0 }, "required": true },
+            { "key": "decay_step_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 0.9 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "daily_earned", "difficulty_expr": "{param:daily_soft_cap}", "on_success": [
+              { "effect": "modify_rule", "target_rule": "price_rule_slot", "patch": { "patch": "scale_coefficient", "expr": "income * {param:decay_step_ratio} ^ overflow_steps" }, "priority": 10 }
+            ], "on_failure": [] },
+            { "effect": "modify_property", "entity": "economy_world", "property": "money_supply", "formula": "money_supply + effective_income" }
+          ]
+        },
+        {
+          "id": "progressive_wealth_tax",
+          "label": "存量阶梯税",
+          "summary": "按持有量分段征收周期性资产税（仓储费/维护费口径），存得越多税率越高",
+          "implications": [
+            "囤币大户是主要税基，普通玩家几乎无感——泄洪精确打击水位贡献者",
+            "征税日前的避税消费（转移成实物资产）会成为玩家的周期行为，实物市场随之波动",
+            "『存钱被罚』的直觉抵触强烈，必须包装成有语义的世界规则（仓储费/领地维护）而非裸税"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "bracket_floor", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100000000.0 }, "required": true },
+            { "key": "tax_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.2 }, "required": true }
+          ], "row_key": "bracket_floor", "cardinality_key": "wealth_tax_rows" },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "86400 * 7", "unit": "seconds", "inner": [
+              { "effect": "consume_resource", "resource": "currency_main", "formula": "sum_over_brackets(balance, bracket_floor, tax_ratio)" },
+              { "effect": "modify_property", "entity": "economy_world", "property": "money_supply", "formula": "money_supply - taxed_total" },
+              { "effect": "emit_signal", "signal": "wealth_tax_collected" }
+            ] }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "bounty_rows": { "min": 5, "max": 100 },
+    "service_sink_rows": { "min": 3, "max": 30 },
+    "buyback_rows": { "min": 4, "max": 60 },
+    "currency_rows": { "min": 2, "max": 12 },
+    "wealth_tax_rows": { "min": 2, "max": 8 }
+  },
+  "consistency_rules": [
+    {
+      "id": "split_and_exchange_answered_together",
+      "kind": "answered_together",
+      "first": "sys.economy.currency_split",
+      "second": "sys.economy.exchange_rule"
+    }
+  ],
+  "skin_fields": ["currency_display_names", "coin_icon_style"]
+}

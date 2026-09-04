@@ -1,12 +1,16 @@
 use adm4_authoring::FrozenDesign;
 use adm4_contracts::{SpecRef, TypedValue, UnclassifiedItem, ValueKind};
-use adm4_decision::{DesignLevel, ParameterSchema, ParameterValues, SelectedOptionRef, Selection};
+use adm4_decision::{
+    DesignLevel, GraphEntryConstraint, ParameterSchema, ParameterValues, SelectedOptionRef,
+    Selection, validate_graph_value,
+};
 use adm4_foundation::{Adm4Error, Adm4Result};
 use adm4_space::DesignSpace;
 use adm4_spec::{
     ContentSpec, CurveInterpolation, CurveSpec, DesignNote, DesignNoteRole, EffectSpec, EntitySpec,
-    GameSpec, GraphSpec, MechanicSpec, ProjectIntent, PropertySpec, SPEC_SCHEMA_VERSION,
-    SpecIdentity, SpecSourceEntry, SystemSpec, TableSpec, VisualForm, validate_game_spec,
+    GameSpec, GraphEntry, GraphSpec, MechanicSpec, ProjectIntent, PropertySpec,
+    SPEC_SCHEMA_VERSION, SpecIdentity, SpecSourceEntry, SystemSpec, TableSpec, VisualForm,
+    validate_game_spec,
 };
 use std::collections::BTreeMap;
 
@@ -15,9 +19,13 @@ use std::collections::BTreeMap;
 const STATEMENT_PARAM_KEY: &str = "statement";
 
 /// Curve 参数的标量键约定：`data_form=curve` 的选项在该键放 `CurveSpec` 的 JSON 文本。
-/// schema 侧（adm4-decision `ParameterSchema`）尚无 Curve 变体，波 1 以标量文本承载，
+/// schema 侧已有 `ParameterSchema::Curve` 变体（W7 3a），值形态沿波 1 先例以标量文本承载，
 /// 编译成两列 TableSpec + 插值注记（W7 定稿 §5.4，复用既有表通路）。
 const CURVE_PARAM_KEY: &str = "curve";
+
+/// Graph 参数的标量键约定：`data_form=graph` 的选项在该键放 GraphSpec 形态的 JSON 文本
+/// （nodes/edges；directed/acyclic/entry 以 schema 为真相覆盖，见 `compile_graph`）。
+const GRAPH_PARAM_KEY: &str = "graph";
 
 /// 数据形态标签键：`data_table` 角色的选项可声明 `data_form=curve|graph`。
 const DATA_FORM_TAG: &str = "data_form";
@@ -42,9 +50,8 @@ pub fn compile_frozen_design(frozen: &FrozenDesign, space: &DesignSpace) -> Adm4
     let mut entities: Vec<EntitySpec> = Vec::new();
     let mut tables: Vec<TableSpec> = Vec::new();
     let mut content: Vec<ContentSpec> = Vec::new();
-    // Graph 参数尚无 schema 侧变体（见 compile_data_table 的 data_form=graph 臂的结构化申报），
-    // 波 1 恒为空集；保留装配位让 GameSpec.graphs 的填充点在代码里可见。
-    let graphs: Vec<GraphSpec> = Vec::new();
+    // W7 3a：`data_form=graph` 的选项由 compile_graph 编译进本集合（GameSpec.graphs）。
+    let mut graphs: Vec<GraphSpec> = Vec::new();
     let mut source_map: Vec<SpecSourceEntry> = Vec::new();
     let mut promises: Vec<String> = Vec::new();
     let mut genre_parts: Vec<String> = Vec::new();
@@ -175,6 +182,23 @@ pub fn compile_frozen_design(frozen: &FrozenDesign, space: &DesignSpace) -> Adm4
                             }
                             entities.append(&mut new_entities);
                             tables.push(table);
+                        }
+                        Err(item) => unknown.push(item),
+                    }
+                }
+                // Graph 产 GraphSpec 进 GameSpec.graphs（不走表通路），先于 data_table 分流。
+                "data_table"
+                    if option.compiler_tags.get(DATA_FORM_TAG).map(String::as_str)
+                        == Some("graph") =>
+                {
+                    match compile_graph(option, item.parameters, &element_id) {
+                        Ok(mut graph) => {
+                            graph.design_notes.extend(notes);
+                            source_map.push(entry(
+                                &format!("graphs/{}", graph.id),
+                                &selection.decision_id,
+                            ));
+                            graphs.push(graph);
                         }
                         Err(item) => unknown.push(item),
                     }
@@ -637,13 +661,13 @@ fn compile_data_table(
 ) -> Result<TableSpec, UnclassifiedItem> {
     match option.compiler_tags.get(DATA_FORM_TAG).map(String::as_str) {
         Some("curve") => return compile_curve_table(option, parameters, element_id),
-        // Graph 编译入口：schema 侧（adm4-decision ParameterSchema）无 Graph 变体，
-        // 本卡禁改 decision crate → 结构化 Err 申报，不静默跳过（R2 纪律）。
+        // Graph 在主循环里先于 data_table 分流到 compile_graph（产 GraphSpec 不产表）；
+        // 走到这里说明调用路径接错，按 R2 显式申报而不是静默当普通表编译。
         Some("graph") => {
             return Err(UnclassifiedItem {
                 item: element_id.to_string(),
-                reason: "Graph 参数的 C0 编译入口未交付：adm4-decision 的 ParameterSchema \
-                         尚无 Graph 变体（并行卡协调范围），本卡不发明 schema（R2）"
+                reason: "内部路由错误：data_form=graph 应由 compile_graph 编译进 GameSpec.graphs，\
+                         不走表通路（R2）"
                     .into(),
             });
         }
@@ -782,13 +806,73 @@ fn compile_curve_table(
     })
 }
 
+/// Graph → GraphSpec（W7 定稿 §5.4，T-W7-3a 翻转波 1 的结构化 Err 降级）。
+///
+/// 值形态：标量参数 `graph` 键装 GraphSpec 形态 JSON 文本（nodes/edges）。
+/// **schema 为真相**：directed/acyclic/entry 一律取 `ParameterSchema::Graph`
+/// 的声明覆盖，值里写什么都不算数——同一份值换 schema 语义即变，真相必须唯一。
+/// 结构校验（端点已声明 / acyclic 拓扑 / 单入口 / 必填负载）走 adm4-decision 的
+/// `validate_graph_value` 纯函数，问题清单逐条进 R2 阻塞文案。
+fn compile_graph(
+    option: &adm4_decision::DecisionOption,
+    parameters: &ParameterValues,
+    element_id: &str,
+) -> Result<GraphSpec, UnclassifiedItem> {
+    let ParameterSchema::Graph(schema) = &option.parameter_schema else {
+        return Err(UnclassifiedItem {
+            item: element_id.to_string(),
+            reason: "data_form=graph 要求选项声明 ParameterSchema Graph 分支\
+                     （directed/acyclic/entry 以 schema 为真相，缺 schema 即无真相，R2）"
+                .into(),
+        });
+    };
+    let Some(raw) = scalar_text(parameters, GRAPH_PARAM_KEY) else {
+        return Err(UnclassifiedItem {
+            item: element_id.to_string(),
+            reason: format!(
+                "data_form=graph 要求标量参数含 {GRAPH_PARAM_KEY} 键（GraphSpec 形态 JSON）"
+            ),
+        });
+    };
+    let mut value: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|error| UnclassifiedItem {
+            item: element_id.to_string(),
+            reason: format!("Graph 参数解析失败：{error}"),
+        })?;
+    let problems = validate_graph_value(schema, &value);
+    if !problems.is_empty() {
+        return Err(UnclassifiedItem {
+            item: element_id.to_string(),
+            reason: format!("Graph 参数结构校验失败：{}", problems.join("; ")),
+        });
+    }
+    // id 一律取决策 id（值内不承载 id：spec 元素锚点由编译器统一命名，与表通路一致）。
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "id".to_string(),
+            serde_json::Value::String(element_id.to_string()),
+        );
+    }
+    let mut graph: GraphSpec = serde_json::from_value(value).map_err(|error| UnclassifiedItem {
+        item: element_id.to_string(),
+        reason: format!("Graph 参数不符合 GraphSpec 形态：{error}"),
+    })?;
+    graph.directed = schema.directed;
+    graph.acyclic = schema.acyclic;
+    graph.entry = match schema.entry {
+        GraphEntryConstraint::Single => GraphEntry::Single,
+        GraphEntryConstraint::Multiple => GraphEntry::Multiple,
+    };
+    Ok(graph)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use adm4_authoring::{FreezeGateReport, FrozenDesign};
     use adm4_decision::{
         DecisionGraph, DecisionOption, DecisionPoint, DepthProfile, DesignOrganization, GenreScope,
-        PointRequirement, Provenance, SelectionMode,
+        GraphSchema, PointRequirement, Provenance, SelectionMode,
     };
     use adm4_space::GenrePack;
 
@@ -838,9 +922,12 @@ mod tests {
                 consistency_rules: Vec::new(),
                 nodes: Vec::new(),
                 decision_points: Vec::new(),
+                system_refs: Vec::new(),
+                core_nouns: Vec::new(),
             },
             graph: DecisionGraph::new(points).expect("测试图构造失败"),
             organization: DesignOrganization::new(Vec::new(), Vec::new()),
+            system_instances: Vec::new(),
         }
     }
 
@@ -869,6 +956,7 @@ mod tests {
                 evaluated_at: "2026-09-03T00:00:00Z".into(),
             },
             red_team_proof: None,
+            module_versions: Default::default(),
         }
     }
 
@@ -1128,23 +1216,147 @@ mod tests {
         assert!(error.message.contains("严格升序"), "{}", error.message);
     }
 
-    /// data_form=graph：schema 侧无 Graph 变体（禁改 decision），必须结构化 Err 申报，
-    /// 不静默跳过（R2）。
+    // ===== Graph → GraphSpec（W7 §5.4，T-W7-3a 翻转波 1 的结构化 Err 降级）=====
+
+    fn graph_option(schema: GraphSchema) -> DecisionOption {
+        DecisionOption {
+            id: "map".into(),
+            label: "地图图".into(),
+            parameter_schema: ParameterSchema::Graph(schema),
+            compiler_tags: BTreeMap::from([
+                ("spec_role".to_string(), "data_table".to_string()),
+                (DATA_FORM_TAG.to_string(), "graph".to_string()),
+            ]),
+            ..Default::default()
+        }
+    }
+
+    fn graph_schema(acyclic: bool, entry: GraphEntryConstraint) -> GraphSchema {
+        GraphSchema {
+            node_payload: Vec::new(),
+            edge_payload: Vec::new(),
+            directed: true,
+            acyclic,
+            entry,
+            cardinality_key: String::new(),
+        }
+    }
+
+    fn graph_selection(graph_json: &str) -> Selection {
+        let mut chosen = selection("data.map", "map", "");
+        chosen.parameters = ParameterValues::Scalars {
+            entries: BTreeMap::from([(
+                GRAPH_PARAM_KEY.to_string(),
+                TypedValue::Text(graph_json.into()),
+            )]),
+        };
+        chosen
+    }
+
+    /// Graph 正路径（T-W7-3a 翻转豁免）：schema 点 + 图值 → GraphSpec 进 GameSpec.graphs，
+    /// directed/acyclic/entry 以 schema 为真相覆盖，source_map 登记 graphs/ 路径（R4）。
     #[test]
-    fn graph_data_form_returns_structured_err() {
+    fn graph_compiles_into_game_spec_graphs_with_schema_as_truth() {
+        let space = space_with(vec![point(
+            "data.map",
+            DesignLevel::L5,
+            vec![graph_option(graph_schema(
+                true,
+                GraphEntryConstraint::Single,
+            ))],
+        )]);
+        // 值里故意写反 directed/acyclic/entry：schema 为真相，值内声明不算数。
+        let frozen = frozen_with(vec![graph_selection(
+            r#"{"directed":false,"acyclic":false,"entry":"multiple",
+                "nodes":[{"id":"start"},{"id":"mid"},{"id":"boss"}],
+                "edges":[{"from":"start","to":"mid"},{"from":"mid","to":"boss"}]}"#,
+        )]);
+        let spec = compile_frozen_design(&frozen, &space).expect("合法图应编译成功");
+        assert_eq!(spec.graphs.len(), 1, "GameSpec.graphs 应非空");
+        let graph = &spec.graphs[0];
+        assert_eq!(graph.id, "data.map");
+        assert!(graph.directed && graph.acyclic, "schema 为真相覆盖值内声明");
+        assert_eq!(graph.entry, adm4_spec::GraphEntry::Single);
+        assert_eq!(graph.nodes.len(), 3);
+        assert_eq!(graph.edges.len(), 2);
+        // R4 锚定闭合：source_map 里有 graphs/ 路径。
+        assert!(
+            spec.source_map
+                .iter()
+                .any(|entry| entry.spec_path.0 == "graphs/data.map"),
+            "source_map 应登记 graphs/data.map"
+        );
+    }
+
+    /// 负测试（豁免条款保留）：悬空边端点必须拒绝并点名。
+    #[test]
+    fn graph_dangling_edge_endpoint_blocks() {
+        let space = space_with(vec![point(
+            "data.map",
+            DesignLevel::L5,
+            vec![graph_option(graph_schema(
+                false,
+                GraphEntryConstraint::Multiple,
+            ))],
+        )]);
+        let frozen = frozen_with(vec![graph_selection(
+            r#"{"nodes":[{"id":"a"}],"edges":[{"from":"a","to":"ghost"}]}"#,
+        )]);
+        let error = compile_frozen_design(&frozen, &space).expect_err("悬空端点必须阻塞");
+        assert!(error.message.contains("ghost"), "{}", error.message);
+        assert!(error.message.contains("data.map"), "{}", error.message);
+    }
+
+    /// 负测试（豁免条款保留）：schema 声明 acyclic 但图值有环必须拒绝。
+    #[test]
+    fn graph_cycle_under_acyclic_schema_blocks() {
+        let space = space_with(vec![point(
+            "data.map",
+            DesignLevel::L5,
+            vec![graph_option(graph_schema(
+                true,
+                GraphEntryConstraint::Multiple,
+            ))],
+        )]);
+        let frozen = frozen_with(vec![graph_selection(
+            r#"{"nodes":[{"id":"a"},{"id":"b"}],
+                "edges":[{"from":"a","to":"b"},{"from":"b","to":"a"}]}"#,
+        )]);
+        let error = compile_frozen_design(&frozen, &space).expect_err("acyclic 下的环必须阻塞");
+        assert!(error.message.contains("环"), "{}", error.message);
+    }
+
+    /// 负测试：缺 graph 键 / 缺 Graph schema 声明都必须结构化申报。
+    #[test]
+    fn graph_missing_key_or_schema_blocks() {
+        let space = space_with(vec![point(
+            "data.map",
+            DesignLevel::L5,
+            vec![graph_option(graph_schema(
+                false,
+                GraphEntryConstraint::Multiple,
+            ))],
+        )]);
+        let frozen = frozen_with(vec![selection("data.map", "map", "")]);
+        let error = compile_frozen_design(&frozen, &space).expect_err("缺 graph 键必须阻塞");
+        assert!(error.message.contains(GRAPH_PARAM_KEY), "{}", error.message);
+
+        // data_form=graph 但选项没声明 Graph schema：无真相 → 阻塞。
         let mut option = curve_option();
         option
             .compiler_tags
             .insert(DATA_FORM_TAG.into(), "graph".into());
         let space = space_with(vec![point("data.map", DesignLevel::L5, vec![option])]);
-        let frozen = frozen_with(vec![selection("data.map", "xp", "")]);
-        let error = compile_frozen_design(&frozen, &space).expect_err("Graph 入口未交付必须申报");
-        assert!(error.message.contains("Graph"), "{}", error.message);
-        assert!(
-            error.message.contains("ParameterSchema"),
-            "{}",
-            error.message
-        );
+        let mut chosen = selection("data.map", "xp", "");
+        chosen.parameters = ParameterValues::Scalars {
+            entries: BTreeMap::from([(
+                GRAPH_PARAM_KEY.to_string(),
+                TypedValue::Text(r#"{"nodes":[]}"#.into()),
+            )]),
+        };
+        let frozen = frozen_with(vec![chosen]);
+        let error = compile_frozen_design(&frozen, &space).expect_err("缺 schema 必须阻塞");
+        assert!(error.message.contains("schema"), "{}", error.message);
         assert!(error.message.contains("data.map"), "{}", error.message);
     }
 }

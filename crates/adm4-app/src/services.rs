@@ -12,11 +12,13 @@ use adm4_archive::{
     ArchiveLock, ArchiveManifest, ArchiveStore, DataRoot, export_package, import_package,
 };
 use adm4_authoring::{
-    AuthoringEngine, AuthoringState, CustomMechanicDraft, CustomMechanicRecord,
-    EffectTemplateValidator, FindingDisposition, FreezeGateReport, FrozenDesign, GateFinding,
-    InterviewProgress, InterviewProposal, InterviewService, InterviewTurn, PrefillReport,
-    WorkbenchResetReport, augment_space_with_points, evaluate_freeze_gates, execute_freeze,
-    run_red_team,
+    AuthoringEngine, AuthoringState, CompositionAssessment, CompositionFixProposal,
+    CompositionFormConfirmation, ConceptProposal, CustomMechanicDraft, CustomMechanicRecord,
+    EffectTemplateValidator, FindingDisposition, FixActionKind, FreezeGateReport, FrozenDesign,
+    GateFinding, InterviewProgress, InterviewProposal, InterviewService, InterviewTurn,
+    PrefillReport, WorkbenchResetReport, augment_space_with_points, clarify_tier,
+    evaluate_freeze_gates, execute_freeze, proposal_to_refs, propose_composition_fix,
+    propose_concept, run_red_team,
 };
 use adm4_build::art::budget::AssetBudget;
 use adm4_build::art::style_anchor::{
@@ -32,10 +34,11 @@ use adm4_build::{
     pending_stage, phase2_artifacts, phase2_execution_order, save_budget,
 };
 use adm4_contracts::{SkinScanner, normalize_skin_word};
+use adm4_decision::system_module::{PromptEntry, PromptLibrary, SystemModule};
 use adm4_decision::{
     DecisionPoint, DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress,
-    ParameterValues, PointApplicability, PointRequirement, ProgressCounts, SelectionMode,
-    check_row_references, counts_toward_completeness,
+    ParameterValues, PointApplicability, PointRequirement, ProgressCounts, Provenance,
+    SelectionMode, check_row_references, counts_toward_completeness,
 };
 use adm4_foundation::{
     Adm4Error, Adm4Result, UtcTimestamp, ensure_dir, ensure_within_root, new_id, read_json_file,
@@ -45,7 +48,10 @@ use adm4_pipeline::{
     ArtifactStore, CancelSignal, PipelineRerunOutcome, PipelineRunOutcome, PipelineRunState,
     PipelineRunner, RunnerContext, StageStatus, phase2_registry,
 };
-use adm4_space::{DesignSpace, DesignSpaceRoot, load_design_space};
+use adm4_space::{
+    DesignSpace, DesignSpaceRoot, SystemRef, load_design_space_customized,
+    load_design_space_with_modules, load_modules_from_dirs,
+};
 use adm4_spec::{EffectSpec, GameSpec};
 use adm4_template::{
     Certification, CrossCheckReport, CrossCheckService, EvidenceCandidate, EvidenceQuery,
@@ -53,7 +59,7 @@ use adm4_template::{
     TemplateLibrary, TemplateOrigin, TemplateSelectedOption, load_skin_wordlist,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -79,6 +85,11 @@ pub struct AppServices {
     /// 已打开的项目悄悄指到另一份清单上（缓存里还留着旧空间）。因此 `reload_config`
     /// 遇到它被改动会显式报错要求重启，而不是装作生效。
     design_space_root: String,
+    /// 系统模块库根（W7 3a）：与 `design_space_root` 同为进程期不变量。
+    ///
+    /// 装配缓存里的空间可能内嵌模块实例化产物，运行期换目录等于给缓存换语义。
+    /// 只有声明了 `system_refs` 的包才会读它，旧包路径零接触。
+    system_modules_root: String,
     space_root: DesignSpaceRoot,
     templates: TemplateLibrary,
     /// 已装配设计空间的进程内缓存，键 = `pack_id`。
@@ -102,6 +113,7 @@ impl AppServices {
         };
         let config = load_config(&data_root)?;
         let design_space_root = config.design_space_root.clone();
+        let system_modules_root = config.system_modules_root.clone();
         let space_root = DesignSpaceRoot::new(&design_space_root);
         let templates = TemplateLibrary::new(&design_space_root);
         let log = RunLog::new(&data_root);
@@ -111,6 +123,7 @@ impl AppServices {
             config: RwLock::new(config),
             log,
             design_space_root,
+            system_modules_root,
             space_root,
             templates,
             space_cache: Mutex::new(BTreeMap::new()),
@@ -131,6 +144,11 @@ impl AppServices {
         &self.design_space_root
     }
 
+    /// 系统模块库根（进程期不变量，无需加锁）。
+    pub fn system_modules_root(&self) -> &str {
+        &self.system_modules_root
+    }
+
     /// 从磁盘重读 `config/app.json` 并替换当前生效配置。
     ///
     /// 用于「用户在别处（手改文件 / 另一个进程）改了配置，界面点刷新」。
@@ -143,6 +161,13 @@ impl AppServices {
                 "config/app.json 的 design_space_root 已从 {} 改为 {}：\
                  设计空间根是进程期不变量（决策图与模板库缓存都锚在它上面），请重启应用后生效",
                 self.design_space_root, fresh.design_space_root
+            )));
+        }
+        if fresh.system_modules_root != self.system_modules_root {
+            return Err(Adm4Error::blocked(format!(
+                "config/app.json 的 system_modules_root 已从 {} 改为 {}：\
+                 系统模块库根是进程期不变量（装配缓存里的空间内嵌模块实例化产物），请重启应用后生效",
+                self.system_modules_root, fresh.system_modules_root
             )));
         }
         let mut guard = self.write_config()?;
@@ -191,12 +216,16 @@ impl AppServices {
         self.space_root.list_packs()
     }
 
-    /// 装载设计空间（进程内缓存；语义与直接 `load_design_space` 完全等价）。
+    /// 装载设计空间（进程内缓存；语义与直接加载完全等价）。
     pub fn load_space(&self, pack_id: &str) -> Adm4Result<DesignSpace> {
         Ok((*self.load_space_shared(pack_id)?).clone())
     }
 
     /// 装载设计空间并共享所有权：只读用途（不需要 `DesignSpace` 所有权）走这里，连结构克隆都免了。
+    ///
+    /// W7 3a：带系统模块库目录装配——pack 声明了 `system_refs` 时模块实例化产物并进
+    /// 空间（重写决策点 + tier 合成点），无引用的旧包行为与扩展前逐字节一致
+    /// （加载器只在需要时才读模块目录）。
     pub fn load_space_shared(&self, pack_id: &str) -> Adm4Result<Arc<DesignSpace>> {
         {
             let cache = self.lock_space_cache()?;
@@ -205,11 +234,51 @@ impl AppServices {
             }
         }
         // 校验失败照旧上抛（fail-closed）：只有装配成功的空间进缓存，不缓存错误。
-        let space = Arc::new(load_design_space(&self.space_root, pack_id)?);
+        let space = Arc::new(load_design_space_with_modules(
+            &self.space_root,
+            pack_id,
+            &self.module_dirs(),
+        )?);
         let mut cache = self.lock_space_cache()?;
         Ok(Arc::clone(
             cache.entry(pack_id.to_string()).or_insert(space),
         ))
+    }
+
+    /// 系统模块库目录集合：库根存在才进清单。
+    ///
+    /// 不存在时给空清单而不是报错：无 system_refs 的项目根本不需要模块库；
+    /// 声明了引用而库缺失的包会在实例化处按「模块未加载」fail-closed 点名。
+    fn module_dirs(&self) -> Vec<PathBuf> {
+        let path = PathBuf::from(&self.system_modules_root);
+        if path.is_dir() {
+            vec![path]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// 某项目的**生效**设计空间：pack 空间 + 该项目登记的私有系统模块（W7 §8）。
+    ///
+    /// 无私有模块（绝大多数项目）→ 直接回缓存共享句柄，行为与扩展前一致；
+    /// 有私有模块 → 每次现装（私有模块是项目态，进程级 pack 缓存装不下它）。
+    fn project_space_at(&self, content: &Path, pack_id: &str) -> Adm4Result<Arc<DesignSpace>> {
+        let records = read_project_system_modules(content)?;
+        // 概念访谈确认落盘的项目私有实例引用（W7 3d：引用库模块、不带私有模块本体），
+        // 与私有模块的实例一并作为 extra_refs 进装配。
+        let concept_refs = read_project_system_refs(content)?;
+        if records.is_empty() && concept_refs.is_empty() {
+            return self.load_space_shared(pack_id);
+        }
+        let (extra_modules, mut extra_refs) = split_project_modules(&records)?;
+        extra_refs.extend(concept_refs);
+        Ok(Arc::new(load_design_space_customized(
+            &self.space_root,
+            pack_id,
+            &self.module_dirs(),
+            &extra_modules,
+            &extra_refs,
+        )?))
     }
 
     fn lock_space_cache(&self) -> Adm4Result<MutexGuard<'_, BTreeMap<String, Arc<DesignSpace>>>> {
@@ -403,12 +472,36 @@ impl AppServices {
         Ok(state)
     }
 
-    /// 打开项目为创作引擎（加载状态 + 设计空间）。
-    /// 设计空间取缓存里的共享句柄——引擎按 `Arc` 持有，因此这里连结构克隆都不发生。
+    /// 打开项目为创作引擎（加载状态 + 生效设计空间）。
+    /// 无私有系统模块的项目取缓存共享句柄——引擎按 `Arc` 持有，连结构克隆都不发生。
     pub fn open_engine(&self, archive_id: &str) -> Adm4Result<AuthoringEngine> {
         let state = self.load_authoring_state(archive_id)?;
-        let space = self.load_space_shared(&state.genre_pack)?;
-        AuthoringEngine::new(space, state)
+        let content = self.archives.content_dir(archive_id);
+        let space = self.project_space_at(&content, &state.genre_pack)?;
+        let mut engine = AuthoringEngine::new(space, state)?;
+        self.inject_system_modules(&mut engine, &content)?;
+        Ok(engine)
+    }
+
+    /// 给引擎注入组合校验用的模块表（W7 3b）：库内模块 + 本项目私有模块。
+    ///
+    /// 只有 pack 声明了 `system_refs`（含私有引用并入后的）才读模块目录——
+    /// 旧项目路径零接触，行为与扩展前逐字节一致。装配已成功意味着这些模块必然
+    /// 可加载（同一目录同一入口），此处失败即环境在装配后被改动，如实上抛。
+    fn inject_system_modules(
+        &self,
+        engine: &mut AuthoringEngine,
+        content: &Path,
+    ) -> Adm4Result<()> {
+        if engine.space().pack.system_refs.is_empty() {
+            return Ok(());
+        }
+        let mut modules = load_modules_from_dirs(&self.module_dirs())?;
+        for record in read_project_system_modules(content)? {
+            modules.insert(record.module.module_id.clone(), record.module);
+        }
+        engine.set_system_modules(modules);
+        Ok(())
     }
 
     /// 修改并事务性保存项目（持锁 → 草稿 → 变更 → 原子提交）。
@@ -439,8 +532,9 @@ impl AppServices {
             self.archives.create_draft(&session_id, Some(archive_id))?;
             let content = self.archives.draft_content_dir(&session_id);
             let state: AuthoringState = read_json_file(&content.join("authoring_state.json"))?;
-            let space = self.load_space_shared(&state.genre_pack)?;
+            let space = self.project_space_at(&content, &state.genre_pack)?;
             let mut engine = AuthoringEngine::new(space, state)?;
+            self.inject_system_modules(&mut engine, &content)?;
             let value = operation(&mut engine)?;
             write_json_file(&content.join("authoring_state.json"), engine.state())?;
             self.archives
@@ -732,6 +826,93 @@ impl AppServices {
                 }
             ),
         )
+    }
+
+    // ------------------------------------------------------------------
+    // 系统级 custom：项目私有系统模块登记（W7 §8 可拓宽通道，T-W7-3a）
+    // ------------------------------------------------------------------
+
+    /// 登记一个项目私有系统模块（系统级 custom；草案 = 完整 `SystemModule` JSON +
+    /// 实例引用）。校验链（全部 fail-closed，违例点名原因）：
+    /// 1. `SystemModule::validate` 结构自校验（前缀/名词声明/阶梯/档位门控）；
+    /// 2. 实例引用一致性（`instance.module_id` 缺省补全为模块 id，不一致即拒）；
+    /// 3. 与库内模块 / 本项目既有私有模块的 id 冲突检查；
+    /// 4. **整装校验**：带上新模块重装本项目生效空间（命名空间重写、V6 名词绑定、
+    ///    activates/tier_gate 矛盾、版本要求全部走加载器同一套代码，不复制第二份规则）,
+    ///    且既有创作状态必须仍能通过 `AuthoringEngine::new` 的复核。
+    ///
+    /// 合法 → 持久化到项目存档 `content/system_modules.json` 并即刻参与该项目空间装配
+    /// （创作/冻结/流水线读的都是生效空间）；非法 → Err，存档零改动。
+    /// 返回实例 id。不做 UI/CLI（3e/后续波接线）。
+    pub fn system_module_add(
+        &self,
+        archive_id: &str,
+        module: SystemModule,
+        mut instance: SystemRef,
+    ) -> Adm4Result<String> {
+        module.validate()?;
+        if instance.module_id.trim().is_empty() {
+            instance.module_id = module.module_id.clone();
+        }
+        if instance.module_id != module.module_id {
+            return Err(Adm4Error::invalid_input(format!(
+                "实例引用的 module_id={} 与草案模块 id {} 不一致（私有模块登记只服务自己的实例）",
+                instance.module_id, module.module_id
+            )));
+        }
+        if instance.instance_id.trim().is_empty() {
+            return Err(Adm4Error::invalid_input(format!(
+                "私有模块 {} 的实例缺少 instance_id（实例 id 是决策点命名空间锚，必填）",
+                module.module_id
+            )));
+        }
+        let manifest = self.archives.manifest(archive_id)?;
+        let session_id = new_id("session");
+        let archive_dir = self.data_root.archive_dir(archive_id);
+        let lock = ArchiveLock::acquire(&archive_dir, &session_id)?;
+        let result = (|| {
+            self.archives.create_draft(&session_id, Some(archive_id))?;
+            let content = self.archives.draft_content_dir(&session_id);
+            let state: AuthoringState = read_json_file(&content.join("authoring_state.json"))?;
+            let mut records = read_project_system_modules(&content)?;
+            if records
+                .iter()
+                .any(|record| record.module.module_id == module.module_id)
+            {
+                return Err(Adm4Error::conflict(format!(
+                    "项目已登记过私有模块 {}（模块 id 是全局命名空间，重复即歧义）",
+                    module.module_id
+                )));
+            }
+            let instance_id = instance.instance_id.clone();
+            records.push(ProjectSystemModule {
+                module: module.clone(),
+                instance,
+            });
+            write_json_file(&content.join(SYSTEM_MODULES_FILE), &records)?;
+            // 整装校验：库冲突/实例冲突/绑定悬空/门控矛盾全部在这里点名；
+            // 再过一遍引擎构造，保证既有选择在扩展后的空间里仍然合法。
+            let space = self.project_space_at(&content, &state.genre_pack)?;
+            AuthoringEngine::new(space, state)?;
+            self.archives
+                .commit_draft(&session_id, &manifest.project_name, Some(archive_id))?;
+            Ok(instance_id)
+        })();
+        lock.release()?;
+        let instance_id = result?;
+        self.log.append(
+            "authoring",
+            &format!(
+                "项目 {archive_id} 登记私有系统模块 {}（实例 {instance_id}，semver {}）",
+                module.module_id, module.semver
+            ),
+        )?;
+        Ok(instance_id)
+    }
+
+    /// 本项目已登记的私有系统模块清单（只读）。
+    pub fn system_module_list(&self, archive_id: &str) -> Adm4Result<Vec<ProjectSystemModule>> {
+        read_project_system_modules(&self.archives.content_dir(archive_id))
     }
 
     // ------------------------------------------------------------------
@@ -1041,6 +1222,51 @@ impl AppServices {
     }
 
     // ------------------------------------------------------------------
+    // 组合校验（W7 3b：authoring 即时反馈 + |H| 署名形态确认流）
+    // ------------------------------------------------------------------
+
+    /// 当前组合评估（只读）：authoring 期任何时刻可查，与 gate2 消费同一纯函数，
+    /// 结论逐字节一致（I1）。无系统模块引用的项目返回 `Ok(None)`。
+    pub fn composition_report(
+        &self,
+        archive_id: &str,
+    ) -> Adm4Result<Option<CompositionAssessment>> {
+        let engine = self.open_engine(archive_id)?;
+        engine.composition_assessment()
+    }
+
+    /// |H| 超参考线的一次性署名形态确认：「我知道并接受这是 |H|=N 的超大玩法」。
+    ///
+    /// R3 留痕进项目存档（署名 + 时间戳 + 当时 h_set 快照）；重核集合变化后确认
+    /// 自动失效重新要求。确认必须绑定用户手势（D11）——本方法只应由 CLI/桌面的
+    /// 用户操作触达，AI 永不代签。未被要求确认时拒绝（防预防性签名）。
+    pub fn compose_confirm_form(
+        &self,
+        archive_id: &str,
+        signer: &str,
+        note: &str,
+    ) -> Adm4Result<CompositionFormConfirmation> {
+        let record = self.with_project(archive_id, |engine| {
+            engine.confirm_composition_form(signer, note)
+        })?;
+        self.log.append(
+            "authoring",
+            &format!(
+                "项目 {archive_id} 署名形态确认：|H|={}（{}）由 {} 确认{}",
+                record.h_set.len(),
+                record.h_set.join("、"),
+                record.signer,
+                if record.note.is_empty() {
+                    String::new()
+                } else {
+                    format!("：{}", record.note)
+                }
+            ),
+        )?;
+        Ok(record)
+    }
+
+    // ------------------------------------------------------------------
     // 冻结
     // ------------------------------------------------------------------
 
@@ -1145,19 +1371,48 @@ impl AppServices {
         )
     }
 
-    /// 某冻结版本的**生效**设计空间：pack 空间 + 该版本落盘的 custom 合成点
-    /// （`frozen/v{N}/custom_points.json`，冻结时写入）。无 custom 时文件不存在，
-    /// 直接返回缓存共享句柄——与扩展前行为逐字节一致（金样零漂移）。
+    /// 某冻结版本的**生效**设计空间：pack 空间（含系统模块与项目私有模块实例化）
+    /// 加上该版本落盘的 custom 合成点（`frozen/v{N}/custom_points.json`，冻结时写入）。
+    /// 无 custom 时文件不存在，直接返回装配句柄——与扩展前行为逐字节一致（金样零漂移）。
+    ///
+    /// W7 3a 复演比对（fail-closed）：冻结产物带 `module_versions` 时，当前装配出的
+    /// 模块版本必须逐条一致——版本漂移意味着同一份 FrozenDesign 会编译出不同语义的
+    /// 产物，宁可显式报错也不静默换语义。
     fn frozen_space(
         &self,
         archive_id: &str,
         version: u32,
         pack_id: &str,
     ) -> Adm4Result<Arc<DesignSpace>> {
-        let base = self.load_space_shared(pack_id)?;
-        let path = self
-            .archives
-            .content_dir(archive_id)
+        let content = self.archives.content_dir(archive_id);
+        let base = self.project_space_at(&content, pack_id)?;
+        let frozen = self.load_frozen(archive_id, version)?;
+        if !frozen.module_versions.is_empty() {
+            let current: BTreeMap<&str, &str> = base
+                .system_instances
+                .iter()
+                .map(|instance| (instance.module_id.as_str(), instance.semver.as_str()))
+                .collect();
+            for (module_id, frozen_semver) in &frozen.module_versions {
+                match current.get(module_id.as_str()) {
+                    None => {
+                        return Err(Adm4Error::blocked(format!(
+                            "冻结 v{version} 依赖的系统模块 {module_id}（semver {frozen_semver}）\
+                             在当前装配中不存在：复演被拒（fail-closed），请恢复该模块或重新冻结"
+                        )));
+                    }
+                    Some(current_semver) if *current_semver != frozen_semver.as_str() => {
+                        return Err(Adm4Error::blocked(format!(
+                            "系统模块 {module_id} 版本漂移：冻结 v{version} 锁定 semver \
+                             {frozen_semver}，当前加载的是 {current_semver}——同一份冻结集在\
+                             不同模块版本下语义不同，复演被拒（fail-closed），请对齐版本或重新冻结"
+                        )));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        let path = content
             .join("frozen")
             .join(format!("v{version}"))
             .join("custom_points.json");
@@ -2682,6 +2937,467 @@ impl AppServices {
     }
 
     // ------------------------------------------------------------------
+    // 三段访谈（W7 3d：概念/组合/机制——AI 只提案，确认/执行是用户手势）
+    // ------------------------------------------------------------------
+
+    /// 概念访谈提案（激活 Provider 版）。
+    pub fn interview_concept(&self, archive_id: &str, pitch: &str) -> Adm4Result<ConceptProposal> {
+        let provider = self.build_provider()?;
+        self.interview_concept_with(archive_id, provider.as_ref(), pitch)
+    }
+
+    /// 概念访谈：用户口述想法 → AI 产出结构化提案（系统清单 + 建议档 + core_loop 草案，
+    /// 含大战略/融合型嗅探）。**只提案不落盘**——提案由调用方持有，确认走
+    /// [`AppServices::interview_concept_confirm`]（用户手势）。
+    pub fn interview_concept_with(
+        &self,
+        archive_id: &str,
+        provider: &dyn AiProvider,
+        pitch: &str,
+    ) -> Adm4Result<ConceptProposal> {
+        let engine = self.open_engine(archive_id)?;
+        let modules = self.all_modules_for(archive_id)?;
+        let proposal = propose_concept(engine.space(), &modules, provider, pitch)?;
+        self.log.append(
+            "interview",
+            &format!(
+                "项目 {archive_id} 概念访谈提案：{} 个系统、core_loop {} 动词、库外 {} 项{}",
+                proposal.systems.len(),
+                proposal.core_loop.len(),
+                proposal.library_external.len(),
+                if proposal.per_heavy_core_mode {
+                    format!(
+                        "；重核候选 {} 个 > 4 → 切逐重核轻重理清模式",
+                        proposal.heavy_core_candidates.len()
+                    )
+                } else {
+                    String::new()
+                }
+            ),
+        )?;
+        Ok(proposal)
+    }
+
+    /// 逐重核档位理清（大战略模式）：用户对「轻度还是重度？对标哪款游戏？」的回答
+    /// → AI 落该系统的档位建议 + rationale，返回更新后的提案（原样传回纪律）。
+    pub fn interview_concept_clarify_with(
+        &self,
+        archive_id: &str,
+        provider: &dyn AiProvider,
+        proposal: ConceptProposal,
+        instance_id: &str,
+        answer: &str,
+    ) -> Adm4Result<ConceptProposal> {
+        let modules = self.all_modules_for(archive_id)?;
+        let updated = clarify_tier(&modules, provider, proposal, instance_id, answer)?;
+        let clarification = &updated.tier_clarifications[instance_id];
+        self.log.append(
+            "interview",
+            &format!(
+                "项目 {archive_id} 概念访谈档位理清：{instance_id} → {}（{}）",
+                clarification.tier_id, clarification.rationale
+            ),
+        )?;
+        Ok(updated)
+    }
+
+    /// 概念访谈确认落盘（**用户手势**，AI 永不代确认）：
+    /// 1. 前置校验（逐重核模式下全部重核候选必须已理清）；
+    /// 2. 实例引用写入 `content/system_refs.json`（3a 私有模块同款纪律）并重装空间
+    ///    （命名空间重写/绑定悬空/版本要求全部走加载器同一套代码，非法即整体回滚）；
+    /// 3. 逐实例在 tier 合成点 `<instance>.tier` 选定生效档（理清档优先于建议档）
+    ///    并确认（Provenance::AiInterviewConfirmed + rationale）；
+    /// 4. core_loop 落 `AuthoringState.core_loop`（组合校验的 κ 推导数据源）；
+    /// 5. 提案与确认进 transcript（R3 留痕）。
+    pub fn interview_concept_confirm(
+        &self,
+        archive_id: &str,
+        proposal: &ConceptProposal,
+    ) -> Adm4Result<ConceptConfirmReport> {
+        proposal.validate_for_confirm()?;
+        let manifest = self.archives.manifest(archive_id)?;
+        let session_id = new_id("session");
+        let archive_dir = self.data_root.archive_dir(archive_id);
+        let lock = ArchiveLock::acquire(&archive_dir, &session_id)?;
+        let result = (|| {
+            self.archives.create_draft(&session_id, Some(archive_id))?;
+            let content = self.archives.draft_content_dir(&session_id);
+            let state: AuthoringState = read_json_file(&content.join("authoring_state.json"))?;
+
+            // 引用落盘（与既有 refs 合并，实例 id 冲突即拒——命名空间锚必须唯一）。
+            let mut refs = read_project_system_refs(&content)?;
+            let taken: BTreeSet<String> = refs.iter().map(|r| r.instance_id.clone()).collect();
+            for reference in proposal_to_refs(proposal) {
+                if taken.contains(&reference.instance_id) {
+                    return Err(Adm4Error::conflict(format!(
+                        "实例 id {} 已被本项目既有引用占用（实例 id 是决策点命名空间锚）",
+                        reference.instance_id
+                    )));
+                }
+                refs.push(reference);
+            }
+            write_json_file(&content.join(SYSTEM_REFS_FILE), &refs)?;
+
+            // 整装校验 + 引擎复核（加载器同一套代码，不复制第二份规则）。
+            let space = self.project_space_at(&content, &state.genre_pack)?;
+            let mut engine = AuthoringEngine::new(space, state)?;
+            self.inject_system_modules(&mut engine, &content)?;
+
+            // 逐实例落档位声明与 rationale（理清记录优先）。
+            let mut tier_selections = Vec::new();
+            for system in &proposal.systems {
+                let (tier, rationale) =
+                    proposal
+                        .effective_tier(&system.instance_id)
+                        .ok_or_else(|| {
+                            Adm4Error::internal(format!(
+                                "提案内实例 {} 缺少生效档位（不应发生）",
+                                system.instance_id
+                            ))
+                        })?;
+                let tier_point = format!("{}.tier", system.instance_id);
+                engine.select_option(&tier_point, tier, Provenance::AiInterviewConfirmed)?;
+                engine.set_rationale(&tier_point, rationale)?;
+                engine.confirm_selection(&tier_point)?;
+                if let Some(clarification) = proposal.tier_clarifications.get(&system.instance_id) {
+                    engine.append_interview_entry(
+                        &tier_point,
+                        "user_confirm",
+                        &format!(
+                            "逐重核理清确认：档位 {}；用户回答「{}」；理由：{}",
+                            clarification.tier_id,
+                            clarification.user_answer,
+                            clarification.rationale
+                        ),
+                    );
+                }
+                tier_selections.push(format!("{tier_point} = {tier}"));
+            }
+
+            // core_loop 落盘（3b 遗留 ① 的数据源）。
+            engine.set_core_loop(proposal.core_loop.clone());
+            engine.append_interview_entry(
+                "concept",
+                "user_confirm",
+                &format!(
+                    "概念访谈确认：系统 {}；core_loop [{}]{}{}",
+                    proposal
+                        .systems
+                        .iter()
+                        .map(|system| format!("{}({})", system.instance_id, system.module_id))
+                        .collect::<Vec<_>>()
+                        .join("、"),
+                    proposal
+                        .core_loop
+                        .iter()
+                        .map(|entry| format!("{}→{}", entry.verb, entry.instance_id))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    proposal
+                        .fusion
+                        .as_ref()
+                        .map(|fusion| format!(
+                            "；融合分解：{}（转换：{}）",
+                            fusion
+                                .cores
+                                .iter()
+                                .map(|core| core.label.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" + "),
+                            fusion.transition
+                        ))
+                        .unwrap_or_default(),
+                    if proposal.library_external.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            "；库外系统（如实标注，未落盘）：{}",
+                            proposal
+                                .library_external
+                                .iter()
+                                .map(|note| note.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join("、")
+                        )
+                    }
+                ),
+            );
+
+            write_json_file(&content.join("authoring_state.json"), engine.state())?;
+            self.archives
+                .commit_draft(&session_id, &manifest.project_name, Some(archive_id))?;
+            Ok(ConceptConfirmReport {
+                instances: proposal
+                    .systems
+                    .iter()
+                    .map(|system| system.instance_id.clone())
+                    .collect(),
+                tier_selections,
+                core_loop_len: proposal.core_loop.len(),
+            })
+        })();
+        lock.release()?;
+        let report = result?;
+        self.log.append(
+            "interview",
+            &format!(
+                "项目 {archive_id} 概念访谈确认落盘：{} 个实例、core_loop {} 动词（用户手势）",
+                report.instances.len(),
+                report.core_loop_len
+            ),
+        )?;
+        Ok(report)
+    }
+
+    /// 组合访谈提案（激活 Provider 版）。
+    pub fn interview_compose_fix(&self, archive_id: &str) -> Adm4Result<CompositionFixProposal> {
+        let provider = self.build_provider()?;
+        self.interview_compose_fix_with(archive_id, provider.as_ref())
+    }
+
+    /// 组合访谈：当前组合有 blocks/advices/确认待办时，AI 人话解释违例并给
+    /// 结构化修复选项。只提案不执行——执行走
+    /// [`AppServices::interview_compose_fix_apply`]（用户选定 = 手势）。
+    pub fn interview_compose_fix_with(
+        &self,
+        archive_id: &str,
+        provider: &dyn AiProvider,
+    ) -> Adm4Result<CompositionFixProposal> {
+        let engine = self.open_engine(archive_id)?;
+        let assessment = engine.composition_assessment()?.ok_or_else(|| {
+            Adm4Error::conflict("项目没有系统实例组合，无组合违例可访谈（无 system_refs）")
+        })?;
+        let modules = self.all_modules_for(archive_id)?;
+        let proposal = propose_composition_fix(engine.space(), &modules, &assessment, provider)?;
+        self.log.append(
+            "interview",
+            &format!(
+                "项目 {archive_id} 组合访谈提案：{} 个修复选项",
+                proposal.options.len()
+            ),
+        )?;
+        Ok(proposal)
+    }
+
+    /// 执行用户选定的组合修复选项（**用户手势**）：
+    /// - `tier_change` → 改 tier 合成点选择（既有 select 链路 + 确认 + rationale）；
+    /// - `confirm_form` → 要求 `signer`（AI 不能代签），转发 `compose_confirm_form`；
+    /// - `replace_system` / `add_binding` → 本卡不自动执行，Err 指路系统清单变更通道
+    ///   （概念访谈重新确认 / system_module_add）——结构化建议已在提案里呈现。
+    pub fn interview_compose_fix_apply(
+        &self,
+        archive_id: &str,
+        proposal: &CompositionFixProposal,
+        option_id: &str,
+        signer: Option<&str>,
+    ) -> Adm4Result<String> {
+        let option = proposal
+            .options
+            .iter()
+            .find(|option| option.option_id == option_id)
+            .ok_or_else(|| {
+                Adm4Error::not_found(format!(
+                    "修复选项 {option_id} 不在提案内（可选：{}）",
+                    proposal
+                        .options
+                        .iter()
+                        .map(|option| option.option_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join("、")
+                ))
+            })?;
+        let message = match option.kind {
+            FixActionKind::TierChange => {
+                let tier_point = format!("{}.tier", option.instance_id);
+                let to_tier = option.to_tier.clone();
+                let rationale = format!("组合访谈修复：{}", option.detail);
+                let entry = format!(
+                    "组合修复确认：{tier_point} → {to_tier}（选项 {}）",
+                    option.option_id
+                );
+                self.with_project(archive_id, |engine| {
+                    engine.select_option(
+                        &tier_point,
+                        &to_tier,
+                        Provenance::AiInterviewConfirmed,
+                    )?;
+                    engine.set_rationale(&tier_point, &rationale)?;
+                    engine.confirm_selection(&tier_point)?;
+                    engine.append_interview_entry(&tier_point, "user_confirm", &entry);
+                    Ok(())
+                })?;
+                format!("已执行改档：{tier_point} → {to_tier}")
+            }
+            FixActionKind::ConfirmForm => {
+                let signer = signer
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        Adm4Error::invalid_input(
+                            "署名形态确认必须提供 --signer（AI 不能代签，署名是用户手势）",
+                        )
+                    })?;
+                let record = self.compose_confirm_form(archive_id, signer, &option.detail)?;
+                format!(
+                    "已署名形态确认：|H|={}（签名 {}）",
+                    record.h_set.len(),
+                    record.signer
+                )
+            }
+            FixActionKind::ReplaceSystem | FixActionKind::AddBinding => {
+                return Err(Adm4Error::blocked(format!(
+                    "选项 {}（{}）不支持自动执行：换系统/改绑定会改变装配结构，请走\
+                     系统清单变更通道（概念访谈重新确认，或 system_module_add / 手改\
+                     实例引用后重装校验）。建议内容：{}",
+                    option.option_id,
+                    option.kind.label(),
+                    option.detail
+                )));
+            }
+        };
+        self.log.append(
+            "interview",
+            &format!("项目 {archive_id} 组合访谈执行选项 {option_id}：{message}"),
+        )?;
+        Ok(message)
+    }
+
+    /// 机制访谈提案（激活 Provider 版）。
+    pub fn interview_mechanism_next(
+        &self,
+        archive_id: &str,
+        instance_id: &str,
+    ) -> Adm4Result<InterviewTurnDto> {
+        let provider = self.build_provider()?;
+        self.interview_mechanism_next_with(archive_id, provider.as_ref(), instance_id)
+    }
+
+    /// 机制访谈：进入某系统实例内部，按激活点逐点提案（复用既有逐点机制，范围
+    /// 限定到 `<instance>.` 命名空间）；PromptLibrary 按该实例模块 domain 取
+    /// 追问弹药注入 AI 上下文。确认/拒绝复用既有 `interview_confirm` / `interview_reject`。
+    pub fn interview_mechanism_next_with(
+        &self,
+        archive_id: &str,
+        provider: &dyn AiProvider,
+        instance_id: &str,
+    ) -> Adm4Result<InterviewTurnDto> {
+        let ammo = self.mechanism_ammo(archive_id, instance_id)?;
+        let turn = self.with_project(archive_id, |engine| {
+            InterviewService::propose_next_scoped(engine, provider, instance_id, &ammo)
+        })?;
+        let dto = InterviewTurnDto::from_turn(turn);
+        let message = match &dto {
+            InterviewTurnDto::StructuralPoint { proposal } => format!(
+                "项目 {archive_id} 机制访谈提案（实例 {instance_id}）{}/{}（弹药 {} 条）",
+                proposal.decision_id,
+                proposal.option_id,
+                ammo.len()
+            ),
+            InterviewTurnDto::TableProposal { proposal } => format!(
+                "项目 {archive_id} 机制访谈提案（实例 {instance_id}，整表）{}/{}",
+                proposal.decision_id, proposal.option_id
+            ),
+            InterviewTurnDto::Complete => {
+                format!("项目 {archive_id} 机制访谈完成：实例 {instance_id} 无待确认激活点")
+            }
+        };
+        self.log.append("interview", &message)?;
+        Ok(dto)
+    }
+
+    /// 机制访谈的 custom 草案起草：AI 起草 rule_text + effects + GWT 三段。
+    /// 产出草案**不登记**——登记仍走 [`AppServices::custom_add`]（用户确认手势）。
+    pub fn interview_mechanism_draft_custom_with(
+        &self,
+        archive_id: &str,
+        provider: &dyn AiProvider,
+        host_system_id: &str,
+        idea: &str,
+    ) -> Adm4Result<CustomMechanicDraft> {
+        let engine = self.open_engine(archive_id)?;
+        let host_domain = engine
+            .space()
+            .graph
+            .require_point(host_system_id)?
+            .domain
+            .clone();
+        let ammo = self.prompt_ammo(&host_domain)?;
+        let draft = InterviewService::draft_custom_mechanic(
+            &engine,
+            provider,
+            host_system_id,
+            idea,
+            &ammo,
+        )?;
+        self.log.append(
+            "interview",
+            &format!(
+                "项目 {archive_id} custom 草案起草：{}（host {host_system_id}，待 custom add 用户确认）",
+                draft.slug
+            ),
+        )?;
+        Ok(draft)
+    }
+
+    /// 某实例的追问弹药：按实例模块 id 作为 domain 取 PromptLibrary 条目。
+    fn mechanism_ammo(&self, archive_id: &str, instance_id: &str) -> Adm4Result<Vec<PromptEntry>> {
+        let engine = self.open_engine(archive_id)?;
+        let module_id = engine
+            .space()
+            .pack
+            .system_refs
+            .iter()
+            .find(|reference| reference.instance_id == instance_id)
+            .map(|reference| reference.module_id.clone())
+            .ok_or_else(|| {
+                Adm4Error::not_found(format!(
+                    "项目没有系统实例 {instance_id}（机制访谈的范围锚是实例 id；\
+                     可用实例见 compose report / 概念访谈确认结果）"
+                ))
+            })?;
+        self.prompt_ammo(&module_id)
+    }
+
+    /// PromptLibrary 按 domain 取弹药。库文件缺失 → 空清单（弹药是访谈增强不是前提）；
+    /// 文件存在但解析失败 → Err（坏库不静默吞，R2）。
+    fn prompt_ammo(&self, domain: &str) -> Adm4Result<Vec<PromptEntry>> {
+        let path = self.prompt_library_path();
+        if !path.is_file() {
+            return Ok(Vec::new());
+        }
+        let library: PromptLibrary = read_json_file(&path)?;
+        Ok(library
+            .entries
+            .into_iter()
+            .filter(|entry| entry.domain == domain)
+            .collect())
+    }
+
+    /// 追问弹药库路径：模块库根的兄弟目录 `prompt_library/seed.json`
+    /// （默认 `knowledge/systems` → `knowledge/prompt_library/seed.json`）。
+    fn prompt_library_path(&self) -> PathBuf {
+        Path::new(&self.system_modules_root)
+            .parent()
+            .map(|parent| parent.join("prompt_library").join("seed.json"))
+            .unwrap_or_else(|| PathBuf::from("prompt_library").join("seed.json"))
+    }
+
+    /// 库内模块 + 本项目私有模块的完整模块表（概念/组合访谈的候选库与校验基准）。
+    fn all_modules_for(&self, archive_id: &str) -> Adm4Result<BTreeMap<String, SystemModule>> {
+        let dirs = self.module_dirs();
+        let mut modules = if dirs.is_empty() {
+            BTreeMap::new()
+        } else {
+            load_modules_from_dirs(&dirs)?
+        };
+        let content = self.archives.content_dir(archive_id);
+        for record in read_project_system_modules(&content)? {
+            modules.insert(record.module.module_id.clone(), record.module);
+        }
+        Ok(modules)
+    }
+
+    // ------------------------------------------------------------------
     // AI
     // ------------------------------------------------------------------
 
@@ -3108,6 +3824,77 @@ pub struct BuildStageView {
     pub consumes: Vec<String>,
     /// 执行器尚未实现时的诚实说明（已实现的段为 None）。
     pub pending_note: Option<String>,
+}
+
+/// 项目私有系统模块的存档记录（`content/system_modules.json` 的条目）：
+/// 完整 `SystemModule` 草案 + 它在本项目里的实例引用。
+///
+/// 概念访谈确认落盘的回执（CLI/GUI 呈现用）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ConceptConfirmReport {
+    /// 落盘的实例 id 清单。
+    pub instances: Vec<String>,
+    /// 逐实例的档位声明（`<instance>.tier = <tier>`，rationale 已进 Selection）。
+    pub tier_selections: Vec<String>,
+    /// 落盘的 core_loop 动词数。
+    pub core_loop_len: usize,
+}
+
+/// 为什么模块与实例成对落盘：私有模块只服务本项目，登记时就必须给出实例
+/// （否则模块装进空间却无人引用，决策点一个都不进图，登记等于什么都没发生）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ProjectSystemModule {
+    pub module: SystemModule,
+    pub instance: SystemRef,
+}
+
+/// 项目私有系统模块的存档文件名（项目内容树下，随导出包走、进内容指纹）。
+const SYSTEM_MODULES_FILE: &str = "system_modules.json";
+
+/// 概念访谈确认落盘的项目私有实例引用文件名（W7 3d；与私有模块同款纪律：
+/// 确认落 content/ 下 JSON、随导出包走、进内容指纹、装配时并进 extra_refs）。
+const SYSTEM_REFS_FILE: &str = "system_refs.json";
+
+/// 读某内容目录下的私有模块清单；文件不存在（绝大多数项目）→ 空清单。
+fn read_project_system_modules(content: &Path) -> Adm4Result<Vec<ProjectSystemModule>> {
+    let path = content.join(SYSTEM_MODULES_FILE);
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    read_json_file(&path)
+}
+
+/// 读某内容目录下的概念访谈实例引用；文件不存在（未做概念访谈）→ 空清单。
+fn read_project_system_refs(content: &Path) -> Adm4Result<Vec<SystemRef>> {
+    let path = content.join(SYSTEM_REFS_FILE);
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    read_json_file(&path)
+}
+
+/// 私有模块清单 → 加载器入参（模块表 + 实例引用序列）。
+/// 清单内模块 id 重复即 Err（登记入口已拦，这里防手改存档的漏网）。
+fn split_project_modules(
+    records: &[ProjectSystemModule],
+) -> Adm4Result<(BTreeMap<String, SystemModule>, Vec<SystemRef>)> {
+    let mut modules = BTreeMap::new();
+    let mut refs = Vec::with_capacity(records.len());
+    for record in records {
+        if modules
+            .insert(record.module.module_id.clone(), record.module.clone())
+            .is_some()
+        {
+            return Err(Adm4Error::validation(format!(
+                "项目私有模块清单里 {} 重复声明（存档被手改？模块 id 是全局命名空间）",
+                record.module.module_id
+            )));
+        }
+        refs.push(record.instance.clone());
+    }
+    Ok((modules, refs))
 }
 
 /// P1 契约的只读摘要（切片要点 + 轮次/缺口计数 + 指南与引擎事实 + 阻塞原因）。

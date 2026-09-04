@@ -192,12 +192,15 @@ fn space() -> DesignSpace {
             consistency_rules: Vec::new(),
             nodes: Vec::new(),
             decision_points: Vec::new(),
+            system_refs: Vec::new(),
+            core_nouns: Vec::new(),
         },
         graph: match DecisionGraph::new(points) {
             Ok(graph) => graph,
             Err(error) => panic!("测试图构造失败：{}", error.message),
         },
         organization,
+        system_instances: Vec::new(),
     }
 }
 

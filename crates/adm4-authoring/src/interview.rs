@@ -1,7 +1,9 @@
+use crate::custom::CustomMechanicDraft;
 use crate::engine::AuthoringEngine;
 use crate::state::InterviewEntry;
 use adm4_ai::{AiProvider, AiRequest};
 use adm4_contracts::{MatrixCell, TypedValue};
+use adm4_decision::system_module::PromptEntry;
 use adm4_decision::{
     DecisionId, DecisionOption, DecisionPoint, DesignLevel, ParameterSchema, ParameterValues,
     Provenance, counts_toward_completeness,
@@ -9,6 +11,11 @@ use adm4_decision::{
 use adm4_foundation::{Adm4Error, Adm4Result, UtcTimestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+
+/// 机制访谈（实例内逐点提案）AI 调用的 purpose 键（T-W7-3d ③）。
+pub const PURPOSE_MECHANISM: &str = "interview_mechanism";
+/// 机制访谈 custom 草案起草 AI 调用的 purpose 键。
+pub const PURPOSE_MECHANISM_CUSTOM: &str = "interview_mechanism_custom";
 
 /// AI 访谈提案（结构层逐条 / L5-L6 整表）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -103,6 +110,177 @@ impl InterviewService {
         } else {
             InterviewTurn::StructuralPoint(proposal)
         })
+    }
+
+    /// 机制访谈（T-W7-3d ③）：范围限定到某系统实例命名空间下的激活点，逐点提案。
+    ///
+    /// 与 `propose_next` 同一选点纪律（层升序 + 拓扑序 + 被拒点排后），只是把
+    /// 待办过滤到 `<instance_id>.` 前缀（tier 合成点与模块决策点都在该命名空间下）。
+    /// `ammo` 为 PromptLibrary 按当前系统 domain 取出的追问弹药——注入 AI 上下文
+    /// 作为**追问素材**（帮 AI 提出更尖锐的取舍建议），不是决策点、不进决策图。
+    /// 实例下无待办 → Complete；AI 非法输出 → Err 即停（与主路径同防线）。
+    pub fn propose_next_scoped(
+        engine: &mut AuthoringEngine,
+        provider: &dyn AiProvider,
+        instance_id: &str,
+        ammo: &[PromptEntry],
+    ) -> Adm4Result<InterviewTurn> {
+        if instance_id.trim().is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "机制访谈需要系统实例 id（范围限定到该实例命名空间下的激活点）",
+            ));
+        }
+        let prefix = format!("{instance_id}.");
+        let pending: Vec<DecisionId> = engine
+            .pending_decisions()?
+            .into_iter()
+            .filter(|id| id.starts_with(&prefix))
+            .collect();
+        if pending.is_empty() {
+            return Ok(InterviewTurn::Complete);
+        }
+        let next_id = select_layered_next(engine, &pending)?;
+        let point = engine.space().graph.require_point(&next_id)?.clone();
+        let mut request = build_request(engine, &point)?;
+        request.purpose = PURPOSE_MECHANISM.into();
+        if !ammo.is_empty() {
+            let ammo_text = ammo
+                .iter()
+                .map(|entry| {
+                    let follow_ups = if entry.follow_ups.is_empty() {
+                        String::new()
+                    } else {
+                        format!("（追问：{}）", entry.follow_ups.join("；"))
+                    };
+                    format!("- {}{follow_ups}", entry.question_zh)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            request.user_prompt.push_str(&format!(
+                "\n\n追问弹药（该系统领域的真实取舍问句，供你在 rationale 里回应取舍、\
+                 不是决策点）：\n{ammo_text}"
+            ));
+        }
+        let response = provider.invoke(&request)?;
+        let proposal = parse_proposal(&point, &response.text)?;
+
+        let interview = engine_interview_mut(engine);
+        interview.cursor = Some(next_id.clone());
+        interview.skipped_this_round.remove(&next_id);
+        interview.transcript.push(InterviewEntry {
+            decision_id: next_id,
+            role: "ai_proposal".into(),
+            content: response.text,
+            at: UtcTimestamp::now().to_iso8601(),
+        });
+
+        let is_table_layer = matches!(
+            point
+                .option(&proposal.option_id)
+                .map(|option| &option.parameter_schema),
+            Some(ParameterSchema::Table(_)) | Some(ParameterSchema::Matrix(_))
+        );
+        Ok(if is_table_layer {
+            InterviewTurn::TableProposal(proposal)
+        } else {
+            InterviewTurn::StructuralPoint(proposal)
+        })
+    }
+
+    /// custom 机制草案 AI 起草（T-W7-3d ③）：rule_text + effects + GWT 三段。
+    ///
+    /// 产出 `CustomMechanicDraft`——**不登记**：登记仍走 `custom_add`（用户确认手势），
+    /// 本方法只是把「想要一个库里没有的机制」翻译成结构化草案。effects 全集校验
+    /// 在登记时由 `EffectTemplateValidator` 做（不在此处复制第二份规则）；
+    /// 这里只做形状与非空校验（slug/label/rule_text/rationale/effects 至少一条，
+    /// custom 效果三段非空——起草空白等于没起草）。
+    pub fn draft_custom_mechanic(
+        engine: &AuthoringEngine,
+        provider: &dyn AiProvider,
+        host_system_id: &str,
+        idea: &str,
+        ammo: &[PromptEntry],
+    ) -> Adm4Result<CustomMechanicDraft> {
+        if idea.trim().is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "custom 机制起草需要用户的机制想法（idea 不可为空）",
+            ));
+        }
+        let host = engine.space().graph.require_point(host_system_id)?;
+        let ammo_text = if ammo.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n\n追问弹药（该系统领域的取舍问句，rationale 应回应其中的取舍）：\n{}",
+                ammo.iter()
+                    .map(|entry| format!("- {}", entry.question_zh))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        };
+        let request = AiRequest {
+            purpose: PURPOSE_MECHANISM_CUSTOM.into(),
+            system_prompt: "你是游戏设计访谈助手，为用户起草一个自定义（custom）机制草案。\
+                 输出 JSON（CustomMechanicDraft 形态）：{\"host_system_id\":给定值,\
+                 \"slug\":小写下划线短名,\"label_zh\":中文机制名,\"rule_text\":规则文本,\
+                 \"effects\":[{\"effect\":\"custom\",\"verb\":动词,\"given\":前置条件,\
+                 \"when\":触发时机,\"then\":发生什么}],\"new_nouns\":[新名词，没有则空],\
+                 \"rationale\":设计理由}。\
+                 rule_text/GWT 三段（given/when/then）都必须非空——这是机制的验收语义。\
+                 你起草的是草案，登记与确认由用户决定。"
+                .into(),
+            user_prompt: format!(
+                "归属系统决策点：{}（{}）\n用户的机制想法：\n{}{ammo_text}",
+                host.id,
+                host.question,
+                idea.trim()
+            ),
+            expect_json: true,
+        };
+        let response = provider.invoke(&request)?;
+        let mut draft: CustomMechanicDraft =
+            serde_json::from_str(response.text.trim()).map_err(|error| {
+                Adm4Error::validation(format!(
+                    "custom 草案不是合法 CustomMechanicDraft JSON：{error}；原文：{}",
+                    response.text
+                ))
+            })?;
+        // host 以调用方给定为准（AI 写错归属会让草案挂到别的系统下）。
+        draft.host_system_id = host_system_id.to_string();
+        if draft.rule_text.trim().is_empty() {
+            return Err(Adm4Error::validation(
+                "custom 草案的 rule_text 为空（规则文本是机制的本体，AI 起草不完整即拒）",
+            ));
+        }
+        if draft.rationale.trim().is_empty() {
+            return Err(Adm4Error::validation(
+                "custom 草案的 rationale 为空（设计理由必填，AI 起草不完整即拒）",
+            ));
+        }
+        if draft.effects.is_empty() {
+            return Err(Adm4Error::validation(
+                "custom 草案不含任何效果（无效果的机制不成立）",
+            ));
+        }
+        for (index, effect) in draft.effects.iter().enumerate() {
+            let is_custom = effect.get("effect").and_then(|tag| tag.as_str()) == Some("custom");
+            if !is_custom {
+                continue;
+            }
+            for key in ["given", "when", "then"] {
+                let blank = effect
+                    .get(key)
+                    .and_then(|value| value.as_str())
+                    .is_none_or(|text| text.trim().is_empty());
+                if blank {
+                    return Err(Adm4Error::validation(format!(
+                        "custom 草案第 {} 条效果的 GWT 段 {key} 为空（三段验收语义缺一不可）",
+                        index + 1
+                    )));
+                }
+            }
+        }
+        Ok(draft)
     }
 
     /// 用户确认提案（唯一提交路径；AI 不可代调用——本方法仅由 UI/CLI 的用户动作触发）。
@@ -464,6 +642,10 @@ fn schema_hint(schema: &ParameterSchema) -> String {
                 .join("/")
         ),
         ParameterSchema::Matrix(_) => " 整表提案（parameters.cells，逐格 row/col/value）".into(),
+        // W7 §5.4 机械新增臂（T-W7-3a 编译豁免申报）：Graph/Curve 值以标量
+        // `graph`/`curve` 键装 JSON 文本，访谈按标量参数提示——旧 schema 零行为改动。
+        ParameterSchema::Graph(_) => " 参数字段：graph（GraphSpec 形态 JSON 文本）".into(),
+        ParameterSchema::Curve(_) => " 参数字段：curve（CurveSpec 形态 JSON 文本）".into(),
     }
 }
 
@@ -573,6 +755,19 @@ fn check_parameter_shape(
             point.id,
             shape_label(other)
         ))),
+        // W7 §5.4 机械新增臂（T-W7-3a 编译豁免申报）：Graph/Curve 值以标量键装
+        // JSON 文本 → 与 Scalar 同形（None 留待用户填、Scalars 放行、其余形态拒绝）。
+        (
+            ParameterSchema::Graph(_) | ParameterSchema::Curve(_),
+            ParameterValues::None | ParameterValues::Scalars { .. },
+        ) => Ok(()),
+        (ParameterSchema::Graph(_) | ParameterSchema::Curve(_), other) => {
+            Err(Adm4Error::validation(format!(
+                "决策点 {} 是图/曲线参数（标量 JSON 文本承载），AI 给出了{}（非法输出即停）",
+                point.id,
+                shape_label(other)
+            )))
+        }
     }
 }
 
@@ -757,9 +952,12 @@ mod tests {
                 consistency_rules: Vec::new(),
                 nodes: Vec::new(),
                 decision_points: Vec::new(),
+                system_refs: Vec::new(),
+                core_nouns: Vec::new(),
             },
             graph: DecisionGraph::new(points).unwrap(),
             organization: adm4_decision::DesignOrganization::default(),
+            system_instances: Vec::new(),
         };
         let state = AuthoringState::new(
             "测试项目",
@@ -992,6 +1190,124 @@ mod tests {
         let mut engine = engine_with(vec![table_point("t_guards")]);
         let provider = provider_with(vec![r#"{"option_id":"full_table","rationale":"x"}"#.into()]);
         assert!(InterviewService::propose_next(&mut engine, &provider).is_err());
+    }
+
+    fn ammo(question: &str) -> PromptEntry {
+        PromptEntry {
+            id: "ammo_1".into(),
+            domain: "sys.test".into(),
+            question_zh: question.into(),
+            follow_ups: vec!["对标哪款游戏？".into()],
+            source_ref: "v2#test".into(),
+        }
+    }
+
+    /// 机制访谈 e-1) 范围限定：只对 `<instance>.` 前缀的待办出提案，
+    /// 弹药问句注入 user_prompt（scripted 通道可断言）。
+    #[test]
+    fn scoped_interview_stays_in_instance_namespace_and_injects_ammo() {
+        let mut engine = engine_with(vec![
+            structural_point("gear_main.tier", DesignLevel::L3, vec![option("t_light")]),
+            structural_point("other.tier", DesignLevel::L3, vec![option("o_x")]),
+        ]);
+        let provider = ScriptedProvider::new();
+        provider.script(
+            PURPOSE_MECHANISM,
+            vec![proposal_json("t_light"), proposal_json("t_light")],
+        );
+        let ammo_entries = vec![ammo("强化失败要不要掉级？")];
+        let InterviewTurn::StructuralPoint(proposal) = InterviewService::propose_next_scoped(
+            &mut engine,
+            &provider,
+            "gear_main",
+            &ammo_entries,
+        )
+        .unwrap() else {
+            panic!("期待结构层提案");
+        };
+        assert_eq!(proposal.decision_id, "gear_main.tier");
+        // 弹药问句进了 AI 上下文（验收 3 的可断言性锚点）。
+        let calls = provider.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].purpose, PURPOSE_MECHANISM);
+        assert!(
+            calls[0].user_prompt.contains("强化失败要不要掉级？"),
+            "弹药问句应注入提示词：{}",
+            calls[0].user_prompt
+        );
+        assert!(
+            calls[0].user_prompt.contains("追问弹药"),
+            "{}",
+            calls[0].user_prompt
+        );
+        // 确认后该实例无待办 → Complete（other.tier 不在范围内）。
+        InterviewService::confirm_proposal(&mut engine, &proposal, None).unwrap();
+        assert!(matches!(
+            InterviewService::propose_next_scoped(&mut engine, &provider, "gear_main", &[])
+                .unwrap(),
+            InterviewTurn::Complete
+        ));
+        assert!(
+            !engine.state().selections.contains_key("other.tier"),
+            "范围外的点不得被访谈触碰"
+        );
+    }
+
+    /// 机制访谈 e-2) custom 草案起草：GWT 三段非空校验；缺段即 Err；host 以调用方为准。
+    #[test]
+    fn custom_draft_requires_three_part_gwt() {
+        let engine = engine_with(vec![structural_point(
+            "sys.combat",
+            DesignLevel::L3,
+            vec![option("combat_x")],
+        )]);
+        let provider = ScriptedProvider::new();
+        provider.script(
+            PURPOSE_MECHANISM_CUSTOM,
+            vec![
+                r#"{"host_system_id":"whatever","slug":"chain_strike","label_zh":"连锁打击","rule_text":"连续命中同一目标叠层","effects":[{"effect":"custom","verb":"stack_bonus","given":"同一目标被连续命中","when":"第三次命中结算","then":"追加一次伤害"}],"rationale":"奖励专注输出"}"#
+                    .into(),
+            ],
+        );
+        let draft = InterviewService::draft_custom_mechanic(
+            &engine,
+            &provider,
+            "sys.combat",
+            "想要连击奖励机制",
+            &[],
+        )
+        .unwrap();
+        assert_eq!(draft.host_system_id, "sys.combat", "host 以调用方给定为准");
+        assert_eq!(draft.slug, "chain_strike");
+        assert!(!draft.rule_text.is_empty());
+
+        // GWT 缺段 → Err。
+        let provider = ScriptedProvider::new();
+        provider.script(
+            PURPOSE_MECHANISM_CUSTOM,
+            vec![
+                r#"{"host_system_id":"sys.combat","slug":"x","label_zh":"某机制","rule_text":"规则","effects":[{"effect":"custom","verb":"v","given":"","when":"w","then":"t"}],"rationale":"理由"}"#
+                    .into(),
+            ],
+        );
+        let error =
+            InterviewService::draft_custom_mechanic(&engine, &provider, "sys.combat", "想法", &[])
+                .unwrap_err();
+        assert!(error.message.contains("given"), "{}", error.message);
+
+        // rule_text 留白 → Err。
+        let provider = ScriptedProvider::new();
+        provider.script(
+            PURPOSE_MECHANISM_CUSTOM,
+            vec![
+                r#"{"host_system_id":"sys.combat","slug":"x","label_zh":"某机制","rule_text":"  ","effects":[{"effect":"custom","verb":"v","given":"g","when":"w","then":"t"}],"rationale":"理由"}"#
+                    .into(),
+            ],
+        );
+        let error =
+            InterviewService::draft_custom_mechanic(&engine, &provider, "sys.combat", "想法", &[])
+                .unwrap_err();
+        assert!(error.message.contains("rule_text"), "{}", error.message);
     }
 
     /// d-3 补充) 标量结构点发明参数字段 → Err 即停。

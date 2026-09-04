@@ -1,9 +1,11 @@
+use crate::compose::{CompositionAssessment, assess_composition};
 use crate::custom::{
     CUSTOM_ENTRY_LABEL, CUSTOM_ENTRY_OPTION_ID, CUSTOM_RULE_OPTION_ID, CustomMechanicDraft,
     CustomMechanicRecord, EffectTemplateValidator, augment_space, template_references_rule,
     validate_draft,
 };
-use crate::state::{AuthoringState, FindingDisposition, TemplateMode};
+use crate::state::{AuthoringState, CompositionFormConfirmation, FindingDisposition, TemplateMode};
+use adm4_decision::system_module::SystemModule;
 use adm4_decision::{
     ApplicabilityMap, CompletenessReport, DecisionId, DecisionPoint, NaJustification, OptionId,
     OrganizationProgress, ParameterValues, PointRequirement, Provenance, SelectedOption, Selection,
@@ -14,6 +16,7 @@ use adm4_foundation::{Adm4Error, Adm4Result, UtcTimestamp};
 use adm4_space::DesignSpace;
 use adm4_template::Template;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// 模板预填时被跳过的一条答卷内容（R2：不静默丢弃，逐条在案）。
@@ -114,6 +117,13 @@ pub struct AuthoringEngine {
     base_space: Arc<DesignSpace>,
     /// 生效空间 = base + 项目私有 custom 合成点；无 custom 时与 base 是同一个 Arc。
     space: Arc<DesignSpace>,
+    /// 组合校验用的系统模块表（W7 3b：库内 + 项目私有；键 = module_id）。
+    ///
+    /// 为什么单独持有：`DesignSpace::system_instances` 只有 id/semver，而组合校验
+    /// 需要模块的重度阶梯/接口/传导原文。`None` = 调用方未注入（无 system_refs 的
+    /// 项目根本不需要；有 refs 却没注入时组合评估按数据缺口 fail-closed 报错，
+    /// 不静默当"零违例"）。`Arc` 与设计空间同一纪律：运行期只读，多引擎共享。
+    system_modules: Option<Arc<BTreeMap<String, SystemModule>>>,
     state: AuthoringState,
 }
 
@@ -137,8 +147,14 @@ impl AuthoringEngine {
         Ok(Self {
             base_space,
             space,
+            system_modules: None,
             state,
         })
+    }
+
+    /// 注入组合校验用的系统模块表（门面层在装配后调用；测试可自建模块表）。
+    pub fn set_system_modules(&mut self, modules: impl Into<Arc<BTreeMap<String, SystemModule>>>) {
+        self.system_modules = Some(modules.into());
     }
 
     /// custom 登记簿变化后重建生效空间（base 不变，不叠加增广）。
@@ -620,6 +636,71 @@ impl AuthoringEngine {
         Ok(())
     }
 
+    // ------------------------------------------------------------------
+    // 组合校验（W7 3b：gate2 与 authoring 即时反馈共用同一评估）
+    // ------------------------------------------------------------------
+
+    /// 当前组合评估（authoring 期任何时刻可查；gate2 消费同一方法，结论逐字节一致）。
+    ///
+    /// 无 `system_refs` 的项目返回 `Ok(None)` 零开销；有引用但模块表未注入 → Err
+    /// （fail-closed：组合校验的输入缺了一半，静默跳过会把结构缺陷报成零违例）。
+    pub fn composition_assessment(&self) -> Adm4Result<Option<CompositionAssessment>> {
+        if self.space.pack.system_refs.is_empty() {
+            return Ok(None);
+        }
+        let modules = self.system_modules.as_ref().ok_or_else(|| {
+            Adm4Error::internal(format!(
+                "项目引用了 {} 个系统实例但引擎未注入模块表：组合校验无法进行\
+                 （门面层装配后须调用 set_system_modules）",
+                self.space.pack.system_refs.len()
+            ))
+        })?;
+        assess_composition(
+            &self.space,
+            &self.state.selections,
+            modules,
+            self.state.composition_form_confirmation.as_ref(),
+            &self.state.core_loop,
+        )
+    }
+
+    /// |H| 超参考线的一次性署名形态确认（W7 §4.2(c)；确认必须是用户手势，AI 永不代签）。
+    ///
+    /// 前置：当前报告确实要求确认（`form_confirmation_required`）——没超线或已有
+    /// 生效确认时拒绝，防止「预防性签名」把未来的形态变化提前签掉。
+    /// 留痕（R3）：署名 + 时间戳 + 确认当时的 h_set 快照；h_set 变化即失效重签。
+    /// 不推进 revision：确认不是设计变更（与红队处置同一口径），推了反而把
+    /// 刚跑完的红队记录标成过期。
+    pub fn confirm_composition_form(
+        &mut self,
+        signer: &str,
+        note: &str,
+    ) -> Adm4Result<CompositionFormConfirmation> {
+        let signer = signer.trim();
+        if signer.is_empty() {
+            return Err(Adm4Error::invalid_input(
+                "形态确认必须署名（signer）：R3 要求人工判断可追责，AI 永不代签",
+            ));
+        }
+        let assessment = self.composition_assessment()?.ok_or_else(|| {
+            Adm4Error::conflict("项目没有系统实例组合，无形态可确认（无 system_refs）")
+        })?;
+        if !assessment.report.form_confirmation_required {
+            return Err(Adm4Error::conflict(
+                "当前组合不要求形态确认（|H| 未超参考线，或已有针对当前重核集合的生效确认）\
+                 ——确认只在被要求时签署，防止预防性签名绕过未来的形态变化",
+            ));
+        }
+        let record = CompositionFormConfirmation {
+            signer: signer.to_string(),
+            note: note.trim().to_string(),
+            at: UtcTimestamp::now().to_iso8601(),
+            h_set: assessment.report.h_set.clone(),
+        };
+        self.state.composition_form_confirmation = Some(record.clone());
+        Ok(record)
+    }
+
     /// 用户确认（AI 提案/模板预填 → 计入完成度的唯一途径）。
     pub fn confirm_selection(&mut self, decision_id: &str) -> Adm4Result<()> {
         let selection = self
@@ -1037,6 +1118,29 @@ impl AuthoringEngine {
     /// 访谈状态可变访问（访谈记录不参与完成度/门禁判定，不影响 revision）。
     pub(crate) fn interview_mut(&mut self) -> &mut crate::state::InterviewState {
         &mut self.state.interview
+    }
+
+    /// core_loop 动词序列落盘（概念访谈确认时由用户手势触达；设计变更 bump revision）。
+    ///
+    /// 绑定实例的存在性由调用方（概念确认入口）校验——它掌握「提案 + 既有 refs」的
+    /// 全集，引擎只负责状态写入与 revision 语义。
+    pub fn set_core_loop(&mut self, core_loop: Vec<crate::state::CoreLoopVerb>) {
+        self.state.core_loop = core_loop;
+        self.state.bump_revision();
+    }
+
+    /// 访谈留痕追加（概念/组合访谈的提案与确认走这里进 transcript，R3 可溯源；
+    /// decision_id 用段落级锚如 `concept` / `composition`——不是决策点也留痕）。
+    pub fn append_interview_entry(&mut self, decision_id: &str, role: &str, content: &str) {
+        self.state
+            .interview
+            .transcript
+            .push(crate::state::InterviewEntry {
+                decision_id: decision_id.to_string(),
+                role: role.to_string(),
+                content: content.to_string(),
+                at: adm4_foundation::UtcTimestamp::now().to_iso8601(),
+            });
     }
 
     pub fn record_red_team(&mut self, record: crate::state::RedTeamRecord) {

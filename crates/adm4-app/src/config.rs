@@ -10,6 +10,13 @@ pub struct AppConfig {
     /// 设计空间根目录（相对 cwd 或绝对路径）。
     #[serde(default = "default_design_space_root")]
     pub design_space_root: String,
+    /// 系统模块库根目录（W7 3a：`<root>/<module_id>/module.json` 布局）。
+    ///
+    /// 仅在品类包声明了 `system_refs` 时才会被读取：旧包（无引用）的加载路径
+    /// 完全不碰该目录，行为与扩展前逐字节一致。与 `design_space_root` 同为
+    /// 进程期不变量（装配缓存锚在它上面），运行期改动需重启。
+    #[serde(default = "default_system_modules_root")]
+    pub system_modules_root: String,
     /// 激活的 AI Provider 配置（无则 AI 相关功能 blocked）。
     #[serde(default)]
     pub ai_provider: Option<HttpProviderConfig>,
@@ -40,11 +47,16 @@ fn default_design_space_root() -> String {
     "knowledge/design_space".into()
 }
 
+fn default_system_modules_root() -> String {
+    "knowledge/systems".into()
+}
+
 pub fn load_config(data_root: &DataRoot) -> Adm4Result<AppConfig> {
     let path = data_root.config_dir().join("app.json");
     if !path.is_file() {
         return Ok(AppConfig {
             design_space_root: default_design_space_root(),
+            system_modules_root: default_system_modules_root(),
             ai_provider: None,
             image_provider: None,
             engine_backend: None,

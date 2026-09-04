@@ -17,10 +17,10 @@ use adm4_app::{
 };
 use adm4_authoring::{AuthoringEngine, AuthoringState, InterviewProposal};
 use adm4_decision::{
-    AxisRef, DesignDomain, DesignLevel, OrganizationProgress, ParameterSchema, ParameterValues,
-    ParameterValues as Params, Provenance,
+    AxisRef, CoreLink, DesignDomain, DesignLevel, OrganizationProgress, ParameterSchema,
+    ParameterValues, ParameterValues as Params, Provenance, SystemModule,
 };
-use adm4_foundation::{Adm4Error, Adm4ErrorKind, Adm4Result, atomic_write};
+use adm4_foundation::{Adm4Error, Adm4ErrorKind, Adm4Result, atomic_write, read_json_file};
 use adm4_pipeline::{CancelSignal, PipelineRunner};
 use adm4_template::{CertificationStatus, Template};
 use slint::{Model, ModelRc, SharedString, VecModel};
@@ -118,6 +118,7 @@ fn main() -> Result<(), slint::PlatformError> {
     hook_ai_callbacks(&window, &services);
     hook_image_provider_callbacks(&window, &services);
     hook_style_callbacks(&window, &services, &state);
+    hook_system_callbacks(&window, &services, &state);
 
     // 运行期轮询：后端把 `StageStatus::Running` 与各段起止时刻写进 run_state.json，
     // 不定期回读的话，「运行中」与逐段耗时要等整轮跑完才看得见（等于没有进度）。
@@ -458,6 +459,9 @@ fn hook_project_callbacks(
                 window.set_compare_rows(ModelRc::new(VecModel::from(Vec::<CompareRow>::new())));
                 window.set_compare_title(SharedString::default());
                 window.set_archive_panel_open(false);
+                // 上一个项目的系统组合面板内容不能跨项目显示（关面板 + 清数据）。
+                window.set_system_panel_open(false);
+                clear_system(&window);
                 // 上一个项目的流水线/重置/另存回执不能跟着跨项目显示。
                 window.set_artifact_stage(SharedString::default());
                 window.set_artifact_title(SharedString::default());
@@ -3270,6 +3274,14 @@ fn refresh_decision_panel(
             schema_label = format!("标量字段 {} 个（JSON 编辑）", fields.len());
         }
         ParameterSchema::None => {}
+        // W7 §5.4 机械新增臂（T-W7-3a 编译豁免申报）：Graph/Curve 值以标量
+        // `graph`/`curve` 键装 JSON 文本，桌面端走既有 JSON 编辑通路（零行为改动）。
+        ParameterSchema::Graph(_) => {
+            schema_label = "图结构参数（标量 graph 键装 JSON，JSON 编辑）".to_string();
+        }
+        ParameterSchema::Curve(_) => {
+            schema_label = "曲线参数（标量 curve 键装 JSON，JSON 编辑）".to_string();
+        }
     }
     window.set_focused_option_text(SharedString::from(format!(
         "参数编辑目标：{option_id} · {schema_label}"
@@ -3864,4 +3876,200 @@ fn apply_image_provider_form(window: &MainWindow, form: view::ImageProviderForm)
     window.set_image_key_ref(SharedString::from(form.api_key_ref));
     window.set_image_size(SharedString::from(form.size));
     window.set_image_timeout(SharedString::from(form.timeout_secs));
+}
+
+// ---------------------------------------------------------------------------
+// 系统组合面板（W7 3e）：系统实例/档位、私有模块、组合校验、|H| 署名形态确认
+// ---------------------------------------------------------------------------
+
+/// 系统组合面板回调：刷新 + 署名形态确认（档位选择不在这里——面板行点击
+/// 直接走既有 `select-decision` 通道，tier 合成点就是普通 L3 单选点）。
+fn hook_system_callbacks(
+    window: &MainWindow,
+    services: &Arc<AppServices>,
+    state: &Rc<RefCell<UiState>>,
+) {
+    let weak = window.as_weak();
+
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_system_refresh(move || {
+            if let Some(window) = weak.upgrade() {
+                refresh_system(&window, &services, &state);
+            }
+        });
+    }
+    // 署名形态确认（用户手势，D11）：署名必填、未被要求时拒签均由后端判定，
+    // UI 只转发并展示拒绝原因；成功后即刻重取报告（确认卡消失、留痕出现）。
+    {
+        let services = services.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        window.on_system_confirm_form(move |signer, note| {
+            if let Some(window) = weak.upgrade() {
+                let Some(archive) = state.borrow().current_archive.clone() else {
+                    report::<String>(
+                        &window,
+                        Err(Adm4Error::invalid_input("请先在存档管理载入项目")),
+                    );
+                    return;
+                };
+                let result = services
+                    .compose_confirm_form(&archive, signer.as_str(), note.as_str())
+                    .map(|record| {
+                        format!(
+                            "形态确认已署名：|H|={}（{}）由 {} 确认；重核集合变化后自动失效需重签",
+                            record.h_set.len(),
+                            record.h_set.join("、"),
+                            record.signer
+                        )
+                    });
+                refresh_system(&window, &services, &state);
+                report(&window, result);
+            }
+        });
+    }
+}
+
+/// 刷新系统组合面板：实例清单（生效空间）+ 私有模块 + 组合校验报告 + 确认流状态。
+///
+/// 模块档位标定（W 分/档带）不经 services 暴露（引擎模块表是私有实现），
+/// 展示层按 `system_modules_root` 直接读库内 module.json——读不到时降级标注
+/// 「模块数据不可读」不拦渲染：权威校验在空间装配层已跑过，这里是纯展示。
+fn refresh_system(window: &MainWindow, services: &AppServices, state: &Rc<RefCell<UiState>>) {
+    let Some(archive) = state.borrow().current_archive.clone() else {
+        clear_system(window);
+        window.set_system_summary(SharedString::from(
+            "尚未打开项目：请先在「存档管理」载入项目，再查看系统组合。",
+        ));
+        return;
+    };
+    let data = match load_system_data(services, &archive) {
+        Ok(data) => data,
+        Err(error) => {
+            clear_system(window);
+            report::<String>(window, Err(error));
+            return;
+        }
+    };
+    window.set_system_summary(SharedString::from(view::system_panel_summary(
+        &data.facts,
+        data.private_records.len(),
+        data.assessment.as_ref(),
+    )));
+    window.set_system_instance_rows(ModelRc::new(VecModel::from(view::system_instance_rows(
+        &data.facts,
+    ))));
+    window.set_system_module_rows(ModelRc::new(VecModel::from(view::system_module_rows(
+        &data.private_records,
+    ))));
+    window.set_system_report_rows(ModelRc::new(VecModel::from(view::system_report_rows(
+        data.assessment.as_ref(),
+    ))));
+    match &data.assessment {
+        Some(assessment) => {
+            window.set_system_confirm_required(assessment.report.form_confirmation_required);
+            window.set_system_confirm_text(SharedString::from(
+                if assessment.report.form_confirmation_required {
+                    view::system_confirm_text(assessment, &data.facts)
+                } else {
+                    String::new()
+                },
+            ));
+            window.set_system_confirmed_text(SharedString::from(view::system_confirmed_text(
+                assessment.confirmation.as_ref(),
+            )));
+        }
+        None => {
+            window.set_system_confirm_required(false);
+            window.set_system_confirm_text(SharedString::default());
+            window.set_system_confirmed_text(SharedString::default());
+        }
+    }
+}
+
+/// 一轮系统组合数据（全部来自 AppServices 的只读查询 + 模块库文件的展示性读取）。
+struct SystemPanelData {
+    facts: Vec<view::SystemInstanceFacts>,
+    private_records: Vec<adm4_app::ProjectSystemModule>,
+    assessment: Option<adm4_authoring::CompositionAssessment>,
+}
+
+fn load_system_data(services: &AppServices, archive: &str) -> Adm4Result<SystemPanelData> {
+    let project = services.load_authoring_state(archive)?;
+    let space = services.load_space_shared(&project.genre_pack)?;
+    let private_records = services.system_module_list(archive)?;
+    let assessment = services.composition_report(archive)?;
+
+    // 实例清单：pack 空间实例 + 私有模块实例（私有实例不在 pack 缓存空间里——
+    // 生效空间的私有装配产物由后端各查询内部使用，这里补上清单行即可）。
+    let mut instances: Vec<(String, String, String)> = space
+        .system_instances
+        .iter()
+        .map(|info| {
+            (
+                info.instance_id.clone(),
+                info.module_id.clone(),
+                info.semver.clone(),
+            )
+        })
+        .collect();
+    let mut core_links: std::collections::BTreeMap<String, CoreLink> = space
+        .pack
+        .system_refs
+        .iter()
+        .map(|system_ref| (system_ref.instance_id.clone(), system_ref.core_link))
+        .collect();
+    let mut modules: std::collections::BTreeMap<String, SystemModule> =
+        std::collections::BTreeMap::new();
+    let mut private_instances: std::collections::BTreeSet<String> =
+        std::collections::BTreeSet::new();
+    for record in &private_records {
+        instances.push((
+            record.instance.instance_id.clone(),
+            record.module.module_id.clone(),
+            record.module.semver.clone(),
+        ));
+        core_links.insert(
+            record.instance.instance_id.clone(),
+            record.instance.core_link,
+        );
+        modules.insert(record.module.module_id.clone(), record.module.clone());
+        private_instances.insert(record.instance.instance_id.clone());
+    }
+    // 库内模块标定：按需逐个读（只读引用到的模块，不扫全库）；坏文件降级不拦渲染。
+    let modules_root = PathBuf::from(services.system_modules_root());
+    for (_, module_id, _) in &instances {
+        if modules.contains_key(module_id) {
+            continue;
+        }
+        let manifest = modules_root.join(module_id).join("module.json");
+        if let Ok(module) = read_json_file::<SystemModule>(&manifest) {
+            modules.insert(module_id.clone(), module);
+        }
+    }
+    let facts = view::system_instance_facts(
+        &instances,
+        &core_links,
+        &modules,
+        &project.selections,
+        &private_instances,
+    );
+    Ok(SystemPanelData {
+        facts,
+        private_records,
+        assessment,
+    })
+}
+
+fn clear_system(window: &MainWindow) {
+    window.set_system_instance_rows(ModelRc::new(VecModel::<TextRow>::from(Vec::new())));
+    window.set_system_module_rows(ModelRc::new(VecModel::<TextRow>::from(Vec::new())));
+    window.set_system_report_rows(ModelRc::new(VecModel::<TextRow>::from(Vec::new())));
+    window.set_system_confirm_required(false);
+    window.set_system_confirm_text(SharedString::default());
+    window.set_system_confirmed_text(SharedString::default());
+    window.set_system_summary(SharedString::default());
 }

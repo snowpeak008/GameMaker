@@ -241,6 +241,20 @@ export component MainWindow inherits Window {
     in property <[DeliverRow]> deliver-rows: [];
     in property <string> deliver-summary: "尚未打开项目";
 
+    // ---------------- 系统组合（W7：系统模块 / 档位 / 组合校验 / 署名形态确认）----------------
+    // 全部数据由 Rust 侧从 AppServices 聚合（D14）：档位选择不在本面板落值——实例行
+    // 点击即跳中栏该实例的 tier 合成点（普通 L3 单选点，走既有 select+confirm 通道）。
+    in-out property <bool> system-panel-open: false;
+    in property <string> system-summary: "";
+    in property <[TextRow]> system-instance-rows: [];
+    in property <[TextRow]> system-module-rows: [];
+    in property <[TextRow]> system-report-rows: [];
+    // |H| 超参考线的一次性署名形态确认：required 时出确认卡（署名必填由后端判，
+    // 确认必须是用户点击——AI/自动流程永不触发 system-confirm-form）。
+    in property <bool> system-confirm-required: false;
+    in property <string> system-confirm-text: "";
+    in property <string> system-confirmed-text: "";
+
     // ---------------- 回调 ----------------
     callback refresh-projects();
     callback create-project(string, string, string);
@@ -307,6 +321,11 @@ export component MainWindow inherits Window {
     callback style-regenerate(string, string);        // 方向 id, 新提示词
     callback style-clear-prompt(string);              // 回到锚定真源的派生提示词
     callback style-confirm(string, string, string);   // 方向 id, 署名, 结论
+
+    // 系统组合：刷新（开面板/署名后重取）+ 署名形态确认（用户手势）。
+    // 档位跳转不设新回调：面板行点击关面板后直接走既有 select-decision 通道。
+    callback system-refresh();
+    callback system-confirm-form(string, string); // 署名, 说明
 
     // 另存模板 / 工作台重置 / 存档体检
     callback template-export(string, string, string, string, string); // id, 模板名, 别名, 审核人, 审核结论
@@ -481,6 +500,7 @@ export component MainWindow inherits Window {
                             clicked => {
                                 root.archive-panel-open = !root.archive-panel-open;
                                 root.template-panel-open = false;
+                                root.system-panel-open = false;
                                 root.refresh-projects();
                             }
                         }
@@ -490,7 +510,18 @@ export component MainWindow inherits Window {
                             clicked => {
                                 root.template-panel-open = !root.template-panel-open;
                                 root.archive-panel-open = false;
+                                root.system-panel-open = false;
                                 root.reverse-refresh();
+                            }
+                        }
+                        Button {
+                            text: root.system-panel-open ? "关闭系统组合" : "系统组合";
+                            width: 108px;
+                            clicked => {
+                                root.system-panel-open = !root.system-panel-open;
+                                root.archive-panel-open = false;
+                                root.template-panel-open = false;
+                                if (root.system-panel-open) { root.system-refresh(); }
                             }
                         }
                         Button {
@@ -2864,6 +2895,250 @@ export component MainWindow inherits Window {
                                             color: #6e7781;
                                             overflow: elide;
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 覆盖面板三：系统组合（W7）——系统实例/档位、私有模块、组合校验、署名形态确认
+            //
+            // 全窗覆盖而不是塞右栏：实例清单 + 组合报告 + 确认卡三块内容 348px 放不下。
+            // 档位选择不在本面板落值：实例行/缺档待办点击 → 关面板跳中栏 tier 合成点
+            // （普通 L3 单选点，走既有 select+confirm 通道，零新机制）。
+            // 组合校验语义（定稿 §4.2(c)）：红 = 硬违例拦冻结；黄 = 提示义务，不是禁止。
+            // -----------------------------------------------------------------
+            if root.active-view == "design" && root.system-panel-open: Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: parent.height - 24px;
+                background: #ffffff;
+                border-color: #54aeff;
+                border-width: 2px;
+                border-radius: 8px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        height: 30px;
+                        spacing: 8px;
+                        Text {
+                            text: "系统组合（模块实例 · 重度档位 · 组合校验 · |H| 形态确认）";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #1f2328;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Button { text: "刷新"; width: 76px; clicked => { root.system-refresh(); } }
+                        Button { text: "关闭"; width: 76px; clicked => { root.system-panel-open = false; } }
+                    }
+                    Text {
+                        text: root.system-summary;
+                        height: 40px;
+                        font-size: 11px;
+                        color: #57606a;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 10px;
+
+                        // 左：系统实例清单（点击跳档位点）+ 私有模块只读清单
+                        VerticalLayout {
+                            width: 46%;
+                            spacing: 6px;
+                            Text {
+                                text: "系统实例（点击行前往该实例的档位合成点）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                            }
+                            ListView {
+                                vertical-stretch: 3;
+                                for row in root.system-instance-rows: Rectangle {
+                                    height: row.kind == "header" ? 28px : 56px;
+                                    background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                    border-color: #eaeef2;
+                                    border-width: row.kind == "header" ? 0px : 1px;
+                                    if row.target != "": TouchArea {
+                                        clicked => {
+                                            root.system-panel-open = false;
+                                            root.select-decision(row.target);
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: row.kind == "bad"
+                                                ? #cf222e
+                                                : (row.kind == "ok" ? #1a7f37 : #57606a);
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "项目私有模块（只读清单；登记走后端校验通道）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                            }
+                            ListView {
+                                vertical-stretch: 2;
+                                for row in root.system-module-rows: Rectangle {
+                                    height: row.kind == "header" ? 28px : 56px;
+                                    background: row.kind == "header" ? #f6f8fa : #ffffff;
+                                    border-color: #eaeef2;
+                                    border-width: row.kind == "header" ? 0px : 1px;
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: #1f2328;
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: #57606a;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 右：组合校验报告（红拦/黄提示）+ 署名形态确认流
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text {
+                                text: "组合校验（红 = 硬违例，冻结门第 2 道拦截；黄 = 提示义务，不拦冻结）";
+                                height: 20px;
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #1f2328;
+                                overflow: elide;
+                            }
+                            ListView {
+                                vertical-stretch: 1;
+                                for row in root.system-report-rows: Rectangle {
+                                    height: row.kind == "header" ? 28px : 60px;
+                                    background: row.kind == "header"
+                                        ? #f6f8fa
+                                        : (row.kind == "bad"
+                                            ? #fff5f5
+                                            : (row.kind == "warn" ? #fff8c5 : #ffffff));
+                                    border-color: #eaeef2;
+                                    border-width: row.kind == "header" ? 0px : 1px;
+                                    if row.target != "": TouchArea {
+                                        clicked => {
+                                            root.system-panel-open = false;
+                                            root.select-decision(row.target);
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        padding: 4px;
+                                        spacing: 1px;
+                                        Text {
+                                            text: row.title;
+                                            font-size: row.kind == "header" ? 12px : 11px;
+                                            font-weight: row.kind == "header" ? 700 : 400;
+                                            color: row.kind == "bad"
+                                                ? #cf222e
+                                                : (row.kind == "warn"
+                                                    ? #9a6700
+                                                    : (row.kind == "ok" ? #1a7f37 : #1f2328));
+                                            overflow: elide;
+                                        }
+                                        if row.kind != "header": Text {
+                                            text: row.text;
+                                            font-size: 10px;
+                                            color: row.kind == "bad"
+                                                ? #cf222e
+                                                : (row.kind == "warn" ? #9a6700 : #57606a);
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // |H| 超参考线的一次性署名形态确认卡（仅后端要求时出现；
+                            // 确认必须是用户点击，无任何自动署名路径）。
+                            if root.system-confirm-required: Rectangle {
+                                height: 148px;
+                                background: #fff8c5;
+                                border-color: #d4a72c;
+                                border-width: 1px;
+                                border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 4px;
+                                    Text {
+                                        text: root.system-confirm-text;
+                                        vertical-stretch: 1;
+                                        font-size: 11px;
+                                        color: #7d4e00;
+                                        wrap: word-wrap;
+                                    }
+                                    HorizontalLayout {
+                                        height: 28px;
+                                        spacing: 6px;
+                                        system-signer := LineEdit {
+                                            placeholder-text: "署名（必填）";
+                                            width: 160px;
+                                        }
+                                        system-note := LineEdit {
+                                            placeholder-text: "确认说明（可选，如对标游戏）";
+                                            horizontal-stretch: 1;
+                                        }
+                                        Button {
+                                            text: "署名确认形态";
+                                            width: 118px;
+                                            primary: true;
+                                            clicked => {
+                                                root.system-confirm-form(system-signer.text, system-note.text);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.system-confirmed-text != "": Rectangle {
+                                height: 56px;
+                                background: #eaf5ea;
+                                border-color: #1a7f37;
+                                border-width: 1px;
+                                border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 8px;
+                                    Text {
+                                        text: root.system-confirmed-text;
+                                        font-size: 11px;
+                                        color: #1a7f37;
+                                        wrap: word-wrap;
                                     }
                                 }
                             }

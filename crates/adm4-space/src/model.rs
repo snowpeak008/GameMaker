@@ -1,4 +1,5 @@
 use adm4_contracts::CardinalityRange;
+use adm4_decision::system_module::CoreLink;
 use adm4_decision::{
     DecisionGraph, DecisionId, DecisionPoint, DesignDomain, DesignNode, DesignOrganization,
     GenrePackId, RowReference,
@@ -79,6 +80,29 @@ pub struct UniversalLayer {
     pub nodes: Vec<DesignNode>,
 }
 
+/// 品类包对系统模块的引用 + 绑定（W7 定稿 §2.5：引用不复制）。
+///
+/// 一条 SystemRef = 一个系统实例：同一模块可多实例（主武器装备 + 时装装备），
+/// 实例 id 是命名空间锚——模块决策点按 `<instance_id>.` 前缀重写并入决策图。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SystemRef {
+    /// 实例 id（本包内唯一；决策点重写前缀与 tier 合成点 `<instance_id>.tier` 的锚）。
+    pub instance_id: String,
+    /// 引用的模块 id（`knowledge/systems/<module_id>/module.json`）。
+    pub module_id: String,
+    /// semver 版本要求（手写匹配，零第三方依赖）：空 = 任意；
+    /// 精确（`1.2.0`）= 相等；`^1.2.0` = 同主版本且 ≥ 基准。
+    pub version_req: String,
+    /// 允许的档位 id（空 = 模块全部档位可选）。tier 合成点每允许档一个选项。
+    pub allowed_tiers: Vec<String>,
+    /// 名词绑定（V6）：consumes∪modifies 的每个名词 → 绑定目标。
+    /// 目标 = pack 核心名词，或 `<提供方实例>.<名词>`（该实例模块 provides 该名词）。
+    pub noun_bindings: BTreeMap<String, String>,
+    /// 与核心循环的关联强度 κ 声明（R-C2 预算权重）。
+    pub core_link: CoreLink,
+}
+
 /// 品类包。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,6 +132,12 @@ pub struct GenrePack {
     #[serde(default)]
     pub nodes: Vec<DesignNode>,
     pub decision_points: Vec<DecisionPoint>,
+    /// 系统模块引用（W7 §2.5）；旧包没有该键 → 空清单，加载行为与扩展前逐字节一致。
+    #[serde(default)]
+    pub system_refs: Vec<SystemRef>,
+    /// pack 核心名词（V6 绑定目标的合法集合之一）；旧包缺键 → 空清单零影响。
+    #[serde(default)]
+    pub core_nouns: Vec<String>,
 }
 
 impl GenrePack {
@@ -120,6 +150,16 @@ impl GenrePack {
     }
 }
 
+/// 已实例化系统模块的运行时信息（非 serde：DesignSpace 是内存装配产物不落盘）。
+///
+/// 冻结哈希的 `module_versions` 键与复演时的版本比对都以它为源。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SystemInstanceInfo {
+    pub instance_id: String,
+    pub module_id: String,
+    pub semver: String,
+}
+
 /// 装配后的设计空间：通用层 + 一个品类包 → 一张决策图 + 一套领域/节点组织。
 #[derive(Debug, Clone)]
 pub struct DesignSpace {
@@ -128,6 +168,8 @@ pub struct DesignSpace {
     pub graph: DecisionGraph,
     /// 横向组织维度（领域 → 节点 → 决策点），含内置保留领域「未分域」。
     pub organization: DesignOrganization,
+    /// 已实例化的系统模块（W7 3a；无 system_refs 的旧包恒为空）。
+    pub system_instances: Vec<SystemInstanceInfo>,
 }
 
 impl DesignSpace {

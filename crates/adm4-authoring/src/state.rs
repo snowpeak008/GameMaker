@@ -83,6 +83,38 @@ pub struct NaSignoff {
     pub at: String,
 }
 
+/// |H| 超参考线的一次性署名形态确认（W7 定稿 §4.2(c)，用户 2026-09-03 改制）。
+///
+/// R3 留痕：署名 + 时间戳 + **确认当时的 h_set 快照**。快照是失效判据——
+/// 重核集合变化（新增/更换重核）意味着用户确认的不再是眼前这个形态，
+/// 确认自动失效重新要求（比对由 `compose::assess_composition` 做，状态层只存证）。
+/// 确认必须绑定用户手势（D11），AI 永不代签。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CompositionFormConfirmation {
+    /// 署名（人名/账号），非空。
+    pub signer: String,
+    /// 确认说明（用户对"我知道并接受这是 |H|=N 的超大玩法"的补充，可为空）。
+    pub note: String,
+    /// 确认时间（ISO8601）。
+    pub at: String,
+    /// 确认当时的重核集合（实例 id，字典序）——失效比对的唯一依据。
+    pub h_set: Vec<String>,
+}
+
+/// core_loop 动词序列的一项：动词 + 绑定的系统实例（W7 §9.2b 概念访谈落盘产物）。
+///
+/// 绑定实例是 κ 推导（`derive_core_link` 的 core 分支）与组合校验
+/// `CompositionInput.core_loop_verbs` 的数据源——3b 遗留 ① 的回填载体。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CoreLoopVerb {
+    /// 动词（中文短语，如「拾取」「合成」）。
+    pub verb: String,
+    /// 绑定的系统实例 id（组合内实例；概念访谈确认时校验存在性）。
+    pub instance_id: String,
+}
+
 /// 设计期唯一权威状态。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuthoringState {
@@ -117,6 +149,14 @@ pub struct AuthoringState {
     /// 旧存档没有该键（`serde(default)` → 空 map），行为与扩展前逐字节一致（I2）。
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub custom_mechanics: BTreeMap<DecisionId, CustomMechanicRecord>,
+    /// |H| 超参考线的署名形态确认（R3 留痕；见 [`CompositionFormConfirmation`]）。
+    /// 旧存档没有该键（`serde(default)` → None）；None 时不序列化，旧档零漂移（I2）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition_form_confirmation: Option<CompositionFormConfirmation>,
+    /// core_loop 动词序列（概念访谈确认落盘；空 = 未做概念访谈，旧档零漂移 I2）。
+    /// 组合校验的 `CompositionInput.core_loop_verbs` 从这里取值（3b 遗留 ① 回填）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub core_loop: Vec<CoreLoopVerb>,
     #[serde(default)]
     pub template_mode: TemplateMode,
     #[serde(default)]
@@ -148,6 +188,8 @@ impl AuthoringState {
             node_risk_notes: BTreeMap::new(),
             interview: InterviewState::default(),
             custom_mechanics: BTreeMap::new(),
+            composition_form_confirmation: None,
+            core_loop: Vec::new(),
             template_mode: TemplateMode::None,
             red_team: None,
             revision: 0,

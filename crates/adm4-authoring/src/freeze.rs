@@ -1,3 +1,4 @@
+use crate::compose::composition_finding_code;
 use crate::engine::AuthoringEngine;
 use crate::state::{Finding, RedTeamRecord};
 use adm4_ai::{AiProvider, AiRequest};
@@ -9,6 +10,7 @@ use adm4_decision::{
 use adm4_foundation::{Adm4Error, Adm4Result, ContentHash, UtcTimestamp, sha256_hex};
 use adm4_space::ConsistencyRuleKind;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// 红队发现的合法严重度枚举；缺失或超出枚举一律拒收（不得默认降级为 warning）。
 const FINDING_SEVERITIES: [&str; 2] = ["blocker", "warning"];
@@ -68,6 +70,13 @@ pub struct FrozenDesign {
     /// 旧存档没有该字段（`serde(default)` → None），此时 C1 退化为单份证明校验。
     #[serde(default)]
     pub red_team_proof: Option<ReviewProof>,
+    /// 冻结当时生效的系统模块版本表（W7 3a：`module_id → semver`）。
+    ///
+    /// 进冻结哈希（条件键，见 `execute_freeze`）：同选择不同模块版本 = 不同语义，
+    /// 复演时 `frozen_space` 比对当前加载模块版本，不符即 Err（fail-closed）。
+    /// 无模块项目该表为空：不序列化该键，旧档与产物逐字节零漂移。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub module_versions: BTreeMap<String, String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -330,9 +339,86 @@ pub fn evaluate_freeze_gates(engine: &AuthoringEngine, scanner: &SkinScanner) ->
             }
         }
     }
+    // 组合校验合流（W7 定稿 §4.5 裁决 5：并入 gate2，不新增第 5 道门）。
+    // 无 system_refs 的项目 `composition_assessment` 返回 Ok(None)，本段零变化
+    // （旧项目 gate 报告逐字节不变——负测试锁定）。
+    let mut composition_advisories: Vec<GateFinding> = Vec::new();
+    match engine.composition_assessment() {
+        // 有引用但组合校验跑不起来（模块表未注入等）：fail-closed 记 block，
+        // 静默跳过会把结构缺陷报成"零违例"。
+        Err(error) => gate2_findings.push(GateFinding {
+            code: "composition_unavailable".into(),
+            message: error.message,
+        }),
+        Ok(None) => {}
+        Ok(Some(assessment)) => {
+            // 前提数据缺口：tier 未选择的实例逐条 block（R2 宁缺勿造，不默认档兜底）。
+            for missing in &assessment.missing_tiers {
+                gate2_findings.push(GateFinding {
+                    code: "composition_tier_unselected".into(),
+                    message: missing.detail.clone(),
+                });
+            }
+            // 硬违例（R-C1′(a)(b)/V1/V2/V4/V6）：不可豁免，即使已署名形态确认。
+            for finding in &assessment.report.blocks {
+                gate2_findings.push(GateFinding {
+                    code: format!("composition.{}", composition_finding_code(finding.code)),
+                    message: format!("{}：{}", finding.subject, finding.detail),
+                });
+            }
+            // 提示级（|H| 参考线 / 预算 / 双连通守卫）：警告不拦冻结，
+            // 在通过判定之后 append（gate1 的 N/A 可见性条目同一手法）。
+            for finding in &assessment.report.advices {
+                composition_advisories.push(GateFinding {
+                    code: format!(
+                        "composition_advice.{}",
+                        composition_finding_code(finding.code)
+                    ),
+                    message: format!("{}：{}", finding.subject, finding.detail),
+                });
+            }
+            if assessment.report.form_confirmation_required {
+                composition_advisories.push(GateFinding {
+                    code: "composition_form_confirmation_required".into(),
+                    message: format!(
+                        "{}重核集合 |H|={}（{}）超过产品档参考线，需一次性署名形态确认\
+                         （compose confirm-form --signer <署名>；确认是用户手势，AI 永不代签；\
+                         提示义务不拦冻结）",
+                        if assessment.confirmation_stale {
+                            "此前的署名确认因重核集合变化已失效——"
+                        } else {
+                            ""
+                        },
+                        assessment.report.h_set.len(),
+                        assessment.report.h_set.join("、")
+                    ),
+                });
+            }
+            // 生效确认的可见性条目（R3：谁在什么时候接受了什么形态，门报告里看得见）。
+            if let Some(confirmation) = &assessment.confirmation {
+                composition_advisories.push(GateFinding {
+                    code: "composition_form_confirmed".into(),
+                    message: format!(
+                        "|H|={} 超大玩法形态已由 {} 于 {} 署名确认（重核：{}）{}",
+                        confirmation.h_set.len(),
+                        confirmation.signer,
+                        confirmation.at,
+                        confirmation.h_set.join("、"),
+                        if confirmation.note.is_empty() {
+                            String::new()
+                        } else {
+                            format!("：{}", confirmation.note)
+                        }
+                    ),
+                });
+            }
+        }
+    }
+    let gate2_passed = gate2_findings.is_empty();
+    gate2_findings.append(&mut composition_advisories);
     gates.push(GateResult {
         gate: "gate2_consistency".into(),
-        passed: gate2_findings.is_empty(),
+        passed: gate2_passed,
         findings: gate2_findings,
     });
 
@@ -538,26 +624,41 @@ pub fn execute_freeze(
     // 流水线运行前据此增广设计空间——pipeline crate 因此零改动、零特殊分支。
     // 无 custom 时哈希载荷不带该键，产物与扩展前逐字节一致（金样零漂移）。
     let custom_points = engine.custom_points();
-    let payload = if custom_points.is_empty() {
-        serde_json::json!({
-            "project_name": state.project_name,
-            "decisions": decisions,
-            "not_applicable": not_applicable,
-            "genre_pack": state.genre_pack,
-            "pack_version": state.pack_version,
-            "depth_profile": state.depth_profile,
-        })
-    } else {
-        serde_json::json!({
-            "project_name": state.project_name,
-            "decisions": decisions,
-            "not_applicable": not_applicable,
-            "genre_pack": state.genre_pack,
-            "pack_version": state.pack_version,
-            "depth_profile": state.depth_profile,
-            "custom_points": custom_points,
-        })
-    };
+    // 系统模块版本表（W7 3a）：同一模块多实例只登记一次（module_id → semver 是
+    // 单值映射；同 id 模块在加载器层保证全局唯一版本）。条件键与 custom_points
+    // 同一纪律：无模块实例时不进 payload，冻结哈希与扩展前逐字节一致（金样零漂移）。
+    let module_versions: BTreeMap<String, String> = engine
+        .space()
+        .system_instances
+        .iter()
+        .map(|instance| (instance.module_id.clone(), instance.semver.clone()))
+        .collect();
+    let mut payload = serde_json::json!({
+        "project_name": state.project_name,
+        "decisions": decisions,
+        "not_applicable": not_applicable,
+        "genre_pack": state.genre_pack,
+        "pack_version": state.pack_version,
+        "depth_profile": state.depth_profile,
+    });
+    if let Some(object) = payload.as_object_mut() {
+        if !custom_points.is_empty() {
+            object.insert(
+                "custom_points".into(),
+                serde_json::to_value(&custom_points).map_err(|error| {
+                    Adm4Error::internal(format!("serialize custom_points failed: {error}"))
+                })?,
+            );
+        }
+        if !module_versions.is_empty() {
+            object.insert(
+                "module_versions".into(),
+                serde_json::to_value(&module_versions).map_err(|error| {
+                    Adm4Error::internal(format!("serialize module_versions failed: {error}"))
+                })?,
+            );
+        }
+    }
     let content_hash = ContentHash::of_canonical_json(&payload)?.0;
     let red_team_proof = state.red_team.as_ref().map(|record| record.proof.clone());
     let frozen = FrozenDesign {
@@ -572,6 +673,7 @@ pub fn execute_freeze(
         frozen_at: UtcTimestamp::now().to_iso8601(),
         gate_report: report,
         red_team_proof,
+        module_versions,
     };
     engine.mark_frozen();
     Ok(frozen)

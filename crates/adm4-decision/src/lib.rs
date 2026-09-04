@@ -38,8 +38,9 @@ pub use system_module::{
     PromptLibrary, SystemInterface, SystemModule, TierId,
 };
 pub use types::{
-    AxisRef, DecisionId, DecisionOption, DecisionPoint, DepthProfile, DesignLevel, DomainId,
-    GenrePackId, GenreScope, MatrixSchema, MdaLayer, NaJustification, NodeId, OptionId,
-    OptionSelector, ParamPath, ParameterSchema, ParameterValues, PointRequirement, Provenance,
-    ScalarField, SelectedOption, SelectedOptionRef, Selection, SelectionMode, TableSchema,
+    AxisRef, CurveSchema, DecisionId, DecisionOption, DecisionPoint, DepthProfile, DesignLevel,
+    DomainId, GenrePackId, GenreScope, GraphEntryConstraint, GraphSchema, MatrixSchema, MdaLayer,
+    NaJustification, NodeId, OptionId, OptionSelector, ParamPath, ParameterSchema, ParameterValues,
+    PointRequirement, Provenance, ScalarField, SelectedOption, SelectedOptionRef, Selection,
+    SelectionMode, TableSchema, validate_graph_value,
 };

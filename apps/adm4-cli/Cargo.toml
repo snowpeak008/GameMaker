@@ -13,6 +13,7 @@ adm4-app = { workspace = true }
 adm4-ai = { workspace = true }
 adm4-authoring = { workspace = true }
 adm4-template = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]

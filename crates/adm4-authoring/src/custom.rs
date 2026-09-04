@@ -282,6 +282,7 @@ pub fn augment_space_with_points(
             Adm4Error::validation(format!("custom 决策点并入设计空间失败：{}", error.message))
         })?,
         organization: base.organization.clone(),
+        system_instances: base.system_instances.clone(),
     })
 }
 
@@ -382,9 +383,12 @@ mod tests {
                 consistency_rules: Vec::new(),
                 nodes: Vec::new(),
                 decision_points: Vec::new(),
+                system_refs: Vec::new(),
+                core_nouns: Vec::new(),
             },
             graph: DecisionGraph::new(vec![host_point()]).expect("测试图装配失败"),
             organization: Default::default(),
+            system_instances: Vec::new(),
         };
         let mut selections = BTreeMap::new();
 

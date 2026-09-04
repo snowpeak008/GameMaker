@@ -7,12 +7,24 @@ use std::sync::Mutex;
 /// 确定性脚本 Provider：按 purpose 回放固定应答。测试/离线演示用，杜绝测试依赖真实网络。
 pub struct ScriptedProvider {
     responses: Mutex<BTreeMap<String, Vec<String>>>,
+    /// 已收到的请求（按序）：供测试断言「调用方到底发了什么提示词」——
+    /// 机制访谈的弹药注入（PromptLibrary 问句进 user_prompt）靠它做可断言性。
+    calls: Mutex<Vec<AiRequest>>,
 }
 
 impl ScriptedProvider {
     pub fn new() -> Self {
         Self {
             responses: Mutex::new(BTreeMap::new()),
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// 已收到的请求（克隆快照，按调用序）。
+    pub fn calls(&self) -> Vec<AiRequest> {
+        match self.calls.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
         }
     }
 
@@ -49,6 +61,13 @@ impl AiProvider for ScriptedProvider {
     }
 
     fn invoke(&self, request: &AiRequest) -> Adm4Result<AiResponse> {
+        {
+            let mut calls = match self.calls.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            calls.push(request.clone());
+        }
         let mut guard = self.responses.lock().map_err(|_| {
             Adm4Error::internal(
                 "脚本 Provider 的应答队列锁已中毒（此前有线程 panic），无法回放应答",

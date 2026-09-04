@@ -67,6 +67,8 @@ fn engine() -> AuthoringEngine {
             consistency_rules: Vec::new(),
             nodes: Vec::new(),
             decision_points: Vec::new(),
+            system_refs: Vec::new(),
+            core_nouns: Vec::new(),
         },
         graph: match DecisionGraph::new(vec![
             point("u.vision", DesignLevel::L0, Some("vision")),
@@ -76,6 +78,7 @@ fn engine() -> AuthoringEngine {
             Err(error) => panic!("测试图构造失败：{}", error.message),
         },
         organization,
+        system_instances: Vec::new(),
     };
     let state = AuthoringState::new(
         "豁免项目",

@@ -208,6 +208,7 @@ dependencies = [
  "adm4-foundation",
  "adm4-pipeline",
  "adm4-template",
+ "serde",
  "serde_json",
 ]
 

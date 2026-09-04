@@ -175,6 +175,54 @@ pub struct MatrixSchema {
     pub cardinality_key: String,
 }
 
+/// 图入口约束（W7 定稿 §5.4）。
+///
+/// 决策侧自有枚举而不引用 `adm4-spec::GraphEntry`：decision 是 spec 的上游，
+/// 反向依赖会成环。serde 形态与 spec 侧逐字一致（snake_case 单词 tag），
+/// C0 做确定性映射。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphEntryConstraint {
+    /// 入度 0 的节点恰好 1 个（天赋树根、肉鸽地图起点）。
+    Single,
+    /// 不限入口（对话 hub 图）。
+    #[default]
+    Multiple,
+}
+
+/// 图结构参数的 schema（W7 定稿 §5.4：节点/边负载复用 ScalarField 含 is_skin）。
+///
+/// `acyclic` 默认 **false**（定稿指令 10：对话/图类模块默认可回环，
+/// 仅天赋树/肉鸽地图类显式声明 true）。图值本身沿 Curve 先例以标量参数
+/// `graph` 键装 GraphSpec 形态的 JSON 文本（`ParameterValues` 零改动），
+/// C0 以本 schema 为真相覆盖 directed/acyclic/entry。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct GraphSchema {
+    /// 节点负载字段（required 字段缺失即校验问题；is_skin 供换皮门比对粒度）。
+    pub node_payload: Vec<ScalarField>,
+    /// 边负载字段。
+    pub edge_payload: Vec<ScalarField>,
+    pub directed: bool,
+    /// 默认 false（定稿指令 10）。
+    pub acyclic: bool,
+    pub entry: GraphEntryConstraint,
+    /// 节点数期望的基数键（空 = 不检查），对应品类包 cardinality_expectations。
+    pub cardinality_key: String,
+}
+
+/// 曲线参数的 schema（W7 定稿 §5.4）。
+///
+/// 曲线值沿波 1 先例以标量参数 `curve` 键装 CurveSpec JSON 文本，
+/// C0 编译成两列 Table + 插值注记（不加新 section）。schema 分支的意义是
+/// 让「这个选项收曲线」成为清单里的声明事实，而不再只靠 compiler_tags 约定。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CurveSchema {
+    /// 采样点数期望的基数键（空 = 不检查）。
+    pub cardinality_key: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(tag = "schema", rename_all = "snake_case")]
 pub enum ParameterSchema {
@@ -185,6 +233,132 @@ pub enum ParameterSchema {
     },
     Table(TableSchema),
     Matrix(MatrixSchema),
+    /// W7 §5.4：图结构参数（旧 tag 零改动，新 tag=graph）。
+    Graph(GraphSchema),
+    /// W7 §5.4：曲线参数（tag=curve）。
+    Curve(CurveSchema),
+}
+
+/// 图值（GraphSpec 形态 JSON）对 schema 的结构校验纯函数（W7 定稿 §5.4）。
+///
+/// 校验项：nodes/edges 形态、节点 id 唯一、边端点已声明、必填负载字段在场、
+/// `schema.acyclic=true` 时 Kahn 拓扑检查无环、`entry=Single` 时入度 0 节点恰 1。
+/// 返回问题清单（空 = 通过），供确认时（completeness）与 C0 前置拦截共用——
+/// I3 校验前置：非法图值在创作期就点名，不等冻结后的编译才爆。
+pub fn validate_graph_value(schema: &GraphSchema, value: &serde_json::Value) -> Vec<String> {
+    let mut problems = Vec::new();
+    let Some(root) = value.as_object() else {
+        return vec!["图值必须是 JSON 对象（GraphSpec 形态：nodes/edges）".to_string()];
+    };
+    let nodes = match root.get("nodes").and_then(|nodes| nodes.as_array()) {
+        Some(nodes) => nodes,
+        None => {
+            problems.push("图值缺少 nodes 数组".to_string());
+            return problems;
+        }
+    };
+    let mut node_ids: Vec<&str> = Vec::with_capacity(nodes.len());
+    for (index, node) in nodes.iter().enumerate() {
+        let Some(id) = node.get("id").and_then(|id| id.as_str()) else {
+            problems.push(format!("图节点第 {index} 项缺少字符串 id"));
+            continue;
+        };
+        if node_ids.contains(&id) {
+            problems.push(format!("图节点 id 重复：{id}"));
+        } else {
+            node_ids.push(id);
+        }
+        for field in &schema.node_payload {
+            if field.required
+                && node
+                    .get("payload")
+                    .and_then(|payload| payload.get(&field.key))
+                    .is_none()
+            {
+                problems.push(format!("图节点 {id} 缺少必填负载字段 {}", field.key));
+            }
+        }
+    }
+    let empty = Vec::new();
+    let edges = root
+        .get("edges")
+        .and_then(|edges| edges.as_array())
+        .unwrap_or(&empty);
+    let mut adjacency: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    let mut indegree: BTreeMap<&str, usize> = node_ids.iter().map(|id| (*id, 0usize)).collect();
+    for (index, edge) in edges.iter().enumerate() {
+        let from = edge.get("from").and_then(|from| from.as_str());
+        let to = edge.get("to").and_then(|to| to.as_str());
+        let (Some(from), Some(to)) = (from, to) else {
+            problems.push(format!("图边第 {index} 项缺少 from/to 字符串端点"));
+            continue;
+        };
+        for endpoint in [from, to] {
+            if !node_ids.contains(&endpoint) {
+                problems.push(format!(
+                    "图边 {from}→{to} 的端点 {endpoint} 未在 nodes 声明"
+                ));
+            }
+        }
+        for field in &schema.edge_payload {
+            if field.required
+                && edge
+                    .get("payload")
+                    .and_then(|payload| payload.get(&field.key))
+                    .is_none()
+            {
+                problems.push(format!("图边 {from}→{to} 缺少必填负载字段 {}", field.key));
+            }
+        }
+        if node_ids.contains(&from) && node_ids.contains(&to) {
+            adjacency.entry(from).or_default().push(to);
+            if let Some(degree) = indegree.get_mut(to) {
+                *degree += 1;
+            }
+        }
+    }
+    if schema.acyclic && has_graph_value_cycle(&node_ids, &adjacency, &indegree) {
+        problems.push("schema 声明 acyclic=true 但图值存在环".to_string());
+    }
+    if schema.entry == GraphEntryConstraint::Single {
+        let entry_count = indegree.values().filter(|degree| **degree == 0).count();
+        if entry_count != 1 {
+            problems.push(format!(
+                "schema 要求单入口（entry=single），实际入度 0 节点 {entry_count} 个"
+            ));
+        }
+    }
+    problems
+}
+
+/// Kahn 拓扑排序成环检测（按 from→to 有向读法；无向图声明 acyclic 同样保守查有向环，
+/// 与 adm4-spec 侧 `validate_game_spec` 的口径一致）。
+fn has_graph_value_cycle(
+    node_ids: &[&str],
+    adjacency: &BTreeMap<&str, Vec<&str>>,
+    indegree: &BTreeMap<&str, usize>,
+) -> bool {
+    let mut indegree = indegree.clone();
+    let mut queue: Vec<&str> = indegree
+        .iter()
+        .filter(|(_, degree)| **degree == 0)
+        .map(|(id, _)| *id)
+        .collect();
+    let mut visited = 0usize;
+    while let Some(current) = queue.pop() {
+        visited += 1;
+        if let Some(children) = adjacency.get(current) {
+            for child in children {
+                if let Some(degree) = indegree.get_mut(child) {
+                    *degree -= 1;
+                    if *degree == 0 {
+                        queue.push(child);
+                    }
+                }
+            }
+        }
+    }
+    visited != node_ids.len()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -520,5 +694,168 @@ impl NaJustification {
         } else {
             "无署名（baseline 理由码跳过或旧存档条目）".to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ---------------- ParameterSchema Graph/Curve tag（W7 §5.4） ----------------
+
+    #[test]
+    fn parameter_schema_graph_curve_serde_shapes_and_roundtrip() {
+        let graph = ParameterSchema::Graph(GraphSchema {
+            node_payload: vec![ScalarField {
+                key: "cost".into(),
+                kind: adm4_contracts::ValueKind::Int,
+                constraint: None,
+                required: true,
+                is_skin: false,
+            }],
+            edge_payload: Vec::new(),
+            directed: true,
+            acyclic: true,
+            entry: GraphEntryConstraint::Single,
+            cardinality_key: "talent_nodes".into(),
+        });
+        let value = serde_json::to_value(&graph).expect("序列化应成功");
+        assert_eq!(value.get("schema"), Some(&json!("graph")));
+        let back: ParameterSchema = serde_json::from_value(value).expect("反序列化应成功");
+        assert_eq!(back, graph);
+
+        let curve = ParameterSchema::Curve(CurveSchema {
+            cardinality_key: "xp_points".into(),
+        });
+        let value = serde_json::to_value(&curve).expect("序列化应成功");
+        assert_eq!(value.get("schema"), Some(&json!("curve")));
+        let back: ParameterSchema = serde_json::from_value(value).expect("反序列化应成功");
+        assert_eq!(back, curve);
+
+        // 旧 tag 零改动：table/matrix/scalar/none 的 serde 形态不受新增分支影响。
+        let legacy: ParameterSchema =
+            serde_json::from_str(r#"{"schema":"none"}"#).expect("旧 tag 应可读");
+        assert_eq!(legacy, ParameterSchema::None);
+    }
+
+    #[test]
+    fn graph_schema_defaults_match_w7_directive_10() {
+        // 缺键 JSON：acyclic 默认 false（对话类可回环）、entry 默认 multiple。
+        let schema: GraphSchema = serde_json::from_str("{}").expect("空对象应可读");
+        assert!(!schema.acyclic, "acyclic 默认必须是 false（定稿指令 10）");
+        assert!(!schema.directed);
+        assert_eq!(schema.entry, GraphEntryConstraint::Multiple);
+        assert!(schema.cardinality_key.is_empty());
+    }
+
+    // ---------------- validate_graph_value 校验纯函数 ----------------
+
+    fn talent_schema() -> GraphSchema {
+        GraphSchema {
+            node_payload: vec![ScalarField {
+                key: "cost".into(),
+                kind: adm4_contracts::ValueKind::Int,
+                constraint: None,
+                required: true,
+                is_skin: false,
+            }],
+            edge_payload: Vec::new(),
+            directed: true,
+            acyclic: true,
+            entry: GraphEntryConstraint::Single,
+            cardinality_key: String::new(),
+        }
+    }
+
+    fn talent_value() -> serde_json::Value {
+        json!({
+            "nodes": [
+                { "id": "root", "payload": { "cost": 1 } },
+                { "id": "left", "payload": { "cost": 2 } },
+                { "id": "right", "payload": { "cost": 2 } }
+            ],
+            "edges": [
+                { "from": "root", "to": "left" },
+                { "from": "root", "to": "right" }
+            ]
+        })
+    }
+
+    #[test]
+    fn graph_value_wellformed_passes() {
+        assert!(validate_graph_value(&talent_schema(), &talent_value()).is_empty());
+    }
+
+    #[test]
+    fn graph_value_dangling_edge_endpoint_named() {
+        let mut value = talent_value();
+        value["edges"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "from": "left", "to": "ghost" }));
+        let problems = validate_graph_value(&talent_schema(), &value);
+        assert!(
+            problems.iter().any(|p| p.contains("ghost")),
+            "应点名悬空端点，实际：{problems:?}"
+        );
+    }
+
+    #[test]
+    fn graph_value_cycle_rejected_when_schema_acyclic() {
+        let mut value = talent_value();
+        value["edges"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "from": "left", "to": "root" }));
+        let problems = validate_graph_value(&talent_schema(), &value);
+        assert!(
+            problems.iter().any(|p| p.contains("环")),
+            "acyclic 声明下的环必须被拒，实际：{problems:?}"
+        );
+        // 同构图在 acyclic=false 的 schema 下放行（对话 hub 回环合法）。
+        let mut hub = talent_schema();
+        hub.acyclic = false;
+        hub.entry = GraphEntryConstraint::Multiple;
+        assert!(validate_graph_value(&hub, &value).is_empty());
+    }
+
+    #[test]
+    fn graph_value_single_entry_enforced() {
+        let mut value = talent_value();
+        value["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "id": "orphan", "payload": { "cost": 3 } }));
+        let problems = validate_graph_value(&talent_schema(), &value);
+        assert!(
+            problems.iter().any(|p| p.contains("入度 0 节点 2")),
+            "单入口约束必须点名入口数，实际：{problems:?}"
+        );
+    }
+
+    #[test]
+    fn graph_value_missing_required_payload_and_duplicate_node() {
+        let value = json!({
+            "nodes": [
+                { "id": "a" },
+                { "id": "a", "payload": { "cost": 1 } }
+            ],
+            "edges": []
+        });
+        let problems = validate_graph_value(&talent_schema(), &value);
+        assert!(
+            problems.iter().any(|p| p.contains("缺少必填负载字段 cost")),
+            "必填负载缺失必须点名，实际：{problems:?}"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("重复")),
+            "节点 id 重复必须点名，实际：{problems:?}"
+        );
+        // entry=Single 在缺 nodes 数组时不误报：形态错误先行返回。
+        let malformed = json!("not an object");
+        let problems = validate_graph_value(&talent_schema(), &malformed);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("JSON 对象"));
     }
 }

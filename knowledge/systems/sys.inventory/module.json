@@ -1,0 +1,491 @@
+{
+  "module_id": "sys.inventory",
+  "semver": "1.0.0",
+  "label_zh": "背包仓储",
+  "summary": "实体的容量约束存取与整理（系统库 #16）。阶梯三档：基础容量（容量与满包规则）→ 分类堆叠（堆叠上限与分类结构）→ 批量整理（一键排序与批量清理）。它是装备 E3/E4 传导的承接方：宝石入包要求分类档，材料洪流要求批量档。",
+  "nouns": [
+    {
+      "id": "storage_capacity",
+      "kind": { "kind": "resource" },
+      "label_zh": "存储容量",
+      "summary": "背包的容量余额（格数或负重额度），入包扣减、清理返还，有余额语义。"
+    },
+    {
+      "id": "stored_item_entry",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "存储条目",
+      "summary": "背包中的一条存储记录：引用外部实体（装备/材料/宝石），带堆叠数量与锁定标记两列。"
+    },
+    {
+      "id": "overflow_parcel",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "溢出暂存件",
+      "summary": "满包时进入暂存区的物品包裹，带过期时限；仅溢出暂存口径下存在。"
+    },
+    {
+      "id": "inventory_full_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "满包信号",
+      "summary": "容量耗尽时点信号，载荷为被拒物品；供拾取、掉落、商店购买流程监听中断。"
+    },
+    {
+      "id": "sort_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "整理规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的整理排序规则位（如赛季通行证解锁自定义排序方案）。"
+    }
+  ],
+  "interface": {
+    "provides": ["storage_capacity", "stored_item_entry", "inventory_full_signal", "sort_rule_slot"],
+    "consumes": [
+      "sys.equipment.equipment_entity",
+      "sys.loot.material_entity",
+      "sys.loot.gem_entity"
+    ],
+    "modifies": ["storage_capacity"]
+  },
+  "mda": {
+    "mechanics_summary": "容量口径/满包处理/容量扩展/堆叠上限/分类结构/一键排序/批量清理的机制群。",
+    "dynamics_notes": [
+      "容量趋满时玩家出现拾取犹豫与就地取舍（信号：满包信号频率、野外丢弃次数）",
+      "分类档以上整理行为从逐格挪动变为页签内浏览（信号：单次整理耗时、页签切换次数）",
+      "批量档以上『全都捡→回城一键清』成为主循环节拍（信号：批量分解/出售的单次吞吐量）"
+    ],
+    "aesthetics_primary": ["消遣"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "basic_capacity",
+        "label_zh": "T0 基础容量",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 1 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.inventory.capacity_model",
+          "sys.inventory.overflow_rule",
+          "sys.inventory.storage_expand"
+        ],
+        "inductions": [],
+        "summary": "容量上限 + 满包规则 + 扩容途径：背包只是有边界的口袋。C≥2（consumes 外部实体入包；provides 满包信号）。"
+      },
+      {
+        "id": "classify",
+        "label_zh": "T1 +分类堆叠",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.inventory.capacity_model",
+          "sys.inventory.overflow_rule",
+          "sys.inventory.storage_expand",
+          "sys.inventory.stack_rule",
+          "sys.inventory.tab_structure"
+        ],
+        "inductions": [],
+        "summary": "堆叠上限表 + 分类页签结构：多实体种类（装备/宝石/材料）各有其位。装备 E3 传导的目标档——宝石作为独立实体入包，本档起有分类可承接。"
+      },
+      {
+        "id": "batch_ops",
+        "label_zh": "T2 +批量整理",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 4,
+        "activates": [
+          "sys.inventory.capacity_model",
+          "sys.inventory.overflow_rule",
+          "sys.inventory.storage_expand",
+          "sys.inventory.stack_rule",
+          "sys.inventory.tab_structure",
+          "sys.inventory.sort_rule",
+          "sys.inventory.batch_discard"
+        ],
+        "inductions": [
+          {
+            "when_tier": "batch_ops",
+            "target": { "noun_provided": "currency_main" },
+            "min_tier": "",
+            "reason": "批量清理的出售折现分支需要货币承接——任一实例 provides 主货币即满足（析取语义：纯丢弃口径不受此限，但批量档的完整语义含出售）"
+          }
+        ],
+        "summary": "一键排序 + 批量清理：材料洪流（装备 E4 分解回收）在本档才不淹没背包。装备 E4 传导的目标档。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.inventory.capacity_model",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "背包容量按什么口径约束？",
+      "design_question": "限制玩家携带的是格子还是重量？格子催生俄罗斯方块式整理趣味，负重催生出发前的斤斤计较。",
+      "tier_gate": "basic_capacity",
+      "options": [
+        {
+          "id": "slot_grid",
+          "label": "格子制",
+          "summary": "背包是 N 个离散格位，每件物品占 1 格（或多格），格满即满",
+          "implications": [
+            "容量感知直观：一眼看到还剩几格，取舍决策发生在拾取瞬间",
+            "堆叠规则的价值被放大——可堆叠与否直接决定同类物品吃几格",
+            "多格异形物品（如双手武器占 2 格）会把整理变成拼图子游戏，实现与体验成本同增"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "slot_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 8.0, "max": 400.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "inventory", "property": "storage_capacity", "formula": "{param:slot_count}" },
+            { "effect": "roll_check", "formula": "free_slots", "difficulty_expr": "1", "on_success": [
+              { "effect": "spawn_entity", "entity": "stored_item_entry" },
+              { "effect": "consume_resource", "resource": "storage_capacity", "formula": "item_slot_size" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "inventory_full_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "weight_budget",
+          "label": "负重制",
+          "summary": "物品带重量属性，携带总重不得超过负重上限，格数不限",
+          "implications": [
+            "取舍从『占不占格』变成『值不值这个重量』，价值密度（价值/重量）成为拾取的隐式评分",
+            "负重上限天然与角色属性（力量）挂钩，背包容量成为养成收益的一部分",
+            "接近上限时的移动惩罚（超重减速）比硬拒收温和，但需要战斗系统承接减速效果"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_weight_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 10.0, "max": 9999.0 }, "required": true },
+            { "key": "overweight_slow_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "inventory", "property": "storage_capacity", "formula": "{param:base_weight_cap} + strength_bonus" },
+            { "effect": "roll_check", "formula": "current_weight + item_weight", "difficulty_expr": "{param:base_weight_cap}", "on_success": [
+              { "effect": "emit_signal", "signal": "inventory_full_signal" },
+              { "effect": "attach", "modifier_id": "overweight_slow", "target": "combat_unit", "duration_expr": "while(current_weight > cap)", "priority": 0 }
+            ], "on_failure": [
+              { "effect": "spawn_entity", "entity": "stored_item_entry" },
+              { "effect": "consume_resource", "resource": "storage_capacity", "formula": "item_weight" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.overflow_rule",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "背包满时新获得的物品去哪？",
+      "design_question": "满包瞬间掉下来的橙装是消失、留在地上，还是有个兜底的地方？兜底越厚，容量约束越名存实亡。",
+      "tier_gate": "basic_capacity",
+      "options": [
+        {
+          "id": "reject_pickup",
+          "label": "满包拒收",
+          "summary": "拾取失败，物品留在原地（受地面存留时限约束），玩家必须就地腾位",
+          "implications": [
+            "容量约束是真约束：满包时的就地取舍是本系统的核心决策时刻",
+            "配合掉落存留时限会产生『来不及腾包眼睁睁看极品消失』的尖锐挫败，时限要放宽",
+            "副本/结算类场景（离场即清空地面）必须给例外通道，否则结算掉落直接蒸发"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "ground_persist_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 10.0, "max": 3600.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "inventory_full_signal" },
+            { "effect": "change_state", "machine": "pickup_flow", "to_state": "rejected" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:ground_persist_seconds}", "unit": "seconds", "inner": [
+              { "effect": "despawn_entity", "entity": "ground_item" }
+            ] }
+          ]
+        },
+        {
+          "id": "overflow_mailbox",
+          "label": "溢出暂存",
+          "summary": "满包时物品自动进入带时限的暂存区（邮箱/临时栏），到期未取才消失",
+          "implications": [
+            "拾取体验零打断，适合掉落密度高的刷宝节奏——满包不再中断战斗",
+            "暂存区实质是第二背包，容量约束被软化：暂存上限与时限成为真正的约束参数",
+            "到期清除必须有醒目预警，否则『暂存区里的橙装过期了』是客诉级事故"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "parcel_hold_hours", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 720.0 }, "required": true },
+            { "key": "parcel_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 5.0, "max": 200.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "emit_signal", "signal": "inventory_full_signal" },
+            { "effect": "spawn_entity", "entity": "overflow_parcel" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:parcel_hold_hours} * 3600", "unit": "seconds", "inner": [
+              { "effect": "despawn_entity", "entity": "overflow_parcel" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.storage_expand",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "容量通过什么途径扩展？",
+      "design_question": "更大的背包是花钱买的还是玩出来的？扩容途径决定容量焦虑被谁变现。",
+      "tier_gate": "basic_capacity",
+      "options": [
+        {
+          "id": "purchase_expand",
+          "label": "货币购买扩容",
+          "summary": "消耗货币按次扩容，单价随已购次数递增，趋近软上限",
+          "implications": [
+            "容量焦虑成为稳定的货币沉没点——回收回路的经典组成（与 sys.economy 咬合）",
+            "递增价格曲线是节流阀：前几次人人买得起，后几次是富人的边际选择",
+            "商业化语境下极易滑向付费点，免费货币与付费货币谁来结算要在此显式定夺"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_expand_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 10.0, "max": 1000000.0 }, "required": true },
+            { "key": "cost_growth", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true },
+            { "key": "slots_per_purchase", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "{param:base_expand_cost} * {param:cost_growth} ^ purchase_count" },
+            { "effect": "grant_resource", "resource": "storage_capacity", "formula": "{param:slots_per_purchase}" }
+          ]
+        },
+        {
+          "id": "progression_expand",
+          "label": "进度成长扩容",
+          "summary": "容量随等级/任务/成就里程碑解锁，按里程碑表逐段发放",
+          "implications": [
+            "容量是成长奖励的一部分，扩容瞬间与升级喜悦叠加，零付费争议",
+            "容量曲线与内容投放曲线必须联调：新章节掉落种类增多时容量要先行到位",
+            "满级后容量封顶，后期物品种类若继续膨胀会重新触发容量焦虑且再无出口"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "milestone_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "unlock_condition", "kind": { "kind": "text" }, "required": true },
+            { "key": "slots_added", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100.0 }, "required": true }
+          ], "row_key": "milestone_key", "cardinality_key": "expand_milestone_rows" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "storage_capacity", "formula": "slots_added(milestone_key)" },
+            { "effect": "emit_signal", "signal": "capacity_expanded" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.stack_rule",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "同类物品的堆叠上限怎么定？",
+      "design_question": "999 个药水占一格还是 99 个占一格？堆叠上限是容量压力的第一调节阀——上限翻倍等于容量翻倍。",
+      "tier_gate": "classify",
+      "options": [
+        {
+          "id": "per_type_stack_table",
+          "label": "按类型分表堆叠",
+          "summary": "每类物品一行堆叠上限（材料 999 / 消耗品 99 / 装备不可堆），表驱动",
+          "implications": [
+            "堆叠上限成为逐类可调的运营参数：材料通胀时提上限即是无声的容量补偿",
+            "『装备不可堆』使装备始终占格，与批量分解（batch_ops 档）形成压力-释放回路",
+            "类型表要与掉落实体种类保持同步，新实体类入库漏配上限会回退到默认值引发混乱"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "item_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "stack_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true }
+          ], "row_key": "item_type", "cardinality_key": "stack_rule_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "stored_item_entry", "property": "stack_limit", "formula": "stack_cap(item_type)" }
+          ]
+        },
+        {
+          "id": "uniform_stack_cap",
+          "label": "统一上限",
+          "summary": "全物品统一堆叠上限，仅装备类硬编码不可堆，一个参数管全局",
+          "implications": [
+            "认知与维护成本最低：玩家背下一个数字就理解全部堆叠行为",
+            "失去逐类调节能力——想给某类材料放宽必须全局放宽，容量压力无法定向纾解",
+            "上限取值直接锚定单格价值密度，与格子制容量联动敏感，改动波及全局"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "global_stack_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "stored_item_entry", "property": "stack_limit", "formula": "{param:global_stack_cap}" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.tab_structure",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "物品分类按什么结构组织？",
+      "design_question": "宝石和材料是各住各的房间，还是同住一间靠筛选器找？固定页签替玩家做分类，自由筛选把分类权交给玩家。",
+      "tier_gate": "classify",
+      "options": [
+        {
+          "id": "fixed_tabs",
+          "label": "固定分类页签",
+          "summary": "背包分为固定页签（装备/材料/消耗品/任务），物品按类型自动归页",
+          "implications": [
+            "零学习成本：物品自己找到家，玩家永远知道去哪个页签找什么",
+            "每页可独立设容量，实现『材料页大、装备页小』的差异化压力设计",
+            "跨类物品（既是材料又可使用）的归属要显式裁决，页签边界即分类学债务"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tab_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "tab_label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "accepted_types", "kind": { "kind": "text" }, "required": true },
+            { "key": "tab_capacity", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 400.0 }, "required": true }
+          ], "row_key": "tab_key", "cardinality_key": "tab_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "stored_item_entry", "property": "tab_assignment", "formula": "tab_of(item_type)" },
+            { "effect": "change_state", "machine": "inventory_view", "to_state": "tabbed" }
+          ]
+        },
+        {
+          "id": "filter_tags",
+          "label": "单容器多维筛选",
+          "summary": "全部物品同住一个容器，靠标签筛选器（类型/品质/来源）动态过滤视图",
+          "implications": [
+            "筛选组合表达力强：『可分解的紫装』一次筛出，重度整理玩家的效率天堂",
+            "无页签墙意味着容量是全局单一池，无法做分区差异化压力",
+            "筛选器默认状态决定 90% 玩家的实际体验，默认视图设计比筛选维度本身更重要"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "filter_dimension_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "inventory", "property": "active_filter", "formula": "combine(selected_tags, dims={param:filter_dimension_count})" },
+            { "effect": "change_state", "machine": "inventory_view", "to_state": "filtered" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.sort_rule",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "一键整理按什么排序规则执行？",
+      "design_question": "按下整理键的一瞬间，是系统的审美还是玩家的审美说了算？",
+      "tier_gate": "batch_ops",
+      "options": [
+        {
+          "id": "fixed_priority_sort",
+          "label": "固定优先级排序",
+          "summary": "整理按内置优先级链执行（品质降序→类型→等级），全服一致",
+          "implications": [
+            "整理结果可预期且全服一致，攻略与录像里的背包布局人人可复现",
+            "优先级链是设计者对『什么重要』的一次性表态，与玩家个体价值观冲突时无出口",
+            "实现零状态：不存玩家偏好，跨端同步无额外成本"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "priority_rank", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "sort_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "direction", "kind": { "kind": "enum", "variants": ["asc", "desc"] }, "required": true }
+          ], "row_key": "priority_rank", "cardinality_key": "sort_priority_rows" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "sort_rule_slot", "patch": { "patch": "replace_formula", "formula": "sort_by(priority_chain)" }, "priority": 0 },
+            { "effect": "emit_signal", "signal": "inventory_sorted" }
+          ]
+        },
+        {
+          "id": "custom_sort_profile",
+          "label": "自定义排序方案",
+          "summary": "玩家可保存多套排序方案（键与方向自选），整理时套用当前方案",
+          "implications": [
+            "商人向玩家按价值排、战斗向玩家按品质排——同一系统服务不同人格",
+            "方案槽数量与可选排序键都是复杂度阀门，给多了变成配置软件",
+            "排序方案属于账号数据，跨端同步与方案损坏兜底都要设计"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "profile_slots", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "sortable_key_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "sort_rule_slot", "patch": { "patch": "replace_formula", "formula": "sort_by(player_profile(active_slot))" }, "priority": 1 },
+            { "effect": "emit_signal", "signal": "inventory_sorted" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.inventory.batch_discard",
+      "domain": "inventory",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "批量清理（分解/出售/丢弃）如何防误操作？",
+      "design_question": "一键清空的爽感与误删毕业装的惨案只隔一层保护——这层保护是系统自动划线还是玩家自己上锁？",
+      "tier_gate": "batch_ops",
+      "options": [
+        {
+          "id": "quality_threshold_lock",
+          "label": "品质阈值自动保护",
+          "summary": "达到阈值品质（如稀有以上）的物品自动排除在批量操作外，阈值可调",
+          "implications": [
+            "零操作成本的兜底：新手不做任何设置也不会误删橙装",
+            "『阈值以下皆垃圾』的暗示会同化玩家价值判断，低品质极品词条装（词条容量口径下）被系统性误杀",
+            "阈值本身应随游戏阶段漂移（毕业期紫装也是垃圾），固定阈值会逐渐失效"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "protect_quality_rank", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 7.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "item_quality_rank", "difficulty_expr": "{param:protect_quality_rank}", "on_success": [
+              { "effect": "change_state", "machine": "batch_selection", "to_state": "excluded" }
+            ], "on_failure": [
+              { "effect": "change_state", "machine": "batch_selection", "to_state": "included" },
+              { "effect": "despawn_entity", "entity": "stored_item_entry" }
+            ] }
+          ]
+        },
+        {
+          "id": "manual_item_lock",
+          "label": "手动上锁白名单",
+          "summary": "玩家逐件上锁，锁定物品对一切批量与出售操作免疫，系统不自动划线",
+          "implications": [
+            "保护完全服从玩家意志，词条极品白装也能被精确保下",
+            "上锁是前置劳动：忘记上锁的那一次误删责任在玩家，但情绪账仍算在游戏头上",
+            "锁定标记要在物品格上强可视化，且交易/邮寄等旁路操作也必须尊重锁"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.inventory" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "item_lock", "target": "stored_item_entry", "duration_expr": "until_manually_removed", "priority": 100 },
+            { "effect": "modify_rule", "target_rule": "batch_discard_rule", "patch": { "patch": "add_precondition", "condition": "item_lock not attached" }, "priority": 100 }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "expand_milestone_rows": { "min": 3, "max": 30 },
+    "stack_rule_rows": { "min": 3, "max": 20 },
+    "tab_rows": { "min": 3, "max": 10 },
+    "sort_priority_rows": { "min": 2, "max": 8 }
+  },
+  "consistency_rules": [
+    {
+      "id": "stack_and_tabs_answered_together",
+      "kind": "answered_together",
+      "first": "sys.inventory.stack_rule",
+      "second": "sys.inventory.tab_structure"
+    }
+  ],
+  "skin_fields": ["tab_display_names", "bag_appearance"]
+}

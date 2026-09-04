@@ -79,9 +79,32 @@ $SpaceRoot = Join-Path $Work 'design_space'
 Copy-Item -Recurse -LiteralPath (Join-Path $RepoV4 'knowledge\design_space') -Destination $SpaceRoot
 if (-not (Test-Path -LiteralPath (Join-Path $SpaceRoot 'lane_defense\pack.json'))) { Fail '设计空间副本复制失败' }
 
+# W7 3d：三段访谈段需要系统模块库与追问弹药库的隔离副本（knowledge/ 布局：
+# systems/ 与兄弟目录 prompt_library/——弹药路径按模块库根的兄弟目录解析）。
+$KnowledgeRoot = Join-Path $Work 'knowledge'
+$SystemsRoot = Join-Path $KnowledgeRoot 'systems'
+Copy-Item -Recurse -LiteralPath (Join-Path $RepoV4 'knowledge\systems') -Destination $SystemsRoot
+Copy-Item -Recurse -LiteralPath (Join-Path $RepoV4 'knowledge\prompt_library') -Destination (Join-Path $KnowledgeRoot 'prompt_library')
+if (-not (Test-Path -LiteralPath (Join-Path $SystemsRoot 'sys.equipment\module.json'))) { Fail '系统模块库副本复制失败' }
+
+# 三段访谈用的冒烟包：无 system_refs（实例全部由概念访谈确认落盘），核心名词
+# 供四模块的 modifies/consumes 绑定收口。写进设计空间副本（不碰仓库原件）。
+$ConceptPackDir = Join-Path $SpaceRoot 'concept_smoke'
+New-Item -ItemType Directory -Path $ConceptPackDir -Force | Out-Null
+Write-Utf8NoBom (Join-Path $ConceptPackDir 'pack.json') @'
+{
+  "pack_id": "concept_smoke",
+  "pack_version": "0.1.0",
+  "display_name": "三段访谈冒烟包",
+  "reference_games": ["虚构甲", "虚构乙", "虚构丙"],
+  "core_nouns": ["combat_attribute", "money_supply"],
+  "decision_points": []
+}
+'@
+
 $DataRoot = Join-Path $Work 'data'
 New-Item -ItemType Directory -Path (Join-Path $DataRoot 'config') -Force | Out-Null
-Write-Utf8NoBom (Join-Path $DataRoot 'config\app.json') (@{ design_space_root = $SpaceRoot; ai_provider = $null } | ConvertTo-Json)
+Write-Utf8NoBom (Join-Path $DataRoot 'config\app.json') (@{ design_space_root = $SpaceRoot; system_modules_root = $SystemsRoot; ai_provider = $null } | ConvertTo-Json)
 $env:ADM4_DATA_ROOT = $DataRoot
 
 # 本地语料：虚构逆向目标「晨昏防线」的抓取快照（与 e2e 同源；克制/网格命中前两条，波次/回复命中后两条）。
@@ -1179,10 +1202,204 @@ $out = Invoke-Adm4 'F4e：全量完成度概览不受 --decision 影响' @('auth
 Assert-Contains $out '完成度' '全量完成度概览'
 Assert-NotContains $out '待填 0 项' '不给 --decision 时不打印单点小结'
 
+# --- compose：组合校验 CLI 接线（W7 3b）。冒烟包无 system_refs，锁零变化路径与负例。 ---
+$out = Invoke-Adm4 'compose：无系统模块引用的项目 report 正常退出并明说无组合可校验' @('compose', 'report', $ReuseArchive)
+Assert-Contains $out '未引用系统模块' 'compose report 旧项目提示'
+Invoke-Adm4 'compose 负例：旧项目 confirm-form 必须被拒（无形态可确认）' @('compose', 'confirm-form', $ReuseArchive, '--signer', '冒烟署名') -ExpectFailure | Out-Null
+Invoke-Adm4 'compose 负例：缺 --signer 必须非零退出' @('compose', 'confirm-form', $ReuseArchive) -ExpectFailure | Out-Null
+Invoke-Adm4 'compose 负例：不存在的存档必须非零退出' @('compose', 'report', 'archive-not-there') -ExpectFailure | Out-Null
+
+# ---------------------------------------------------------------------------
+# 8j. T-W7-3d 三段访谈：概念（口述→清单+档位+core_loop 确认落盘，含融合嗅探）
+#     -> 组合（V2 违例→AI 解释+修复选项→选升档→违例消除）
+#     -> 机制（实例内逐点提案+弹药注入+custom 草案起草）
+#
+# 全程 scripted 应答（零网络）；用独立项目（concept_smoke 包，无 system_refs），
+# 不触碰上面任何既有项目；既有断言一条未改。
+# ---------------------------------------------------------------------------
+
+# 概念提案应答：融合型口述（"合成收集+装备强化"）→ 双核并集分解。
+# 系统清单用真实四模块：equip（e3_socket 重核）/loot/bag（基础档，制造 V2 违例）/econ。
+$ConceptScriptPath = Join-Path $AiDir 'concept.json'
+Write-Utf8NoBom $ConceptScriptPath @'
+{
+  "interview_concept": [{
+    "systems": [
+      { "instance_id": "equip_main", "module_id": "sys.equipment", "suggested_tier": "e3_socket",
+        "core_link": "strong", "rationale": "装备强化核的主承诺",
+        "noun_bindings": {
+          "sys.loot.drop_table": "loot_main.drop_table",
+          "sys.loot.gem_entity": "loot_main.gem_entity",
+          "sys.loot.material_entity": "loot_main.material_entity",
+          "sys.economy.currency_main": "econ_main.currency_main",
+          "combat_attribute": "combat_attribute"
+        } },
+      { "instance_id": "loot_main", "module_id": "sys.loot", "suggested_tier": "quality_affix_weights",
+        "core_link": "strong", "rationale": "合成收集核的素材供给", "noun_bindings": {} },
+      { "instance_id": "bag_main", "module_id": "sys.inventory", "suggested_tier": "basic_capacity",
+        "core_link": "weak", "rationale": "先做最小背包",
+        "noun_bindings": {
+          "sys.equipment.equipment_entity": "equip_main.equipment_entity",
+          "sys.loot.material_entity": "loot_main.material_entity",
+          "sys.loot.gem_entity": "loot_main.gem_entity",
+          "storage_capacity": "bag_main.storage_capacity"
+        } },
+      { "instance_id": "econ_main", "module_id": "sys.economy", "suggested_tier": "basic_income",
+        "core_link": "weak", "rationale": "货币兜底",
+        "noun_bindings": {
+          "sys.loot.material_entity": "loot_main.material_entity",
+          "money_supply": "money_supply"
+        } }
+    ],
+    "library_external": [ { "name": "天气系统", "note": "模块库暂无对应，后续走系统级 custom" } ],
+    "core_loop": [
+      { "verb": "收集素材", "instance_id": "loot_main" },
+      { "verb": "合成强化", "instance_id": "equip_main" }
+    ],
+    "fusion": {
+      "cores": [
+        { "label": "合成收集", "instance_ids": ["loot_main", "bag_main"] },
+        { "label": "装备强化", "instance_ids": ["equip_main", "econ_main"] }
+      ],
+      "transition": "收集核产出素材与宝石，进入强化核合成镶嵌；强化产物反哺收集效率"
+    },
+    "notes": "融合型双核：合成收集 + 装备强化"
+  }]
+}
+'@
+
+# 概念越界负例应答：发明模块 id（必须被拒，验收 5）。
+$ConceptBadScriptPath = Join-Path $AiDir 'concept_bad.json'
+Write-Utf8NoBom $ConceptBadScriptPath @'
+{
+  "interview_concept": [{
+    "systems": [
+      { "instance_id": "ghost", "module_id": "sys.mind_control", "suggested_tier": "basic",
+        "core_link": "core", "rationale": "发明的模块" }
+    ]
+  }]
+}
+'@
+
+# 组合修复应答：解释 V2 传导违例 + 两个 tier_change 选项。
+$ComposeFixScriptPath = Join-Path $AiDir 'compose_fix.json'
+Write-Utf8NoBom $ComposeFixScriptPath @'
+{
+  "interview_composition": [{
+    "explanation": "装备开到镶嵌档（e3_socket），宝石作为独立实体入包，但背包只有基础容量档没有分类页签——传导链在 bag_main 断了。",
+    "options": [
+      { "option_id": "upgrade_bag", "kind": "tier_change", "instance_id": "bag_main", "to_tier": "classify",
+        "detail": "背包升到分类堆叠档，宝石有分类可承接；代价是背包 UI 复杂度上升。" },
+      { "option_id": "downgrade_equip", "kind": "tier_change", "instance_id": "equip_main", "to_tier": "e2_skill_build",
+        "detail": "装备退回技能 BD 档不引入宝石实体；代价是失去镶嵌构筑维度。" }
+    ]
+  }]
+}
+'@
+
+# 机制访谈应答：bag_main 命名空间的首个激活点（L3 tier 已确认，进 L4 机制点）。
+$MechanismScriptPath = Join-Path $AiDir 'mechanism.json'
+Write-Utf8NoBom $MechanismScriptPath @'
+{
+  "interview_mechanism": [
+    {"option_id": "slot_grid", "rationale": "格子制让宝石与素材的取舍可见，直接回应容量张力取舍", "parameters": {"slot_count": 40}}
+  ]
+}
+'@
+
+# custom 草案起草应答（GWT 三段齐全）。
+$DraftCustomScriptPath = Join-Path $AiDir 'draft_custom.json'
+Write-Utf8NoBom $DraftCustomScriptPath @'
+{
+  "interview_mechanism_custom": [{
+    "host_system_id": "会被调用方覆盖",
+    "slug": "lucky_streak",
+    "label_zh": "幸运连击",
+    "rule_text": "连续开出低品质掉落会累计幸运值，提升下次高品质概率",
+    "effects": [
+      { "effect": "custom", "verb": "lucky_streak",
+        "given": "玩家连续获得低品质掉落且幸运值未满",
+        "when": "下一次掉落判定",
+        "then": "按累计幸运值提升高品质权重并在出货后清零" }
+    ],
+    "new_nouns": [],
+    "rationale": "把非酋体验转化为可预期的保底节奏"
+  }]
+}
+'@
+
+# 建三段访谈项目（concept_smoke 包，无 system_refs）。
+$out = Invoke-Adm4 '3d：新建三段访谈项目' @('project', 'new', '三段访谈冒烟', '--pack', 'concept_smoke', '--depth', 'L6')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析三段访谈项目的存档 id' }
+$InterviewArchive = $match.Groups[1].Value
+
+# 负例：AI 发明模块 id → 非零退出（验收 5）。
+Invoke-Adm4 '3d 负例：概念提案发明模块 id 必须被拒（错误见上方 stderr）' @('interview', 'concept', $InterviewArchive, '--pitch', '随便口述', '--scripted-file', $ConceptBadScriptPath) -ExpectFailure | Out-Null
+
+# 概念访谈：融合型口述 → 提案 JSON（融合嗅探结构断言，验收 4）。
+$json = Invoke-Adm4 '3d：概念访谈（融合型口述 X+Y）' @('interview', 'concept', $InterviewArchive, '--pitch', '合成收集+装备强化的融合玩法', '--scripted-file', $ConceptScriptPath)
+$concept = $json | ConvertFrom-Json
+if ($concept.systems.Count -ne 4) { Fail "3d：概念提案应含 4 个系统，实际 $($concept.systems.Count)" }
+if ($null -eq $concept.fusion) { Fail '3d：X+Y 口述应产融合分解（fusion 字段）' }
+if ($concept.fusion.cores.Count -ne 2) { Fail "3d：融合分解应为双核，实际 $($concept.fusion.cores.Count)" }
+if (-not $concept.fusion.transition) { Fail '3d：融合分解应带跨核转换说明' }
+if ($concept.per_heavy_core_mode) { Fail '3d：2 个重核候选不应切逐重核模式' }
+if ($concept.library_external.Count -ne 1) { Fail '3d：库外系统应如实标注 1 项' }
+$ConceptProposalPath = Join-Path $ProposalDir 'concept.json'
+Write-Utf8NoBom $ConceptProposalPath $json
+
+# 确认落盘（用户手势）：refs + 逐实例档位 + core_loop。
+$out = Invoke-Adm4 '3d：概念访谈确认落盘（用户手势）' @('interview', 'concept-confirm', $InterviewArchive, '--proposal-file', $ConceptProposalPath)
+Assert-Contains $out '4 个系统实例' '概念确认实例数'
+Assert-Contains $out 'core_loop 2 动词' '概念确认 core_loop'
+Assert-Contains $out 'equip_main.tier = e3_socket' '概念确认档位声明'
+
+# 组合报告：e3_socket 传导要求背包 ≥ classify → V2 违例在场（非零退出）。
+$out = Invoke-Adm4 '3d：确认落盘后组合报告应有 V2 传导违例' @('compose', 'report', $InterviewArchive) -ExpectFailure
+Assert-Contains $out '[BLOCK]' '3d 组合违例标记'
+Assert-Contains $out 'classify' '3d 违例点名目标档'
+
+# 组合访谈：AI 解释 + 修复选项。
+$json = Invoke-Adm4 '3d：组合访谈（违例解释 + 修复选项）' @('compose', 'fix', $InterviewArchive, '--scripted-file', $ComposeFixScriptPath)
+$fix = $json | ConvertFrom-Json
+if (-not $fix.explanation.Contains('传导链')) { Fail '3d：修复提案应有人话解释' }
+if ($fix.options.Count -ne 2) { Fail "3d：修复选项应为 2 个，实际 $($fix.options.Count)" }
+$FixProposalPath = Join-Path $ProposalDir 'compose_fix.json'
+Write-Utf8NoBom $FixProposalPath $json
+
+# 用户选升档 → 执行 → 违例消除。
+$out = Invoke-Adm4 '3d：执行修复选项（升背包档，用户手势）' @('compose', 'fix-apply', $InterviewArchive, 'upgrade_bag', '--proposal-file', $FixProposalPath)
+Assert-Contains $out 'classify' '3d 修复执行回执'
+$out = Invoke-Adm4 '3d：升档后组合违例消除' @('compose', 'report', $InterviewArchive)
+Assert-NotContains $out '[BLOCK]' '3d 升档后零硬违例'
+
+# 机制访谈：bag_main 实例内逐点提案（弹药注入断言：seed.json 的 sys.inventory 问句
+# 会进 AI 上下文——scripted 通道下从服务层测试锁定，这里锁 CLI 链路与范围）。
+$json = Invoke-Adm4 '3d：机制访谈（bag_main 实例内逐点提案）' @('interview', 'mechanism', $InterviewArchive, 'bag_main', '--scripted-file', $MechanismScriptPath)
+$turn = $json | ConvertFrom-Json
+if ($turn.turn -ne 'structural_point') { Fail "3d：机制访谈应出结构层提案，实际 $($turn.turn)" }
+if (-not $turn.proposal.decision_id.StartsWith('bag_main.')) { Fail "3d：机制访谈范围应限定 bag_main. 命名空间，实际 $($turn.proposal.decision_id)" }
+$MechanismTurnPath = Join-Path $ProposalDir 'mechanism_turn.json'
+Write-Utf8NoBom $MechanismTurnPath $json
+
+# 逐点提案确认（复用既有 interview confirm）。
+Invoke-Adm4 '3d：确认机制访谈提案' @('interview', 'confirm', $InterviewArchive, '--proposal-file', $MechanismTurnPath) | Out-Null
+
+# 负例：不存在的实例 → 非零退出。
+Invoke-Adm4 '3d 负例：机制访谈不存在的实例必须被拒' @('interview', 'mechanism', $InterviewArchive, 'ghost_instance', '--scripted-file', $MechanismScriptPath) -ExpectFailure | Out-Null
+
+# custom 草案起草：产出草案 JSON（不登记——登记走 custom add 用户确认）。
+$json = Invoke-Adm4 '3d：custom 机制草案 AI 起草（loot_main 域）' @('interview', 'draft-custom', $InterviewArchive, 'loot_main.rate_model', '--idea', '想要连续不出货的保底机制', '--scripted-file', $DraftCustomScriptPath)
+$draft = $json | ConvertFrom-Json
+if ($draft.slug -ne 'lucky_streak') { Fail "3d：草案 slug 应为 lucky_streak，实际 $($draft.slug)" }
+if ($draft.host_system_id -ne 'loot_main.rate_model') { Fail '3d：草案 host 应以调用方给定为准' }
+if (-not $draft.effects[0].then) { Fail '3d：草案 GWT 三段应齐全' }
+
 # ---------------------------------------------------------------------------
 # 9. 收尾
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> P0 两条线派生 -> 风格锚点门（生成/改词/确认/重选） -> P2 预算门/批量生产/缓存命中/代表锚图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> P0 两条线派生 -> 风格锚点门（生成/改词/确认/重选） -> P2 预算门/批量生产/缓存命中/代表锚图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 -> compose 组合校验接线 -> 三段访谈（概念/组合/机制）OK' -ForegroundColor Green
 exit 0

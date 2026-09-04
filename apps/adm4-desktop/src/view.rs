@@ -12,14 +12,19 @@ use crate::{
 use adm4_ai::{HttpImageProviderConfig, HttpProviderConfig};
 use adm4_app::{
     AiDoctorReport, AiInvokeCheckReport, ChangeRequest, ChangeStatus, DecisionPointView,
-    DeliverableManifest, ProjectDoctorReport, ProjectProfile, RunLogEntry, SdkReviewStatus,
-    SdkSnapshot, StageArtifactView, StyleAnchorSet, StyleApplicationContract, StyleDirection,
-    StyleDirectionStatus, StyleFitRisk, StyleGateStatus, TemplateExportReport, WorkbenchOverview,
+    DeliverableManifest, ProjectDoctorReport, ProjectProfile, ProjectSystemModule, RunLogEntry,
+    SdkReviewStatus, SdkSnapshot, StageArtifactView, StyleAnchorSet, StyleApplicationContract,
+    StyleDirection, StyleDirectionStatus, StyleFitRisk, StyleGateStatus, TemplateExportReport,
+    WorkbenchOverview,
 };
-use adm4_authoring::WorkbenchResetReport;
+use adm4_authoring::{
+    CompositionAssessment, CompositionFormConfirmation, WorkbenchResetReport,
+    composition_finding_code,
+};
 use adm4_build::pending_stage;
 use adm4_decision::{
-    DesignDomain, OrganizationProgress, SelectionMode, UNASSIGNED_DOMAIN_ID, UNASSIGNED_NODE_ID,
+    CoreLink, DesignDomain, OrganizationProgress, SelectionMode, SystemModule,
+    UNASSIGNED_DOMAIN_ID, UNASSIGNED_NODE_ID,
 };
 use adm4_pipeline::{
     PipelineRunState, StageRecord, StageResetReport, StageStatus, design_compile_registry,
@@ -1808,6 +1813,359 @@ fn short_sha(sha: &str) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 系统组合面板（W7 3e）：实例清单 / 私有模块 / 组合校验 / 署名形态确认
+// ---------------------------------------------------------------------------
+
+/// 一个系统实例的展示原料（main.rs 从生效空间/模块表/当前选择聚合，本层只排版）。
+///
+/// `module` 允许缺席：模块库目录被挪走/单个 module.json 损坏时实例仍要上清单
+/// （空间装配时权威校验已跑过，这里是纯展示——缺数据照实标注，不拦渲染）。
+pub struct SystemInstanceFacts {
+    pub instance_id: String,
+    pub module_id: String,
+    pub semver: String,
+    pub kappa: CoreLink,
+    pub module_label: String,
+    /// 当前声明档（tier 合成点的已选选项 id；未选 = None）。
+    pub selected_tier: Option<String>,
+    /// tier 合成点是否已确认（选择与确认是两个手势，照实区分显示）。
+    pub confirmed: bool,
+    /// 该档五维分与档带文本（如 `W 12 · 极重`）；未选档或模块数据缺失为空。
+    pub tier_text: String,
+    /// 已选档的中文名（未选/缺数据为空）。
+    pub tier_label: String,
+    /// 项目私有模块的实例（system_module_list 登记）。
+    pub private: bool,
+}
+
+/// 从原始清单聚合实例展示原料（纯函数，喂给 [`system_instance_rows`] 等）。
+///
+/// `instances` 取自生效空间的 `system_instances`（含私有模块实例）；
+/// `core_links` 取自生效空间 `pack.system_refs`（私有引用装配时已并入）。
+pub fn system_instance_facts(
+    instances: &[(String, String, String)],
+    core_links: &std::collections::BTreeMap<String, CoreLink>,
+    modules: &std::collections::BTreeMap<String, SystemModule>,
+    selections: &std::collections::BTreeMap<String, adm4_decision::Selection>,
+    private_instances: &std::collections::BTreeSet<String>,
+) -> Vec<SystemInstanceFacts> {
+    instances
+        .iter()
+        .map(|(instance_id, module_id, semver)| {
+            let module = modules.get(module_id);
+            let tier_point = format!("{instance_id}.tier");
+            let selection = selections.get(&tier_point);
+            let selected_tier = selection.map(|item| item.option_id.clone());
+            let confirmed = selection.is_some_and(|item| item.confirmed_by_user);
+            let (tier_text, tier_label) = match (module, selected_tier.as_deref()) {
+                (Some(module), Some(tier_id)) => match module
+                    .heaviness
+                    .tiers
+                    .iter()
+                    .find(|tier| tier.id == tier_id)
+                {
+                    Some(tier) => (
+                        format!(
+                            "W {} · {} · M{} D{} C{} P{} O{}",
+                            tier.rating.total(),
+                            tier.rating.band().label(),
+                            tier.rating.m,
+                            tier.rating.d,
+                            tier.rating.c,
+                            tier.rating.p,
+                            tier.rating.o
+                        ),
+                        if tier.label_zh.is_empty() {
+                            tier.id.clone()
+                        } else {
+                            tier.label_zh.clone()
+                        },
+                    ),
+                    // 档位已选但不在阶梯里（模块升级后旧选择失效）：照实标注。
+                    None => ("（所选档位已不在模块阶梯中）".to_string(), tier_id.into()),
+                },
+                (None, Some(tier_id)) => ("（模块数据不可读）".to_string(), tier_id.into()),
+                (None, None) => ("（模块数据不可读）".to_string(), String::new()),
+                (Some(_), None) => (String::new(), String::new()),
+            };
+            SystemInstanceFacts {
+                instance_id: instance_id.clone(),
+                module_id: module_id.clone(),
+                semver: semver.clone(),
+                kappa: core_links.get(instance_id).copied().unwrap_or_default(),
+                module_label: module
+                    .map(|module| module.label_zh.clone())
+                    .unwrap_or_default(),
+                selected_tier,
+                confirmed,
+                tier_text,
+                tier_label,
+                private: private_instances.contains(instance_id),
+            }
+        })
+        .collect()
+}
+
+/// 实例清单行：target = tier 合成点 id，点击即跳中栏既有决策点通道（select+confirm）。
+pub fn system_instance_rows(facts: &[SystemInstanceFacts]) -> Vec<TextRow> {
+    let mut rows = vec![header_row(format!("系统实例（{} 个）", facts.len()))];
+    for fact in facts {
+        let mut title = fact.instance_id.clone();
+        if !fact.module_label.is_empty() {
+            title.push_str(&format!(" · {}", fact.module_label));
+        }
+        title.push_str(&format!("（{} v{}）", fact.module_id, fact.semver));
+        if fact.private {
+            title.push_str("【项目私有】");
+        }
+        let (text, kind) = match fact.selected_tier.as_deref() {
+            Some(tier_id) => {
+                let mut text = format!(
+                    "档位 {}{} · κ {}",
+                    if fact.tier_label.is_empty() {
+                        tier_id.to_string()
+                    } else {
+                        fact.tier_label.clone()
+                    },
+                    if fact.tier_text.is_empty() {
+                        String::new()
+                    } else {
+                        format!("（{}）", fact.tier_text)
+                    },
+                    fact.kappa.label()
+                );
+                if fact.confirmed {
+                    text.push_str(" · 已确认 · 点击换档");
+                    (text, "ok")
+                } else {
+                    text.push_str(" · 已选未确认 · 点击前往确认");
+                    (text, "info")
+                }
+            }
+            None => (
+                format!(
+                    "档位未选择（点击前往 {}.tier 声明档位）· κ {}",
+                    fact.instance_id,
+                    fact.kappa.label()
+                ),
+                "bad",
+            ),
+        };
+        rows.push(TextRow {
+            title: title.into(),
+            text: text.into(),
+            kind: kind.into(),
+            target: format!("{}.tier", fact.instance_id).into(),
+        });
+    }
+    rows
+}
+
+/// 私有模块清单（只读展示：登记走 CLI/后端，本面板不提供编辑）。
+pub fn system_module_rows(records: &[ProjectSystemModule]) -> Vec<TextRow> {
+    if records.is_empty() {
+        return vec![info_row(
+            "无项目私有模块",
+            "本项目未登记私有系统模块（W7 §8 可拓宽通道：后端 system_module_add 登记后在此列出）",
+            "info",
+        )];
+    }
+    let mut rows = vec![header_row(format!("项目私有模块（{} 个）", records.len()))];
+    for record in records {
+        let module = &record.module;
+        rows.push(info_row(
+            format!(
+                "{} · {}（v{}）",
+                module.module_id, module.label_zh, module.semver
+            ),
+            format!(
+                "实例 {} · 重度阶梯 {} 档 · 接口 提供{}/消费{}/修改{} · {}",
+                record.instance.instance_id,
+                module.heaviness.tiers.len(),
+                module.interface.provides.len(),
+                module.interface.consumes.len(),
+                module.interface.modifies.len(),
+                module.summary
+            ),
+            "info",
+        ));
+    }
+    rows
+}
+
+/// 组合校验结果 → 行模型。blocks 红（kind=bad）、advices 黄（kind=warn，
+/// 面板配色传达「提示非禁止」§4.2(c)）、missing_tiers 红且可点跳转档位点。
+pub fn system_report_rows(assessment: Option<&CompositionAssessment>) -> Vec<TextRow> {
+    let Some(assessment) = assessment else {
+        return vec![info_row(
+            "本项目未引用系统模块",
+            "品类包无 system_refs 且未登记私有模块，无组合可校验",
+            "info",
+        )];
+    };
+    let report = &assessment.report;
+    let mut rows = vec![
+        header_row("组合结构事实"),
+        info_row(
+            format!("重核集合 |H| = {}", report.h_set.len()),
+            format!(
+                "{} · {}",
+                if report.h_set.is_empty() {
+                    "（空）".to_string()
+                } else {
+                    report.h_set.join("、")
+                },
+                if report.h_connected {
+                    "连通"
+                } else {
+                    "不连通"
+                }
+            ),
+            "info",
+        ),
+        info_row(
+            format!("重度预算 B(G) = {:.2}", report.budget_total),
+            "Σ W(S) × κ权重（提示制：预算表波 5 标定，超支不拦冻结）",
+            "info",
+        ),
+    ];
+    if !assessment.missing_tiers.is_empty() {
+        rows.push(header_row(format!(
+            "档位待办（{} 项，组合输入不全 = 冻结门拦截）",
+            assessment.missing_tiers.len()
+        )));
+        for missing in &assessment.missing_tiers {
+            rows.push(TextRow {
+                title: format!("{} 档位未选择", missing.instance_id).into(),
+                text: missing.detail.clone().into(),
+                kind: "bad".into(),
+                target: format!("{}.tier", missing.instance_id).into(),
+            });
+        }
+    }
+    if report.blocks.is_empty() && assessment.missing_tiers.is_empty() {
+        rows.push(header_row("硬违例"));
+        rows.push(info_row("无硬违例", "连通/传导/悬空消费检查全部通过", "ok"));
+    } else if !report.blocks.is_empty() {
+        rows.push(header_row(format!(
+            "硬违例（{} 项：冻结门第 2 道拦截，不可署名豁免）",
+            report.blocks.len()
+        )));
+        for finding in &report.blocks {
+            rows.push(info_row(
+                format!(
+                    "[{}] {}",
+                    composition_finding_code(finding.code),
+                    finding.subject
+                ),
+                finding.detail.clone(),
+                "bad",
+            ));
+        }
+    }
+    if !report.advices.is_empty() {
+        rows.push(header_row(format!(
+            "提示（{} 项：提示义务，不拦冻结）",
+            report.advices.len()
+        )));
+        for finding in &report.advices {
+            rows.push(info_row(
+                format!(
+                    "[{}] {}",
+                    composition_finding_code(finding.code),
+                    finding.subject
+                ),
+                finding.detail.clone(),
+                "warn",
+            ));
+        }
+    }
+    rows
+}
+
+/// 署名形态确认卡文案：h_set 清单（带各重核当前档 W 分）+「提示非禁止」语义
+/// （§4.2(c)：超线是稀有但正当的设计，确认后不再重复提示）。
+pub fn system_confirm_text(
+    assessment: &CompositionAssessment,
+    facts: &[SystemInstanceFacts],
+) -> String {
+    let report = &assessment.report;
+    let members = report
+        .h_set
+        .iter()
+        .map(
+            |instance_id| match facts.iter().find(|fact| &fact.instance_id == instance_id) {
+                Some(fact) if !fact.tier_text.is_empty() => {
+                    format!("{instance_id}（{}）", fact.tier_text)
+                }
+                _ => instance_id.clone(),
+            },
+        )
+        .collect::<Vec<_>>()
+        .join("、");
+    let mut text = format!(
+        "|H| = {} 超过 L0 档位参考线（提示义务：超线不是禁止，超大玩法是稀有但正当的设计）。\n\
+         重核集合：{members}。\n\
+         签名即表示：我知道并接受这是 |H|={} 的超大玩法；确认后本提示不再重复出现。",
+        report.h_set.len(),
+        report.h_set.len(),
+    );
+    if assessment.confirmation_stale {
+        text.push_str("\n注意：此前的确认因重核集合变化已失效，须重新署名确认。");
+    }
+    text
+}
+
+/// 生效确认的留痕展示（signer/at/当时 h_set）；无生效确认返回空串（UI 不出卡）。
+pub fn system_confirmed_text(confirmation: Option<&CompositionFormConfirmation>) -> String {
+    match confirmation {
+        Some(record) => format!(
+            "已署名确认：{} 于 {} 接受 |H|={}（{}）形态{}。重核集合变化后自动失效需重签。",
+            record.signer,
+            record.at,
+            record.h_set.len(),
+            record.h_set.join("、"),
+            if record.note.is_empty() {
+                String::new()
+            } else {
+                format!("；说明：{}", record.note)
+            }
+        ),
+        None => String::new(),
+    }
+}
+
+/// 面板顶部摘要：无实例给引导文案（不是空白），有实例给一行状态总览。
+pub fn system_panel_summary(
+    facts: &[SystemInstanceFacts],
+    private_count: usize,
+    assessment: Option<&CompositionAssessment>,
+) -> String {
+    if facts.is_empty() && private_count == 0 {
+        return "本项目未引用系统模块：品类包 pack.json 未声明 system_refs，也未登记项目私有模块。\
+                规模化系统（装备/背包/掉落/经济…）由品类包引用系统模块库（knowledge/systems）接入，\
+                或经后端 system_module_add 登记项目私有模块；接入后本视图列出实例、档位与组合校验结果。"
+            .to_string();
+    }
+    let unselected = facts
+        .iter()
+        .filter(|fact| fact.selected_tier.is_none())
+        .count();
+    let mut text = format!("系统实例 {} 个（项目私有 {private_count} 个）", facts.len());
+    if unselected > 0 {
+        text.push_str(&format!(" · {unselected} 个未选档位"));
+    }
+    if let Some(assessment) = assessment {
+        text.push_str(&format!(
+            " · 组合校验：硬违例 {} 项 / 提示 {} 项",
+            assessment.report.blocks.len() + assessment.missing_tiers.len(),
+            assessment.report.advices.len()
+        ));
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3078,5 +3436,367 @@ mod tests {
             missing,
             vec!["图像 Base URL", "图像模型名", "生成尺寸（如 1024x1024）"]
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // 系统组合面板（W7 3e）
+    // -----------------------------------------------------------------------
+
+    use adm4_authoring::{CompositionAssessment, CompositionFormConfirmation};
+    use adm4_decision::composition::{CompositionFinding, CompositionReport, FindingCode};
+    use adm4_decision::system_module::{FiveAxisRating, HeavinessTier, SystemModule};
+    use adm4_decision::{CoreLink, Provenance, Selection};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn test_module(module_id: &str, label: &str, tiers: &[(&str, &str, u8)]) -> SystemModule {
+        SystemModule {
+            module_id: module_id.into(),
+            semver: "1.0.0".into(),
+            label_zh: label.into(),
+            summary: format!("{label}测试模块"),
+            heaviness: adm4_decision::HeavinessLadder {
+                tiers: tiers
+                    .iter()
+                    .map(|(id, label_zh, m)| HeavinessTier {
+                        id: (*id).into(),
+                        label_zh: (*label_zh).into(),
+                        rating: FiveAxisRating {
+                            m: *m,
+                            d: *m,
+                            c: *m,
+                            p: *m,
+                            o: *m,
+                        },
+                        ..HeavinessTier::default()
+                    })
+                    .collect(),
+            },
+            ..SystemModule::default()
+        }
+    }
+
+    fn tier_selection(decision_id: &str, option_id: &str, confirmed: bool) -> Selection {
+        Selection {
+            decision_id: decision_id.into(),
+            option_id: option_id.into(),
+            parameters: adm4_decision::ParameterValues::None,
+            rationale: String::new(),
+            provenance: Provenance::UserManual,
+            confirmed_by_user: confirmed,
+            template_original: None,
+            additional_options: Vec::new(),
+            primary_option: None,
+        }
+    }
+
+    /// 实例原料聚合：档位 W 分/档带/五维、κ、确认态、私有标记、缺数据降级全覆盖。
+    #[test]
+    fn system_instance_facts_join_tier_rating_kappa_and_private_flag() {
+        let instances = vec![
+            (
+                "equip_main".to_string(),
+                "sys.equipment".to_string(),
+                "1.2.0".to_string(),
+            ),
+            (
+                "bag_main".to_string(),
+                "sys.inventory".to_string(),
+                "1.0.0".to_string(),
+            ),
+            (
+                "ghost".to_string(),
+                "sys.missing".to_string(),
+                "0.1.0".to_string(),
+            ),
+        ];
+        let mut modules = BTreeMap::new();
+        modules.insert(
+            "sys.equipment".to_string(),
+            test_module(
+                "sys.equipment",
+                "装备",
+                &[("e0", "白装", 1), ("e3", "词条构筑", 3)],
+            ),
+        );
+        modules.insert(
+            "sys.inventory".to_string(),
+            test_module("sys.inventory", "背包", &[("basic", "基础容量", 1)]),
+        );
+        let mut core_links = BTreeMap::new();
+        core_links.insert("equip_main".to_string(), CoreLink::Strong);
+        let mut selections = BTreeMap::new();
+        selections.insert(
+            "equip_main.tier".to_string(),
+            tier_selection("equip_main.tier", "e3", true),
+        );
+        selections.insert(
+            "ghost.tier".to_string(),
+            tier_selection("ghost.tier", "t1", false),
+        );
+        let private: BTreeSet<String> = ["ghost".to_string()].into();
+
+        let facts = system_instance_facts(&instances, &core_links, &modules, &selections, &private);
+        assert_eq!(facts.len(), 3);
+        // 装备：已选 e3 已确认，W=15 极重，κ=strong。
+        let equip = &facts[0];
+        assert_eq!(equip.selected_tier.as_deref(), Some("e3"));
+        assert!(equip.confirmed);
+        assert_eq!(equip.tier_label, "词条构筑");
+        assert!(
+            equip.tier_text.contains("W 15") && equip.tier_text.contains("极重"),
+            "{}",
+            equip.tier_text
+        );
+        assert_eq!(equip.kappa, CoreLink::Strong);
+        assert!(!equip.private);
+        // 背包：未选档，κ 缺声明按 Weak 保守显示。
+        let bag = &facts[1];
+        assert!(bag.selected_tier.is_none() && !bag.confirmed);
+        assert!(bag.tier_text.is_empty());
+        assert_eq!(bag.kappa, CoreLink::Weak);
+        // ghost：模块数据不可读 → 降级标注不拦渲染；私有标记在。
+        let ghost = &facts[2];
+        assert!(ghost.tier_text.contains("模块数据不可读"));
+        assert!(ghost.private);
+    }
+
+    /// 实例行：target 恒为 tier 合成点 id（点击跳既有决策点通道）；
+    /// 未选档 kind=bad、已选未确认 info、已确认 ok。
+    #[test]
+    fn system_instance_rows_target_tier_point_and_grade_kinds() {
+        let facts = vec![
+            SystemInstanceFacts {
+                instance_id: "equip_main".into(),
+                module_id: "sys.equipment".into(),
+                semver: "1.2.0".into(),
+                kappa: CoreLink::Strong,
+                module_label: "装备".into(),
+                selected_tier: Some("e3".into()),
+                confirmed: true,
+                tier_text: "W 12 · 重 · M3 D2 C3 P2 O2".into(),
+                tier_label: "词条构筑".into(),
+                private: false,
+            },
+            SystemInstanceFacts {
+                instance_id: "bag_main".into(),
+                module_id: "sys.inventory".into(),
+                semver: "1.0.0".into(),
+                kappa: CoreLink::Weak,
+                module_label: "背包".into(),
+                selected_tier: None,
+                confirmed: false,
+                tier_text: String::new(),
+                tier_label: String::new(),
+                private: true,
+            },
+        ];
+        let rows = system_instance_rows(&facts);
+        assert_eq!(rows[0].kind, "header");
+        assert!(rows[0].title.contains("2 个"));
+        let equip = &rows[1];
+        assert_eq!(equip.target, "equip_main.tier");
+        assert_eq!(equip.kind, "ok");
+        assert!(equip.title.contains("装备") && equip.title.contains("sys.equipment v1.2.0"));
+        assert!(equip.text.contains("词条构筑") && equip.text.contains("W 12"));
+        assert!(equip.text.contains("κ 强关联"));
+        let bag = &rows[2];
+        assert_eq!(bag.target, "bag_main.tier");
+        assert_eq!(bag.kind, "bad");
+        assert!(bag.text.contains("档位未选择"));
+        assert!(bag.title.contains("【项目私有】"));
+    }
+
+    /// 组合报告行：None 引导、blocks 红、advices 黄（warn）、missing 可点跳转、
+    /// 结构事实（|H|/连通/预算）恒出。
+    #[test]
+    fn system_report_rows_render_blocks_red_advices_yellow_missing_clickable() {
+        assert!(system_report_rows(None)[0].title.contains("未引用系统模块"));
+
+        let assessment = CompositionAssessment {
+            report: CompositionReport {
+                blocks: vec![CompositionFinding {
+                    code: FindingCode::V3aDisconnected,
+                    subject: "equip_alpha、equip_beta".into(),
+                    detail: "重核不连通：两个重核实例之间无接口边".into(),
+                    related: vec!["equip_alpha".into(), "equip_beta".into()],
+                }],
+                advices: vec![CompositionFinding {
+                    code: FindingCode::V5BudgetAdvice,
+                    subject: "组合整体".into(),
+                    detail: "重度预算超出参考值".into(),
+                    related: vec![],
+                }],
+                h_set: vec!["equip_alpha".into(), "equip_beta".into()],
+                h_connected: false,
+                budget_total: 21.5,
+                form_confirmation_required: true,
+            },
+            missing_tiers: vec![adm4_authoring::MissingTierSelection {
+                instance_id: "bag_main".into(),
+                detail: "实例 bag_main 的档位合成点 bag_main.tier 尚未选择".into(),
+            }],
+            confirmation: None,
+            confirmation_stale: false,
+        };
+        let rows = system_report_rows(Some(&assessment));
+        let dump = rows
+            .iter()
+            .map(|row| format!("{}|{}|{}|{}", row.title, row.text, row.kind, row.target))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            dump.contains("|H| = 2") && dump.contains("不连通"),
+            "{dump}"
+        );
+        assert!(dump.contains("B(G) = 21.50"), "{dump}");
+        let missing_row = rows
+            .iter()
+            .find(|row| row.title.contains("bag_main 档位未选择"))
+            .expect("缺档待办行");
+        assert_eq!(missing_row.kind, "bad");
+        assert_eq!(missing_row.target, "bag_main.tier");
+        let block_row = rows
+            .iter()
+            .find(|row| row.title.contains("v3a_disconnected"))
+            .expect("硬违例行");
+        assert_eq!(block_row.kind, "bad");
+        let advice_row = rows
+            .iter()
+            .find(|row| row.title.contains("v5_budget_advice"))
+            .expect("提示行");
+        assert_eq!(advice_row.kind, "warn");
+        assert!(
+            rows.iter()
+                .any(|row| row.kind == "header" && row.title.contains("不拦冻结")),
+            "提示段头必须传达「提示非禁止」：{dump}"
+        );
+    }
+
+    /// 零违例时报告给「无硬违例」正向行（不能让人误以为没跑检查）。
+    #[test]
+    fn system_report_rows_show_ok_row_when_clean() {
+        let assessment = CompositionAssessment {
+            report: CompositionReport {
+                h_set: vec!["equip_main".into()],
+                h_connected: true,
+                budget_total: 9.0,
+                ..CompositionReport::default()
+            },
+            ..CompositionAssessment::default()
+        };
+        let rows = system_report_rows(Some(&assessment));
+        assert!(rows.iter().any(|row| row.title == "无硬违例"));
+    }
+
+    /// 确认卡文案：|H| 数字、成员（带 W 分）、「提示非禁止」语义、失效提醒。
+    #[test]
+    fn system_confirm_text_lists_h_set_with_ratings_and_stale_notice() {
+        let facts = vec![SystemInstanceFacts {
+            instance_id: "equip_alpha".into(),
+            module_id: "sys.equipment".into(),
+            semver: "1.0.0".into(),
+            kappa: CoreLink::Core,
+            module_label: "装备".into(),
+            selected_tier: Some("e3".into()),
+            confirmed: true,
+            tier_text: "W 12 · 重 · M3 D2 C3 P2 O2".into(),
+            tier_label: "词条构筑".into(),
+            private: false,
+        }];
+        let mut assessment = CompositionAssessment {
+            report: CompositionReport {
+                h_set: vec!["equip_alpha".into(), "equip_beta".into()],
+                form_confirmation_required: true,
+                ..CompositionReport::default()
+            },
+            ..CompositionAssessment::default()
+        };
+        let text = system_confirm_text(&assessment, &facts);
+        assert!(text.contains("|H| = 2"), "{text}");
+        assert!(text.contains("equip_alpha（W 12"), "{text}");
+        assert!(text.contains("equip_beta"), "{text}");
+        assert!(text.contains("超线不是禁止"), "{text}");
+        assert!(text.contains("我知道并接受这是 |H|=2 的超大玩法"), "{text}");
+        assert!(!text.contains("已失效"));
+
+        assessment.confirmation_stale = true;
+        let stale = system_confirm_text(&assessment, &facts);
+        assert!(
+            stale.contains("已失效") && stale.contains("重新署名"),
+            "{stale}"
+        );
+    }
+
+    /// 留痕展示：signer/at/当时 h_set/说明；无生效确认给空串。
+    #[test]
+    fn system_confirmed_text_shows_signer_at_and_snapshot() {
+        assert!(system_confirmed_text(None).is_empty());
+        let record = CompositionFormConfirmation {
+            signer: "制作人乙".into(),
+            note: "对标 EU4 大战略".into(),
+            at: "2026-09-05T00:00:00Z".into(),
+            h_set: vec!["equip_alpha".into(), "equip_beta".into()],
+        };
+        let text = system_confirmed_text(Some(&record));
+        assert!(text.contains("制作人乙"), "{text}");
+        assert!(text.contains("2026-09-05T00:00:00Z"), "{text}");
+        assert!(text.contains("|H|=2"), "{text}");
+        assert!(text.contains("对标 EU4 大战略"), "{text}");
+    }
+
+    /// 面板摘要：无模块给引导文案（含接入指引），有模块给状态总览。
+    #[test]
+    fn system_panel_summary_guides_when_empty_and_counts_when_present() {
+        let empty = system_panel_summary(&[], 0, None);
+        assert!(empty.contains("未引用系统模块"), "{empty}");
+        assert!(empty.contains("knowledge/systems"), "{empty}");
+
+        let facts = vec![SystemInstanceFacts {
+            instance_id: "bag_main".into(),
+            module_id: "sys.inventory".into(),
+            semver: "1.0.0".into(),
+            kappa: CoreLink::Weak,
+            module_label: "背包".into(),
+            selected_tier: None,
+            confirmed: false,
+            tier_text: String::new(),
+            tier_label: String::new(),
+            private: false,
+        }];
+        let assessment = CompositionAssessment::default();
+        let text = system_panel_summary(&facts, 1, Some(&assessment));
+        assert!(text.contains("系统实例 1 个"), "{text}");
+        assert!(text.contains("项目私有 1 个"), "{text}");
+        assert!(text.contains("1 个未选档位"), "{text}");
+        assert!(text.contains("硬违例 0 项"), "{text}");
+    }
+
+    /// 私有模块清单：空清单给只读引导；有记录列 id/版本/实例/接口计数。
+    #[test]
+    fn system_module_rows_list_private_records_or_guide() {
+        let rows = system_module_rows(&[]);
+        assert!(rows[0].title.contains("无项目私有模块"));
+
+        let mut module = test_module("sys.pet", "宠物", &[("p0", "跟随", 1)]);
+        module.interface.provides = vec!["pet_entity".into()];
+        module.interface.consumes = vec!["sys.loot.material_entity".into()];
+        // 不点名 adm4_space::SystemRef 类型（desktop 无 adm4-space 依赖）：
+        // SystemRef 带 serde(default)，从 JSON 反序列化让字段类型自推。
+        let record = ProjectSystemModule {
+            module,
+            instance: serde_json::from_str(
+                r#"{ "instance_id": "pet_main", "module_id": "sys.pet" }"#,
+            )
+            .expect("SystemRef serde(default) 应可读"),
+        };
+        let rows = system_module_rows(&[record]);
+        let dump = rows
+            .iter()
+            .map(|row| format!("{}|{}", row.title, row.text))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(dump.contains("sys.pet · 宠物（v1.0.0）"), "{dump}");
+        assert!(dump.contains("实例 pet_main"), "{dump}");
+        assert!(dump.contains("提供1/消费1/修改0"), "{dump}");
     }
 }
