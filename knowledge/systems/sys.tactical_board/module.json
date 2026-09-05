@@ -1,0 +1,863 @@
+{
+  "module_id": "sys.tactical_board",
+  "semver": "1.1.0",
+  "label_zh": "战术棋盘",
+  "summary": "离散网格上的单位占位、移动力与地形效果系统（附录 G5）。全谱系 TB0-TB3：静态站位（JRPG 前后排）→ 网格移动+射程/移动力 → 地形效果+高低差+朝向背刺 → 可破坏可改造棋盘+推拉位移连锁。与 #38 三消棋盘边界：同为网格但规则闭包不同（占位战斗 vs 交换消除），不合并。1.1.0（T-W7-4b）：前置 MG0/MG1 两个存量迁移承接档，原样承接 grid_strategy 的网格/地形四点（battlefield_system/move_rule/terrain_effect_rule/terrain_table，实例 id=grid 保 id）；量产波金样重固化窗口时并入 TB 谱系正式档。",
+  "nouns": [
+    {
+      "id": "board_occupancy",
+      "kind": { "kind": "property", "of": "tactical_board" },
+      "label_zh": "棋盘格占用表",
+      "summary": "本系统独占的核心状态：哪个格被哪个单位占据。占位互斥、移动合法性、包夹判定都以它为唯一真相。"
+    },
+    {
+      "id": "unit_position_state",
+      "kind": { "kind": "property", "of": "board_unit" },
+      "label_zh": "单位位置状态",
+      "summary": "单位在棋盘上的坐标/排位/朝向/高度层——对外供给的位置真相，供战斗公式（射程/背刺/高低差修正）消费。"
+    },
+    {
+      "id": "terrain_tile",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "地形格实体",
+      "summary": "带行标识与属性列的地形格：类型、通行成本、掩体值、高度、可破坏耐久都是它的列。"
+    },
+    {
+      "id": "terrain_modifier_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "地形修饰器挂点",
+      "summary": "地形效果规则的可修改挂点：地形对站位单位输出的修饰器（掩体减伤/沼泽减速）经此挂出，也允许他系统 ModifyRule（如技能点燃草地改写格效果）。"
+    },
+    {
+      "id": "move_resolved_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "移动结算事件",
+      "summary": "一次移动/位移最终落位的时点信号，载荷为单位、起点与终点；供借机攻击、陷阱触发、连锁位移监听。"
+    }
+  ],
+  "interface": {
+    "provides": ["unit_position_state", "terrain_modifier_slot", "move_resolved_signal"],
+    "consumes": [
+      "sys.turn_combat.unit_entity",
+      "sys.turn_combat.move_command"
+    ],
+    "modifies": ["board_occupancy"]
+  },
+  "mda": {
+    "mechanics_summary": "站位排布/排位效果/网格拓扑/移动力预算/射程与视线/地形效果表/高低差修正/朝向背刺/棋盘改造/推拉位移连锁的机制群。",
+    "dynamics_notes": [
+      "玩家在移动确认前反复预览可达域与威胁域（信号：移动预览悬停时长、悔棋/撤销使用率）",
+      "TB2 档地形与朝向让同一场战斗出现走位流派分化（信号：同关卡通关站位热力图的多峰分布）",
+      "TB3 档推拉连锁催生『一步多杀』的组合技追求（信号：位移致死占总击杀比、连锁长度分布）"
+    ],
+    "aesthetics_primary": ["挑战"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "mg0_migration_base",
+        "label_zh": "MG0 迁移承接·网格与移动",
+        "rating": { "m": 1, "d": 0, "c": 0, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 0,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule"
+        ],
+        "inductions": [],
+        "summary": "T-W7-4b 存量迁移承接档（非 TB 谱系正式档）：原样承接 grid_strategy 的网格结构（L3）与移动规则（L4）两点，语义/选项/参数与 pack 原点逐字节等价。量产波金样重固化窗口时并入 TB 谱系正式档位。"
+      },
+      {
+        "id": "mg1_terrain_carrier",
+        "label_zh": "MG1 迁移承接·地形交互",
+        "rating": { "m": 1, "d": 1, "c": 0, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 0,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule",
+          "sys.tactical_board.terrain_effect_rule",
+          "sys.tactical_board.terrain_table"
+        ],
+        "inductions": [],
+        "summary": "T-W7-4b 存量迁移承接档：在 MG0 之上追加地形效果规则（L4）与地形效果表（L5）两点，覆盖 grid_strategy 网格/地形四点的完整迁移集。"
+      },
+      {
+        "id": "tb0_static_formation",
+        "label_zh": "TB0 静态站位",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule",
+          "sys.tactical_board.terrain_effect_rule",
+          "sys.tactical_board.terrain_table",
+          "sys.tactical_board.formation_slots",
+          "sys.tactical_board.row_effect"
+        ],
+        "inductions": [],
+        "summary": "JRPG 前后排口径：战前排布站位槽，排位改攻防系数，战斗中不移动。C≥2（consumes 单位实体；provides 位置状态供伤害公式）。"
+      },
+      {
+        "id": "tb1_grid_movement",
+        "label_zh": "TB1 +网格移动、射程与移动力",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule",
+          "sys.tactical_board.terrain_effect_rule",
+          "sys.tactical_board.terrain_table",
+          "sys.tactical_board.formation_slots",
+          "sys.tactical_board.row_effect",
+          "sys.tactical_board.grid_shape",
+          "sys.tactical_board.move_budget",
+          "sys.tactical_board.range_los"
+        ],
+        "inductions": [],
+        "summary": "战棋基本盘：单位每回合按移动力在网格上寻路落位，射程决定可攻击集合。走位成为每回合的重复决策，P 升至 2。"
+      },
+      {
+        "id": "tb2_terrain_facing",
+        "label_zh": "TB2 +地形效果、高低差与朝向背刺",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule",
+          "sys.tactical_board.terrain_effect_rule",
+          "sys.tactical_board.terrain_table",
+          "sys.tactical_board.formation_slots",
+          "sys.tactical_board.row_effect",
+          "sys.tactical_board.grid_shape",
+          "sys.tactical_board.move_budget",
+          "sys.tactical_board.range_los",
+          "sys.tactical_board.terrain_effect_table",
+          "sys.tactical_board.elevation_rule",
+          "sys.tactical_board.facing_backstab"
+        ],
+        "inductions": [],
+        "summary": "FF 战略版/战场女武神口径：格子不再同质——地形表输出修饰器、高低差改射程与命中、朝向让同一格有三种受击面。走位从『去哪』升级为『怎么站』，P 推满。"
+      },
+      {
+        "id": "tb3_dynamic_board",
+        "label_zh": "TB3 +可破坏可改造棋盘与推拉位移连锁",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 7,
+        "activates": [
+          "sys.tactical_board.battlefield_system",
+          "sys.tactical_board.move_rule",
+          "sys.tactical_board.terrain_effect_rule",
+          "sys.tactical_board.terrain_table",
+          "sys.tactical_board.formation_slots",
+          "sys.tactical_board.row_effect",
+          "sys.tactical_board.grid_shape",
+          "sys.tactical_board.move_budget",
+          "sys.tactical_board.range_los",
+          "sys.tactical_board.terrain_effect_table",
+          "sys.tactical_board.elevation_rule",
+          "sys.tactical_board.facing_backstab",
+          "sys.tactical_board.board_alteration",
+          "sys.tactical_board.displacement_chain"
+        ],
+        "inductions": [],
+        "summary": "神界原罪/陷阵之志口径：棋盘本身成为可编辑对象（破坏/造格/表面态改写），推拉位移与地形危害连锁结算——Displace 效果变体的主场。棋盘状态爆炸，C/O 进极重档。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.tactical_board.battlefield_system",
+      "node_id": "grid_battlefield",
+      "domain": "battlefield",
+      "level": "L3",
+      "genre_scope": "universal",
+      "question": "战场采用什么网格结构？",
+      "tier_gate": "mg0_migration_base",
+      "options": [
+        {
+          "id": "square_grid",
+          "label": "方形网格",
+          "summary": "战场由方形格组成，四方向邻接，移动与射程按格计算",
+          "implications": ["需要逐格移动规则", "需要地形效果规则", "射程与距离按曼哈顿距离计算"],
+          "unlocks": ["sys.tactical_board.move_rule", "sys.tactical_board.terrain_effect_rule"]
+        },
+        {
+          "id": "hex_grid",
+          "label": "六边形网格",
+          "summary": "战场由六边形格组成，六方向邻接，包抄与侧翼路线更多",
+          "implications": ["需要逐格移动规则", "需要地形效果规则", "寻路与射程按六向邻接计算"],
+          "unlocks": ["sys.tactical_board.move_rule", "sys.tactical_board.terrain_effect_rule"]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.move_rule",
+      "node_id": "grid_battlefield",
+      "domain": "battlefield",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "网格移动的机制规则是什么？",
+      "tier_gate": "mg0_migration_base",
+      "options": [
+        {
+          "id": "move_point_cost",
+          "label": "地形移动力消耗",
+          "summary": "每进入一格消耗该地形的移动成本，路径总消耗不得超过单位移动力",
+          "implications": ["地形表成为走位策略核心", "寻路采用最小消耗路径", "机动类别可对特定地形改写消耗"],
+          "unlocks": ["sys.tactical_board.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "zoc_enabled", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "path_min_cost(terrain_move_cost) <= move" }
+          ]
+        },
+        {
+          "id": "fixed_range_move",
+          "label": "固定范围移动",
+          "summary": "移动范围为以自身为中心的固定格数，无视地形差异",
+          "implications": ["地形只影响战斗不影响机动", "数值调优集中在移动力字段", "规则可读性高，适合快节奏关卡"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pass_through_allies", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "grid_distance(origin, target) <= move" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.terrain_effect_rule",
+      "node_id": "grid_terrain",
+      "domain": "terrain",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "地形加成的机制规则是什么？",
+      "tier_gate": "mg1_terrain_carrier",
+      "options": [
+        {
+          "id": "terrain_modifier_stack",
+          "label": "地形修正数值叠加",
+          "summary": "站位地形按地形表提供回避与减伤加值，叠加进战斗公式",
+          "implications": ["地形表数值直接进战斗公式", "抢占强势地形成为核心走位动机", "飞行类机动可豁免地形修正"],
+          "unlocks": ["sys.tactical_board.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "flier_ignore_terrain", "kind": { "kind": "bool" }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "evade", "formula": "evade + terrain_evade_bonus" },
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "def", "formula": "def + terrain_def_bonus" }
+          ]
+        },
+        {
+          "id": "terrain_binary_cover",
+          "label": "二元掩体规则",
+          "summary": "地形只区分掩体与非掩体，处于掩体时按固定比例减伤",
+          "implications": ["地形理解成本低，可读性优先", "数值杠杆集中在单一减伤比例上"],
+          "unlocks": ["sys.tactical_board.terrain_table"],
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "cover_reduction", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.9 }, "required": true }
+          ] },
+          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * (1 - {param:cover_reduction}) if in_cover" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.terrain_table",
+      "node_id": "grid_terrain",
+      "domain": "terrain",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "地形效果表的结构是什么？",
+      "tier_gate": "mg1_terrain_carrier",
+      "skin_fields": ["id"],
+      "options": [
+        {
+          "id": "terrain_effect_table",
+          "label": "地形效果表",
+          "summary": "每种地形一行：标识、移动消耗、回避加成、减伤加成、可通行性",
+          "implications": ["移动消耗列被移动规则消费", "回避与减伤列被战斗公式消费"],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table",
+            "columns": [
+              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+              { "key": "move_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
+              { "key": "evade_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 60.0 }, "required": true },
+              { "key": "def_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true },
+              { "key": "passable", "kind": { "kind": "bool" }, "required": true }
+            ],
+            "row_key": "id",
+            "cardinality_key": "terrain_types"
+          }
+        },
+        {
+          "id": "custom_terrain_table",
+          "label": "自定义地形表结构",
+          "summary": "以结构化描述声明与预设不同的地形效果表结构",
+          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
+          "is_custom": true,
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
+          ] }
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.formation_slots",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "静态站位的槽位结构怎么划分？",
+      "design_question": "『站前排还是后排』这道题给玩家几行几列的答题卡？槽位结构是站位策略的定义域。",
+      "tier_gate": "tb0_static_formation",
+      "options": [
+        {
+          "id": "two_row_formation",
+          "label": "前后两排",
+          "summary": "队伍分前排/后排两行，行内顺序不承载机制（DQ/初代 JRPG 口径）",
+          "implications": [
+            "站位决策就一道二选一×人数，上手零门槛，策略深度全靠排位效果系数支撑",
+            "保护关系一目了然：前排在、后排安全——阵型崩坏（前排全灭）是天然的战斗转折点",
+            "横向站位（同排相邻）不承载机制，范围技的横向溅射无从表达"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "front_row_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "row = chosen_row if row_count(front) <= {param:front_row_cap}" },
+            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "assign(unit, row_slot)" }
+          ]
+        },
+        {
+          "id": "cell_matrix_formation",
+          "label": "格阵矩阵站位",
+          "summary": "R×C 小矩阵逐格站位（3×3/4×3），行列都承载机制（皇室战争卡位/炼金工房阵形口径）",
+          "implications": [
+            "行管攻防衰减、列管溅射范围，范围技的形状设计空间被完全打开",
+            "站位组合数按格数阶乘增长，阵型编辑器与预设方案位是必备配套",
+            "格阵是 TB1 网格移动的天然前置：同一张占用表升档时直接扩容，谱系衔接无缝"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "formation_rows", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 5.0 }, "required": true },
+            { "key": "formation_cols", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "cell = chosen(row < {param:formation_rows}, col < {param:formation_cols})" },
+            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "assign_exclusive(unit, cell)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.row_effect",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "排位对攻防的修正按什么规则生效？",
+      "design_question": "站后排换来了什么、付出了什么？排位效果是站位这道题的计分板——没有它站位就是纯摆设。",
+      "tier_gate": "tb0_static_formation",
+      "options": [
+        {
+          "id": "row_coefficient_table",
+          "label": "排位系数表",
+          "summary": "每排一行攻防系数（前排受击优先/后排物伤衰减），全职业统一查表",
+          "implications": [
+            "规则全局一致、一次学会：坦克站前、法师站后的直觉立即成立",
+            "系数全局统一意味着职业差异不进站位——所有后排的收益相同，站位与构筑解耦",
+            "受击优先级（敌方近战只能打前排）是系数之外必须一并定义的目标合法性规则"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "row_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "damage_taken_mult", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 2.0 }, "required": true },
+            { "key": "melee_damage_mult", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 2.0 }, "required": true }
+          ], "row_key": "row_key", "cardinality_key": "row_effect_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "row_position_modifier", "target": "board_unit", "duration_expr": "while(unit_position_state.row == row_key)", "priority": 0 }
+          ]
+        },
+        {
+          "id": "per_skill_row_tags",
+          "label": "技能逐个声明排位约束",
+          "summary": "排位不改全局系数，而是每个技能声明可用排位与可及排位（歧路旅人/网格 JRPG 口径）",
+          "implications": [
+            "站位与构筑咬合：长枪中排可用、弓箭全排可及——排位成为技能设计的一个维度",
+            "没有全局表可背，玩家要逐技能学习排位约束，上手成本转移到技能阅读",
+            "换排本身可能成为回合动作（换排=一回合），站位从战前决策升级为战中资源"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "constraint_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "skill_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "usable_from_rows", "kind": { "kind": "text" }, "required": true },
+            { "key": "reachable_rows", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "constraint_id", "cardinality_key": "skill_row_constraint_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "row_in(usable_from_rows, caster.row) and row_in(reachable_rows, target.row)", "difficulty_expr": "0", "on_success": [
+              { "effect": "emit_signal", "signal": "skill_position_legal" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "skill_position_blocked" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.grid_shape",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "棋盘网格采用什么几何形状？",
+      "design_question": "方格还是六角格？这不是美术偏好——它决定『相邻』有几个方向、斜向算不算一步，是全部空间规则的公理层。",
+      "tier_gate": "tb1_grid_movement",
+      "options": [
+        {
+          "id": "square_grid",
+          "label": "正交方格",
+          "summary": "四邻接方格（斜向不邻接或按规则单算），火纹/陷阵之志口径",
+          "implications": [
+            "行列对齐直觉强，直线技能/推拉方向天然只有四向——TB3 位移连锁在方格上最可读",
+            "斜向处置是永恒补丁位：斜向算 1 步、1.5 步还是禁止，每个选择都有追随者与麻烦",
+            "四方向包夹/侧翼语义简单粗壮，朝向系统（前/侧/背）与方格咬合成本最低"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "board_width", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true },
+            { "key": "board_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "init_grid(square, {param:board_width}, {param:board_height}, neighbors=4)" }
+          ]
+        },
+        {
+          "id": "hex_grid",
+          "label": "六角格",
+          "summary": "六邻接蜂窝格，无斜向歧义（高级战争 like/桌面战棋口径）",
+          "implications": [
+            "六向等距消灭斜向补丁，距离与范围计算在数学上最干净",
+            "包围一个单位需要六格，包夹与封锁的人数经济学整体改变",
+            "行列直觉弱于方格，UI 坐标提示与技能形状模板（扇形/环形）要重新设计"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "board_radius", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 24.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "init_grid(hex, radius={param:board_radius}, neighbors=6)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.move_budget",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "移动力按什么公式换算为可达域？",
+      "design_question": "移动力 5 的骑士能走多远——每格恒扣 1，还是沼泽扣 3 山地扣 2？成本口径决定地图本身是不是一道题。",
+      "tier_gate": "tb1_grid_movement",
+      "options": [
+        {
+          "id": "uniform_step_cost",
+          "label": "恒定步长",
+          "summary": "每格消耗 1 点移动力，可达域=以移动力为半径的规则形状",
+          "implications": [
+            "可达域一眼可算，玩家心算即可规划多回合走位，快节奏战棋的标配",
+            "地形不影响移动的话，地图的战术价值只剩障碍与占位，地形效果表被架空一半",
+            "单位差异只剩移动力数值一个维度，兵种的机动个性（涉水/爬山）无从表达"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_move_points", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "reachable = cells_within({param:base_move_points} steps)" },
+            { "effect": "emit_signal", "signal": "move_resolved_signal" }
+          ]
+        },
+        {
+          "id": "terrain_cost_pathfind",
+          "label": "地形成本寻路",
+          "summary": "每格按地形×兵种查移动成本表，可达域=Dijkstra 展开（火纹/大战略棋口径）",
+          "implications": [
+            "地图处处是题：一条林间小路与一片开阔地的取舍就是战术本身",
+            "兵种×地形成本矩阵是机动个性的载体（飞兵无视地形/骑兵怕森林），构筑与地图咬合",
+            "可达域不再直觉可算，引擎必须渲染可达高亮，心算党与 UI 的契约变重"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "cost_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "terrain_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "unit_class", "kind": { "kind": "text" }, "required": true },
+            { "key": "move_cost", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 99.0 }, "required": true }
+          ], "row_key": "cost_id", "cardinality_key": "move_cost_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "reachable = dijkstra(board, move_points, cost_table(terrain_key, unit_class))" },
+            { "effect": "emit_signal", "signal": "move_resolved_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.range_los",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "攻击射程与视线遮挡按什么规则判定？",
+      "design_question": "弓箭手隔着一堵墙能不能射到人？纯数格射程简单爽快，视线遮挡让掩体与卡位成真——两种口径是两种棋。",
+      "tier_gate": "tb1_grid_movement",
+      "options": [
+        {
+          "id": "range_only",
+          "label": "纯距离射程",
+          "summary": "格距在 [min,max] 区间内即可攻击，无视线概念（火纹口径，min=2 即弓的贴脸盲区）",
+          "implications": [
+            "攻击合法性=数格子，判定零歧义，回合节奏快",
+            "min 射程下限是远程职业的唯一软肋载体（贴脸即废），近远互克全靠它",
+            "障碍物不挡攻击，掩体战术不存在，地图障碍只影响移动一侧"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "min_range", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true },
+            { "key": "max_range", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "grid_distance(attacker, target) between {param:min_range} and {param:max_range}", "difficulty_expr": "0", "on_success": [
+              { "effect": "emit_signal", "signal": "attack_legal" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "attack_out_of_range" }
+            ] }
+          ]
+        },
+        {
+          "id": "line_of_sight_cover",
+          "label": "视线遮挡+掩体",
+          "summary": "攻击需连通视线，遮挡物阻断或按掩体值降低命中（XCOM/陷阵之志口径）",
+          "implications": [
+            "掩体成为棋盘上的稀缺资源，走位目标从『够得着』变成『站得好』",
+            "视线判定（角射线/格连线）的边界情形极多，判定可视化（红/黄/绿线）是必配 UI",
+            "掩体值与命中公式咬合：本系统经 terrain_modifier_slot 供修饰器，命中结算归战斗系统"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "full_cover_block", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "half_cover_hit_penalty", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "line_of_sight_clear(attacker, target) or {param:full_cover_block} == 0", "difficulty_expr": "0", "on_success": [
+              { "effect": "attach", "modifier_id": "cover_hit_penalty", "target": "board_unit", "duration_expr": "while(behind_half_cover)", "priority": 0 },
+              { "effect": "emit_signal", "signal": "attack_legal" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "attack_blocked_by_cover" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.terrain_effect_table",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "地形效果以什么结构对站位单位生效？",
+      "design_question": "站进森林那一刻发生什么——查一张静态属性表，还是格子带着可变的表面状态（着火/结冰/带电）？",
+      "tier_gate": "tb2_terrain_facing",
+      "options": [
+        {
+          "id": "static_terrain_stats",
+          "label": "静态地形属性表",
+          "summary": "地形类型→修正值的静态表（森林闪避+20/山地防御+2），战斗全程不变（火纹口径）",
+          "implications": [
+            "地形是地图作者的语言：修正表全局静态，关卡平衡可离线核算",
+            "占据强格是明确的争夺目标，攻防围绕关键地形展开——布阵感强",
+            "地形不响应战斗行为，火烧森林/冻结河面这类改造玩法在本口径下不存在"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "terrain_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "evade_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": -1.0, "max": 1.0 }, "required": true },
+            { "key": "defense_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": -10.0, "max": 10.0 }, "required": true }
+          ], "row_key": "terrain_key", "cardinality_key": "terrain_effect_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "terrain_static_bonus", "target": "board_unit", "duration_expr": "while(standing_on(terrain_key))", "priority": 0 }
+          ]
+        },
+        {
+          "id": "surface_state_machine",
+          "label": "表面状态机",
+          "summary": "格子带可变表面态（正常/着火/结冰/水浸/带电），元素行为驱动状态转移并对站位者持续结算（神界原罪口径）",
+          "implications": [
+            "棋盘成为化学实验台：油+火=燃烧、水+电=全域麻痹，组合发现是核心乐趣",
+            "表面转移矩阵（何态×何元素→何态）是真实的设计与测试重担，组合爆炸要用封闭元素集压住",
+            "持续结算挂 Schedule 周期伤害，回合结算顺序（先表面伤害还是先单位行动）必须显式定序"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "transition_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "from_state", "kind": { "kind": "text" }, "required": true },
+            { "key": "element_input", "kind": { "kind": "text" }, "required": true },
+            { "key": "to_state", "kind": { "kind": "text" }, "required": true },
+            { "key": "tick_damage", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
+          ], "row_key": "transition_id", "cardinality_key": "surface_transition_rows" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "terrain_tile.surface_state", "to_state": "to_state(transition_id)" },
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "board_unit", "property": "hp", "formula": "hp - tick_damage(surface_state) if standing_on(tile)" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.elevation_rule",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "高低差对攻防与移动的修正怎么定？",
+      "design_question": "占领高地值多少数值？高低差把地图从平面变立体，但它的每一分收益都要从攻防公式里明码标价。",
+      "tier_gate": "tb2_terrain_facing",
+      "options": [
+        {
+          "id": "high_ground_bonus",
+          "label": "高打低增益",
+          "summary": "高度差换算攻击/命中加成与射程延伸，爬升消耗额外移动力（FF 战略版/皇家骑士团口径）",
+          "implications": [
+            "制高点成为地图的战略货币，开局抢高地是普适第一目标",
+            "射程随高度延伸让弓手上塔质变，远程职业的地图依赖度大增",
+            "每层高度的爬升成本要与收益平衡，否则高地一旦占住就是不可撼动的龟壳"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "per_level_damage_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.5 }, "required": true },
+            { "key": "per_level_climb_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "attack_output", "formula": "attack * (1 + elevation_diff * {param:per_level_damage_bonus})" },
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "climb_cost = elevation_diff * {param:per_level_climb_cost}" }
+          ]
+        },
+        {
+          "id": "flat_board_no_elevation",
+          "label": "平面棋盘",
+          "summary": "不引入高度轴，立体感全部交给障碍与地形效果表达",
+          "implications": [
+            "少一个空间维度，可达/视线/位移判定全部简化一档，实现与教学成本双降",
+            "地图语汇少了垂直叙事（塔楼/悬崖/沟壑），立体关卡设计不可用",
+            "TB3 位移连锁在平面上无坠落伤害位：推下悬崖这一经典位移收益要换成撞墙/入危害格口径"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "elevation_axis = disabled (all cells z=0)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.facing_backstab",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "朝向与背刺按什么规则参与结算？",
+      "design_question": "回合结束时单位面朝哪边是不是一个决策？朝向让『站在哪』之外多出『看着哪』，背刺奖励是它的兑现口径。",
+      "tier_gate": "tb2_terrain_facing",
+      "options": [
+        {
+          "id": "facing_arc_multiplier",
+          "label": "受击面倍率",
+          "summary": "单位有朝向，按受击方位（正面/侧面/背面）查倍率表，回合末朝向由玩家显式指定（皇家骑士团/歧路旅人战棋口径）",
+          "implications": [
+            "每回合多一个收尾决策（面朝哪），绕后走位有了明确的数值报偿",
+            "AI 也要会绕后与调整朝向，敌方行为树复杂度同步上浮",
+            "朝向图标必须常显且方位判定线要可视化，否则背刺判定成为黑盒争议源"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "arc_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "damage_mult", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true },
+            { "key": "hit_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "arc_key", "cardinality_key": "facing_arc_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "facing = player_chosen_direction at turn_end" },
+            { "effect": "modify_property", "entity": "board_unit", "property": "incoming_damage", "formula": "damage * damage_mult(attack_arc(attacker_pos, target_facing))" }
+          ]
+        },
+        {
+          "id": "flank_adjacency_bonus",
+          "label": "无朝向包夹加成",
+          "summary": "不建朝向轴，两名友军夹击同一目标（对侧相邻）即触发夹击加成（陷阵之志/多数轻战棋口径）",
+          "implications": [
+            "省掉朝向管理的操作税，包夹收益改由多单位协同兑现——奖励团队走位而非个体收尾",
+            "夹击判定纯几何（对侧占位），无朝向状态要维护，AI 与回放都简单",
+            "单挑局（1v1 残局）不存在包夹，位置加成整体失效，残局深度弱于朝向口径"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "flank_damage_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "allies_on_opposite_sides(target)", "difficulty_expr": "0", "on_success": [
+              { "effect": "attach", "modifier_id": "flanked_debuff", "target": "board_unit", "duration_expr": "while_flanked", "priority": 0 },
+              { "effect": "modify_property", "entity": "board_unit", "property": "incoming_damage", "formula": "damage * (1 + {param:flank_damage_bonus})" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.board_alteration",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "棋盘破坏与改造按什么口径开放？",
+      "design_question": "墙能不能炸、桥能不能架？棋盘从静态考卷变成可编辑画布的那一刻，关卡作者与玩家开始共享出题权。",
+      "tier_gate": "tb3_dynamic_board",
+      "options": [
+        {
+          "id": "destructible_terrain_hp",
+          "label": "地形耐久破坏",
+          "summary": "地形格带耐久，受击扣减、归零转为废墟/平地（战场女武神的墙/XCOM 掩体口径）",
+          "implications": [
+            "『打不过就拆墙』成为合法解，卡关的空间解法多一族",
+            "掩体会被打没：掩体依赖流派有了天敌，攻防的地形军备竞赛成立",
+            "破坏不可逆时残局地图趋向开阔平原，终盘战术单一化——耐久与伤害的比例要护住中盘"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "terrain_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "durability", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "ruined_terrain_key", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "terrain_key", "cardinality_key": "destructible_terrain_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "terrain_tile", "property": "durability", "formula": "durability - incoming_damage" },
+            { "effect": "roll_check", "formula": "durability <= 0", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "terrain_tile.tile_state", "to_state": "ruined" },
+              { "effect": "emit_signal", "signal": "terrain_destroyed" }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "constructive_editing",
+          "label": "建设性改造",
+          "summary": "单位可消耗行动在格上架桥/筑墙/放障碍，向棋盘写入新格（工程兵/冰法造墙口径）",
+          "implications": [
+            "玩家获得出题权：封路、造掩体、搭桥开新路线，走位博弈升维为地形博弈",
+            "造物是否可被拆、持续几回合、有无数量上限——三个参数共同防止棋盘被造物淹没",
+            "寻路/视线缓存随每次改造失效重算，性能与 AI 重规划成本是隐藏账单"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "build_action_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true },
+            { "key": "construct_duration_turns", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
+            { "key": "max_constructs_per_side", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_points", "formula": "{param:build_action_cost}" },
+            { "effect": "spawn_entity", "entity": "terrain_tile" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:construct_duration_turns}", "unit": "turns", "inner": [
+              { "effect": "despawn_entity", "entity": "terrain_tile" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.tactical_board.displacement_chain",
+      "domain": "tactical_board",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "推拉位移的连锁按什么规则结算？",
+      "design_question": "把敌人推进火里、撞上另一个敌人、再挤下悬崖——连锁能传多远？位移结算规则是本档的灵魂，也是 Displace 效果变体的主场。",
+      "tier_gate": "tb3_dynamic_board",
+      "options": [
+        {
+          "id": "stop_on_collision",
+          "label": "碰撞即停+撞击伤害",
+          "summary": "被推单位遇到障碍/单位即停，碰撞双方按剩余推力结算撞击伤害，不传递位移（陷阵之志口径）",
+          "implications": [
+            "连锁在第一次碰撞终止，结算树浅、完全可预览——『所见即所得』是本口径的立身之本",
+            "撞墙/撞人的伤害换算把位移变成一种攻击资源，推与打的选择每回合都在权衡",
+            "多米诺式连环推不存在，位移组合技上限被刻意压低——深度换可读性的显式取舍"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "collision_damage_per_cell", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "displace", "subject": "board_unit", "direction_expr": "push_direction(source, target)", "distance_expr": "min(push_distance, distance_to_first_obstacle)", "duration_expr": "instant" },
+            { "effect": "roll_check", "formula": "collided_with_obstacle_or_unit", "difficulty_expr": "0", "on_success": [
+              { "effect": "modify_property", "entity": "board_unit", "property": "hp", "formula": "hp - remaining_push_cells * {param:collision_damage_per_cell}" }
+            ], "on_failure": [] },
+            { "effect": "emit_signal", "signal": "move_resolved_signal" }
+          ]
+        },
+        {
+          "id": "cascade_transfer",
+          "label": "动量传递连锁",
+          "summary": "被撞单位继承剩余推力继续位移，穿过危害格逐格结算（神界原罪式连环撞+表面联动）",
+          "implications": [
+            "多米诺连锁成立：一次重推可以贯穿一列敌阵，组合技天花板极高——高玩录像的素材机器",
+            "逐格结算要与表面状态机咬合（被推穿过火面逐格点燃），结算顺序表是硬设计产物",
+            "连锁深度必须设硬上限并全程可预览，否则一次推挤触发分钟级结算动画、竞技场景不可用"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "momentum_transfer_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 1.0 }, "required": true },
+            { "key": "max_chain_depth", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "displace", "subject": "board_unit", "direction_expr": "push_direction(source, target)", "distance_expr": "push_distance", "duration_expr": "per_cell_step" },
+            { "effect": "roll_check", "formula": "hit_another_unit and chain_depth < {param:max_chain_depth}", "difficulty_expr": "0", "on_success": [
+              { "effect": "displace", "subject": "collided_unit", "direction_expr": "same_direction", "distance_expr": "remaining_cells * {param:momentum_transfer_ratio}", "duration_expr": "per_cell_step" }
+            ], "on_failure": [] },
+            { "effect": "area_apply", "area_kind": "line", "area_params": { "path": "displacement_path" }, "target_filter": "hazard_tiles_crossed", "inner": [
+              { "effect": "modify_property", "entity": "board_unit", "property": "hp", "formula": "hp - hazard_tick(surface_state) per crossed_cell" }
+            ] },
+            { "effect": "emit_signal", "signal": "move_resolved_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "terrain_types": { "min": 4, "max": 12 },
+    "row_effect_rows": { "min": 2, "max": 5 },
+    "skill_row_constraint_rows": { "min": 4, "max": 200 },
+    "move_cost_rows": { "min": 6, "max": 200 },
+    "terrain_effect_rows": { "min": 3, "max": 30 },
+    "surface_transition_rows": { "min": 4, "max": 60 },
+    "facing_arc_rows": { "min": 2, "max": 4 },
+    "destructible_terrain_rows": { "min": 2, "max": 30 }
+  },
+  "consistency_rules": [
+    {
+      "id": "grid_and_move_budget_answered_together",
+      "kind": "answered_together",
+      "first": "sys.tactical_board.grid_shape",
+      "second": "sys.tactical_board.move_budget"
+    },
+    {
+      "id": "destructible_rows_reference_terrain_effects",
+      "kind": "row_reference",
+      "source_decision": "sys.tactical_board.board_alteration",
+      "source_column": "terrain_key",
+      "target_decision": "sys.tactical_board.terrain_effect_table",
+      "target_key_column": "terrain_key"
+    }
+  ],
+  "skin_fields": ["tile_theme", "grid_highlight_style"]
+}

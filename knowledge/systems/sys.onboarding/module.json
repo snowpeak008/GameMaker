@@ -1,0 +1,432 @@
+{
+  "module_id": "sys.onboarding",
+  "semver": "1.0.0",
+  "label_zh": "新手引导",
+  "summary": "消费首次行为事件、按进度表产出引导展示与功能门控的元系统（缺口扫描 G6；定稿 §2.1 判例 2 已认定是系统、附录修订 R1 勘误入库）。谱系四档：首次触发提示 → 分步强制流程+进度门控 → 情境化触发（检测行为缺失才教）→ 自适应引导（消费表现事件动态调整教学密度）。横切全品类：非『品类成立必需』而是『上线必需』。",
+  "nouns": [
+    {
+      "id": "onboarding_progress",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "引导进度条目",
+      "summary": "引导进度表的一行：步骤 id、完成状态、完成时刻。判例 2 认定的独占状态载体——摘除本系统它无处安放。"
+    },
+    {
+      "id": "ui_guidance_state",
+      "kind": { "kind": "property", "of": "ui_layer" },
+      "label_zh": "引导展示状态",
+      "summary": "当前应展示的引导修饰（高亮/遮罩/指向标）读数，挂在 UI 层上；判例 2 的『产出 UI 修饰器』落点。"
+    },
+    {
+      "id": "feature_gate",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "功能门控挂点",
+      "summary": "允许本系统按进度启闭功能入口的规则位（引导完成前禁用天赋面板）；也开放给他系统 ModifyRule（如付费直升跳过门控）。"
+    },
+    {
+      "id": "guidance_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "引导事件",
+      "summary": "一步引导开始/完成/被跳过的时点信号，载荷为步骤 id 与耗时；供漏斗埋点、任务奖励、自适应调节消费。"
+    }
+  ],
+  "interface": {
+    "provides": ["ui_guidance_state", "feature_gate", "guidance_signal"],
+    "consumes": [
+      "sys.equipment.equip_signal",
+      "sys.loot.drop_signal",
+      "sys.economy.income_signal",
+      "sys.inventory.inventory_full_signal",
+      "sys.telemetry.performance_signal"
+    ],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "首次行为触发口径/跳过策略/流程结构/进度门控/行为缺失检测/教学密度调节的机制群。",
+    "dynamics_notes": [
+      "引导漏斗的逐步流失刻画首会话体验质量（信号：各步骤完成率、步间停留时长、跳过率）",
+      "门控解锁节奏塑造前期目标感：下一个开放的功能就是下一个短期目标（信号：新功能开放后的首次使用间隔）",
+      "情境化档起教学只在缺失时出现，熟练玩家几乎无感（信号：老手账号的引导触发次数趋近于零）"
+    ],
+    "aesthetics_primary": ["消遣"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "n0_first_time_hints",
+        "label_zh": "N0 首次触发提示",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 1 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.onboarding.trigger_scope",
+          "sys.onboarding.skip_policy"
+        ],
+        "inductions": [],
+        "summary": "首次行为事件 → 弹一次提示并记录进度，外加跳过策略。最小可上线形态。C≥2（consumes 首次行为事件源；provides 引导展示状态）。"
+      },
+      {
+        "id": "n1_forced_flow",
+        "label_zh": "N1 +分步强制流程与门控",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 1, "o": 1 },
+        "p_floor": 1,
+        "interface_floor": 3,
+        "activates": [
+          "sys.onboarding.trigger_scope",
+          "sys.onboarding.skip_policy",
+          "sys.onboarding.flow_structure",
+          "sys.onboarding.gate_scope"
+        ],
+        "inductions": [],
+        "summary": "步骤表串成受控流程 + 功能入口按进度启闭：商业手游标准形态。进度表从流水账变成门控裁定依据。"
+      },
+      {
+        "id": "n2_contextual",
+        "label_zh": "N2 +情境化触发",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 1, "o": 2 },
+        "p_floor": 1,
+        "interface_floor": 4,
+        "activates": [
+          "sys.onboarding.trigger_scope",
+          "sys.onboarding.skip_policy",
+          "sys.onboarding.flow_structure",
+          "sys.onboarding.gate_scope",
+          "sys.onboarding.absence_detection"
+        ],
+        "inductions": [],
+        "summary": "检测行为缺失才教：玩家 N 场没用过闪避才弹闪避教学。教学从『到点就播』升级为『缺了才补』，对老手近乎无感。"
+      },
+      {
+        "id": "n3_adaptive",
+        "label_zh": "N3 +自适应密度调节",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 1, "o": 2 },
+        "p_floor": 1,
+        "interface_floor": 5,
+        "activates": [
+          "sys.onboarding.trigger_scope",
+          "sys.onboarding.skip_policy",
+          "sys.onboarding.flow_structure",
+          "sys.onboarding.gate_scope",
+          "sys.onboarding.absence_detection",
+          "sys.onboarding.density_adaptation"
+        ],
+        "inductions": [],
+        "summary": "消费表现事件动态调整教学密度：连败加提示、速通静音。谱系语义上的极重档；五维如实标定 W=11 落全局『重』档带——横切元系统的 P 恒为 1（玩家不做引导决策），档带天花板由量表决定，如实申报不虚标。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.onboarding.trigger_scope",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "『首次』按什么范围判定？",
+      "design_question": "换个存档要重看引导吗？按存档判首次保证每段旅程完整，按账号判首次尊重玩家已经会了的事实。",
+      "tier_gate": "n0_first_time_hints",
+      "options": [
+        {
+          "id": "per_save_first_time",
+          "label": "按存档判首次",
+          "summary": "每个存档/角色独立记录首次行为，新档一律重新引导",
+          "implications": [
+            "多角色游戏里老玩家被迫重看引导，二号角色的前 30 分钟体验最差——跳过策略成为刚需搭配",
+            "引导状态随存档走，测试与复现简单（删档即重置）",
+            "肉鸽/多周目场景下按档判定天然合理，每局都是新旅程的品类反而受益"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "onboarding_progress" },
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "show(step) if first_in_save(action_kind)" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        },
+        {
+          "id": "account_wide_first_time",
+          "label": "按账号判首次",
+          "summary": "首次行为记录在账号层全角色共享，任何角色做过即全账号视为已会",
+          "implications": [
+            "二号角色零重复引导，老玩家开新角色的体验顺滑——MMO/多职业游戏的主流选择",
+            "账号层进度存储把引导系统拖进账号服务的依赖圈，单机离线档要另设兜底",
+            "新角色可能跳过了与新职业强相关的教学（法师没学过的盾反被战士角色标记为已会），机制差异大的职业需要局部重触发"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "onboarding_progress" },
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "show(step) if first_in_account(action_kind)" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.onboarding.skip_policy",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "引导允许怎么跳过？",
+      "design_question": "『跳过』按钮给谁、跳到哪？逐条自由跳把选择权全交玩家，整段验证跳只放行证明了自己的人。",
+      "tier_gate": "n0_first_time_hints",
+      "options": [
+        {
+          "id": "free_skip_per_step",
+          "label": "逐步自由跳过",
+          "summary": "每条引导都带跳过按钮，点击即标记完成并放行，无任何验证",
+          "implications": [
+            "尊重玩家自主权，老玩家/回流玩家零摩擦——跳过率本身成为引导质量的诚实反馈",
+            "新手误触跳过后无人补课，关键教学（第一次强化）漏学的后续挫败会被归咎于游戏难",
+            "跳过即完成的语义让门控形同虚设，与强制门控档搭配时要显式声明哪些步骤不可跳"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "onboarding_progress", "property": "step_status", "formula": "skipped_as_complete on skip_input" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        },
+        {
+          "id": "verified_block_skip",
+          "label": "验证式整段跳过",
+          "summary": "引导按章节分段，完成一次该章节核心行为的实操验证即可整段跳过（老手考试口径）",
+          "implications": [
+            "跳过资格用行为证明而非自我申报，漏学风险被验证环节兜住",
+            "验证关卡是额外内容成本，每个章节都要设计一个『考题』场景",
+            "考不过的玩家被迫看完整段，自认老手却失败的挫败感比直接看引导更强——考题难度必须显著低于正式内容"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "verify_attempt_limit", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "verification_action_completed", "difficulty_expr": "1", "on_success": [
+              { "effect": "modify_property", "entity": "onboarding_progress", "property": "step_status", "formula": "chapter_marked_complete" },
+              { "effect": "emit_signal", "signal": "guidance_signal" }
+            ], "on_failure": [
+              { "effect": "consume_resource", "resource": "verify_attempt", "formula": "1 of {param:verify_attempt_limit}" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.onboarding.flow_structure",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "分步流程按什么结构编排？",
+      "design_question": "教学是一条不许下车的轨道，还是一张自选顺序的清单？线性轨道保证叙事与依赖顺序，任务清单把学习交还给好奇心。",
+      "tier_gate": "n1_forced_flow",
+      "options": [
+        {
+          "id": "linear_scripted_track",
+          "label": "线性脚本轨道",
+          "summary": "步骤严格顺序执行，当前步完成才开下一步，中途不可离开引导流",
+          "implications": [
+            "知识依赖顺序有保证（先教移动再教战斗），叙事可以与教学同轨推进",
+            "强制轨道的每一分钟都在消耗玩家耐心，轨道长度是首日流失的直接变量",
+            "步骤表线性可读，漏斗埋点逐步对齐，A/B 调优的定位精度最高"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "step_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "step_order", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true },
+            { "key": "completion_condition_expr", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "step_id", "cardinality_key": "onboarding_step_rows" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "onboarding_flow", "to_state": "next_step_in_order" },
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "highlight(current_step_target)" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        },
+        {
+          "id": "objective_checklist",
+          "label": "目标清单自选序",
+          "summary": "教学以任务清单形态并行开放，玩家任选完成顺序，集齐即毕业（开放世界口径）",
+          "implications": [
+            "玩家按兴趣驱动学习，自主感好——愿意先钓鱼的人不必先学战斗",
+            "知识依赖无法靠顺序保证，每条教学必须自包含或声明前置项，内容编写约束更严",
+            "清单完成率长尾分布：总有人留着两条不做，毕业奖励要压在集齐上才能收口"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "objective_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "prerequisite_ref", "kind": { "kind": "text" }, "required": false },
+            { "key": "completion_condition_expr", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "objective_id", "cardinality_key": "onboarding_step_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "onboarding_progress", "property": "step_status", "formula": "complete(objective_id) when condition_met" },
+            { "effect": "roll_check", "formula": "count(completed_objectives)", "difficulty_expr": "total_objectives", "on_success": [
+              { "effect": "emit_signal", "signal": "guidance_signal" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.onboarding.gate_scope",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "功能门控按什么口径启闭？",
+      "design_question": "没学过的功能是看不见，还是看得见摸不着？隐藏给干净的界面，灰显给可预期的期待。",
+      "tier_gate": "n1_forced_flow",
+      "options": [
+        {
+          "id": "hidden_until_unlocked",
+          "label": "解锁前隐藏",
+          "summary": "未到进度的功能入口整体不渲染，界面随进度逐步长出来",
+          "implications": [
+            "新手界面极简，认知负担被压到当下可用的最小集合",
+            "玩家不知道后面还有什么，缺少『快解锁天赋了』的期待牵引——目标感要靠别处供给",
+            "版本更新挪动门控点位时，老玩家界面突然长出新入口的莫名感需要一次性引导补丁"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "feature_gate", "patch": { "patch": "disable" }, "priority": 0 },
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "hide(feature_entry) until gate_open" }
+          ]
+        },
+        {
+          "id": "visible_but_locked",
+          "label": "灰显带解锁条件",
+          "summary": "功能入口始终可见但灰显，悬停/点击展示解锁条件（到 10 级开放）",
+          "implications": [
+            "锁着的按钮是免费的目标广告：玩家看得见就会想要，前期追逐感由界面自发供给",
+            "满屏灰键对新手是噪音，入口多的游戏需按邻近解锁程度分层展示",
+            "解锁瞬间的点亮反馈是廉价而有效的爽点位，值得做足表现"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "preview_depth", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "feature_gate", "patch": { "patch": "add_precondition", "condition": "onboarding_progress_reached(required_step)" }, "priority": 0 },
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "grey_locked(feature_entry, show_next={param:preview_depth})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.onboarding.absence_detection",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "行为缺失按什么口径检测？",
+      "design_question": "怎么断定玩家『不会』而不是『不想』？次数窗口看用没用过，情境错失看该用时用没用——后者更准也更贵。",
+      "tier_gate": "n2_contextual",
+      "options": [
+        {
+          "id": "usage_count_window",
+          "label": "次数窗口检测",
+          "summary": "统计窗口期内目标行为的使用次数，低于阈值即判定缺失并触发教学",
+          "implications": [
+            "实现只需行为计数器，检测成本低、跨品类零适配",
+            "分不清『不会用』与『流派不需要』——不用闪避的重甲流玩家会被反复教闪避，需要白名单豁免位",
+            "窗口长度与阈值两个参数决定误报率，上线后要按触发后行为改善率持续校准"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "window_sessions", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true },
+            { "key": "min_usage_threshold", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "usage_count(action_kind, window={param:window_sessions})", "difficulty_expr": "{param:min_usage_threshold}", "on_failure": [
+              { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "show_teaching(action_kind)" },
+              { "effect": "emit_signal", "signal": "guidance_signal" }
+            ], "on_success": [] }
+          ]
+        },
+        {
+          "id": "situational_miss_detection",
+          "label": "情境错失检测",
+          "summary": "定义『该用而未用』的情境谓词（被弹反窗口内未按格挡），错失累计达标才教",
+          "implications": [
+            "教学精准指向真实短板，触发即命中痛点——被教的玩家服气率最高",
+            "每条教学都要人工定义情境谓词，内容成本高且谓词错了比不教更糟",
+            "情境谓词依赖战斗/判定系统暴露细粒度事件，接口需求比次数窗口深一层"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "miss_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "situation_predicate_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "miss_count_to_trigger", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ], "row_key": "miss_rule_id", "cardinality_key": "miss_detection_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "accumulated_misses(miss_rule_id)", "difficulty_expr": "miss_count_to_trigger(miss_rule_id)", "on_success": [
+              { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "show_teaching(miss_rule_id)" },
+              { "effect": "emit_signal", "signal": "guidance_signal" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.onboarding.density_adaptation",
+      "domain": "onboarding",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "教学密度按什么信号自适应？",
+      "design_question": "谁来决定这个玩家需要多少教学？表现分级用赢没赢说话，行为画像用手熟不熟说话。",
+      "tier_gate": "n3_adaptive",
+      "options": [
+        {
+          "id": "performance_tiered",
+          "label": "表现分级调节",
+          "summary": "按胜负/死亡/耗时等结果指标把玩家分到教学密度档，连败升档加提示、连胜降档静音",
+          "implications": [
+            "结果指标客观可比，分档规则一张表讲清，玩家申诉时可解释",
+            "结果滞后于原因：连败可能源于配装而非操作，教学可能补错课——与情境检测搭配可互补",
+            "密度档切换要平滑（迟滞带），在临界成绩附近反复横跳的玩家会感到系统忽冷忽热"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tier_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "performance_condition_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "hint_density_factor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 3.0 }, "required": true }
+          ], "row_key": "tier_key", "cardinality_key": "density_tier_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "density = hint_density_factor(tier_of(performance_metrics))" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        },
+        {
+          "id": "behavior_profile_scaling",
+          "label": "行为画像缩放",
+          "summary": "按操作特征（APM/菜单寻路时长/首次尝试成功率）连续估计熟练度，教学密度随估计值连续缩放",
+          "implications": [
+            "熟练度在结果出现前就可估计，老玩家开新号几分钟内即被识别并静音教学",
+            "连续缩放无档位跳变，体验平滑，但『为什么不教我了』不可解释——需要手动密度开关兜底",
+            "画像特征选取与权重是数据科学工作量，冷启动期没有分布基线只能保守全量教学"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.onboarding" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "adaptation_rate", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 1.0 }, "required": true },
+            { "key": "min_density_floor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "ui_layer", "property": "ui_guidance_state", "formula": "density = max(estimate(profile_features) adjusted_by {param:adaptation_rate}, {param:min_density_floor})" },
+            { "effect": "emit_signal", "signal": "guidance_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "onboarding_step_rows": { "min": 5, "max": 120 },
+    "miss_detection_rows": { "min": 3, "max": 40 },
+    "density_tier_rows": { "min": 2, "max": 6 }
+  },
+  "consistency_rules": [
+    {
+      "id": "flow_and_gate_answered_together",
+      "kind": "answered_together",
+      "first": "sys.onboarding.flow_structure",
+      "second": "sys.onboarding.gate_scope"
+    }
+  ],
+  "skin_fields": ["guide_mascot_appearance", "hint_text_tone"]
+}

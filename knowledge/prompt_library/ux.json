@@ -1,0 +1,144 @@
+{
+  "entries": [
+    {
+      "id": "pl.ux.hud_density",
+      "domain": "ux_interface_design",
+      "question_zh": "HUD 信息密度开多满——数据全上屏（DPS/冷却/威胁值）让硬核玩家决策有据，但屏幕变成仪表盘、画面美术全白做；极简沉浸但关键信息靠猜，密度旋钮拧哪？",
+      "follow_ups": [
+        "自定义 HUD 把决定权丢给玩家，是尊重还是设计弃权——默认档才是真正的设计声明？",
+        "动态 HUD（战斗时浮现、平时隐去）的切换闪烁本身会不会成为新的噪音？"
+      ],
+      "source_ref": "v2:v2.hud_feedback_decision.guan_jian_zhuang_tai_fan_kui.ux_load_boundary"
+    },
+    {
+      "id": "pl.ux.menu_depth",
+      "domain": "ux_interface_design",
+      "question_zh": "功能入口的层级挖多深——首屏平铺所有系统入口找什么都一步到位，但图标海让新手当场失读；收纳进二三级菜单清爽但高频功能每次多点两下、日积月累全是怨，树怎么剪？",
+      "follow_ups": [
+        "按使用频率动态浮动入口（常用自动前排）会不会破坏空间记忆、更难找？",
+        "红点提醒挂几层——层层红点是导流还是牛皮癣？"
+      ],
+      "source_ref": "v2:v2.ux_information_architecture_decision.gong_neng_ru_kou_ceng_ji.ux_load_boundary"
+    },
+    {
+      "id": "pl.ux.confirm_friction",
+      "domain": "ux_interface_design",
+      "question_zh": "危险操作的确认摩擦加几道——分解、出售、购买的二次确认防误操作，但高频操作者每天被同一个弹窗拦一百次；免确认顺滑但一次误删就是一张工单加一条差评，闸门装几道？",
+      "follow_ups": [
+        "『不再提醒』勾选把风险转移给玩家签字画押，法律上和体验上各站得住吗？",
+        "按价值分级确认（贵重品双确认、垃圾免确认）的价值判定跟得上玩家的心理账本吗？"
+      ],
+      "source_ref": "v2:v2.ux_flow_decision.gou_mai_liu_cheng.ux_operation_dynamic"
+    },
+    {
+      "id": "pl.ux.reward_claim_route",
+      "domain": "ux_interface_design",
+      "question_zh": "奖励领取做自动还是手动——自动入包零操作零遗漏，但『亲手领取』的按压快感和确认感也一并蒸发；手动有仪式但十个系统十个待领取红点是每天的第一份作业，领奖动线怎么铺？",
+      "follow_ups": [
+        "一键全领是折中还是摆烂——奖励从十次小快乐变成一行滚动日志，值不值？",
+        "重要奖励（首通/成就）单独走演出、日常奖励自动化，切分线画哪？"
+      ],
+      "source_ref": "v2:v2.ux_flow_decision.jiang_li_ling_qu_liu_cheng.ux_operation_dynamic"
+    },
+    {
+      "id": "pl.ux.error_recovery",
+      "domain": "ux_interface_design",
+      "question_zh": "异常状态的兜底做多厚——断线重连、误操作撤回、进度自动存这些安全网每张都是工程成本，不做则每次事故都由玩家买单、口碑记你账上，网织多密？",
+      "follow_ups": [
+        "撤回窗口（卖错装备 24h 内回购）的时长和『第二仓库』滥用的平衡点在哪？",
+        "重连回来的战场状态（暂停等他还是AI代打）对局内其他人公平吗？"
+      ],
+      "source_ref": "v2:v2.ux_information_architecture_decision.yi_chang_xin_xi_biao_da.ux_understanding_experience"
+    },
+    {
+      "id": "pl.ux.accessibility_budget",
+      "domain": "ux_interface_design",
+      "question_zh": "无障碍支持投多少——色盲模式、键位重映射、字幕选项服务的是少数人但缺了就是把人锁在门外，每项都是排期；做到哪条线算尽责、哪条线算超配，预算切多少？",
+      "follow_ups": [
+        "无障碍选项和难度选项的边界怎么画——自动瞄准算辅助还是算作弊，竞技模式禁不禁？",
+        "上线后补无障碍和立项期就做进管线，成本差几倍？"
+      ],
+      "source_ref": "v2:v2.accessibility_decision.cao_zuo_ke_ti_dai.ux_interface_mechanic"
+    },
+    {
+      "id": "pl.ux.number_or_bar",
+      "domain": "ux_interface_design",
+      "question_zh": "数值展示用精确数字还是模糊条——伤害飘字、精确血量喂养计算党的决策深度，但把战斗变成算术题；血条大约感保直觉但『还差几刀』的判断没了依据，刻度露多少？",
+      "follow_ups": [
+        "精确模式做成可选开关后，开与不开的玩家在对抗里信息不对等算不算失衡？",
+        "超大数值的缩写（1.2M）丢掉的精度，哪些场景里是决策致命伤？"
+      ],
+      "source_ref": "v2:v2.readability_decision.shu_zhi_zhan_shi.ux_understanding_experience"
+    },
+    {
+      "id": "pl.ux.art_style_bet",
+      "domain": "presentation_feel_design",
+      "question_zh": "美术风格押写实还是风格化——写实第一眼惊艳、宣传素材能打，但设备门槛高且五年后必然显旧；风格化耐老、低配友好，但首屏冲击力弱、容易被截图党判『画面差』，赌注押哪边？",
+      "follow_ups": [
+        "风格化的独特度拉多高——太独特的审美是护城河还是劝退墙，测试盘子够大吗？",
+        "跨平台（手机+PC）的画质档位差距多大时，两端玩家会觉得玩的不是同一款游戏？"
+      ],
+      "source_ref": "v2:v2.art_direction_decision.feng_ge_ding_wei.presentation_feeling_target"
+    },
+    {
+      "id": "pl.ux.visual_noise_ceiling",
+      "domain": "presentation_feel_design",
+      "question_zh": "技能特效的华丽度封顶封哪——特效拉满打击感爽、付费皮肤有溢价空间，但多人同屏时满屏光污染、关键信息（敌人抬手）全被糊住，华丽和可读的分界线画哪？",
+      "follow_ups": [
+        "敌我特效不对称渲染（己方华丽、敌方降透明度）技术上可行，竞技公平上站得住吗？",
+        "付费特效比免费更炫是卖点，但炫到影响对手读招时算不算数值付费？"
+      ],
+      "source_ref": "v2:v2.art_direction_decision.shi_jue_yi_zhi_xing.presentation_consistency_boundary"
+    },
+    {
+      "id": "pl.ux.audio_priority",
+      "domain": "presentation_feel_design",
+      "question_zh": "听觉带宽分给谁——脚步、技能音、语音报点是竞技信息，音乐和环境声是氛围沉浸，混音里两派抢的是同一副耳朵，高压时刻谁被压低？",
+      "follow_ups": [
+        "动态混音（战斗时自动压音乐）的切换被玩家感知到时，沉浸是加了还是破了？",
+        "关掉音乐只留音效的竞技玩家占比多少——音乐预算是不是花给了少数人？"
+      ],
+      "source_ref": "v2:v2.audio_experience_decision.sheng_yin_you_xian_ji.presentation_mechanic"
+    },
+    {
+      "id": "pl.ux.cutscene_control",
+      "domain": "presentation_feel_design",
+      "question_zh": "关键演出锁不锁操作——锁操作的运镜每帧都是导演意志、情绪浓度可控，但玩家双手离开设备的每一秒都在提醒他『你在看不在玩』；不锁自由但演出效果听天由命，镜头夺不夺权？",
+      "follow_ups": [
+        "可跳过的演出和不可跳过的『玩法内演出』（边走边听）各适合装什么剧情？",
+        "二周目自动解锁全部跳过，首周目锁跳过（保完整叙事）算不算合理的家长式设计？"
+      ],
+      "source_ref": "v2:v2.cinematic_presentation_decision.guan_jian_jie_dian_yan_chu.presentation_consistency_boundary"
+    },
+    {
+      "id": "pl.ux.failure_scene_cost",
+      "domain": "presentation_feel_design",
+      "question_zh": "失败演出做多重——死亡慢镜头、失败特写把挫折做成戏、强化记忆点，但高频失败的玩法里同一段死亡演出第二十次播放就是刑罚，戏码配多重？",
+      "follow_ups": [
+        "失败演出的跳过从第几次失败开始给——立刻给则仪式白做，不给则怨气叠加？",
+        "『失败得漂亮』（搞笑物理/幸灾乐祸镜头）能不能把挫败洗成乐子，哪些品类敢用？"
+      ],
+      "source_ref": "v2:v2.cinematic_presentation_decision.shi_bai_yan_chu.presentation_sensory_dynamic"
+    },
+    {
+      "id": "pl.ux.help_desk_position",
+      "domain": "ux_interface_design",
+      "question_zh": "求助入口摆多显眼——客服/FAQ入口前置让被卡住的玩家有出口、工单洪水也跟着来，藏深了省人力但玩家的怨走向应用商店评论区，出口开在哪层？",
+      "follow_ups": [
+        "AI 客服先挡一层的漏接率多高时，『找不到真人』本身成为新的投诉源？",
+        "游戏内互助（玩家答玩家）的激励怎么设才不会养出复读机刷分？"
+      ],
+      "source_ref": "v2:v2.help_support_experience_decision.bang_zhu_ru_kou.ux_interface_mechanic"
+    },
+    {
+      "id": "pl.ux.rule_disclosure",
+      "domain": "ux_interface_design",
+      "question_zh": "复杂规则的说明书写多细——机制细节全写进游戏内百科诚实透明，但没人读还嫌菜单臃肿；只给一句话简述轻快但硬核玩家去站外拆包、错误攻略满天飞，官方口径给到哪层？",
+      "follow_ups": [
+        "分层文案（一句话+可展开详情）的展开率有多少——写详情的工时值不值？",
+        "规则说明和实际数值不同步（改了机制忘改说明）的事故防线是流程还是工具？"
+      ],
+      "source_ref": "v2:v2.help_support_experience_decision.gui_ze_jie_shi.ux_understanding_experience"
+    }
+  ]
+}

@@ -1,0 +1,2046 @@
+{
+  "identity": {
+    "schema_version": "4.0.0",
+    "project_id": "网格迁移基准@sha256:d976d5d4cea62a08",
+    "frozen_hash": "sha256:d976d5d4cea62a08dac91ef4671f10e7de5b58522214e1bf5dd000b9a12ea340"
+  },
+  "intent": {
+    "title": "网格迁移基准",
+    "experience_promise": "以小博大的守护：",
+    "genre_structure": "网格战棋",
+    "profile": {
+      "u.business_model": "买断制",
+      "u.platform": "PC 单机"
+    }
+  },
+  "systems": [
+    {
+      "id": "grid.battlefield_system",
+      "name": "方形网格",
+      "purpose": "战场由方形格组成，四方向邻接，移动与射程按格计算",
+      "interfaces": [
+        "需要逐格移动规则",
+        "需要地形效果规则",
+        "射程与距离按曼哈顿距离计算"
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.combat_system",
+      "name": "确定性结算",
+      "purpose": "攻击必然命中，伤害由公式与克制唯一确定，无命中随机",
+      "interfaces": [
+        "信息完全公开，策略深度来自站位与克制",
+        "需要伤害公式与兵种克制矩阵",
+        "敌方意图需要提前展示以支撑推演"
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.progression_system",
+      "name": "经验升级成长",
+      "purpose": "单位通过战斗行为获取经验，升级提升属性",
+      "interfaces": [
+        "需要经验获取规则",
+        "需要养成数值表",
+        "战斗内成长使练兵本身成为玩法"
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.stage_system",
+      "name": "线性战役",
+      "purpose": "关卡按固定顺序推进，难度曲线全局可控",
+      "interfaces": [
+        "需要胜负判定规则",
+        "需要关卡表与敌方配置表",
+        "单一路线便于精确调节难度曲线"
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.turn_system",
+      "name": "敌我阶段交替",
+      "purpose": "我方全体单位行动完毕后轮到敌方，整队轮换",
+      "interfaces": [
+        "需要行动点规则",
+        "单回合内可自由安排己方行动顺序",
+        "敌方回合是纯观战节点，需要演出与信息设计"
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.unit_system",
+      "name": "兵种职业体系",
+      "purpose": "单位由兵种模板派生，同兵种共享属性框架与克制标签",
+      "interfaces": [
+        "需要单位属性表与兵种表",
+        "兵种克制是平衡性的主要抓手"
+      ],
+      "design_notes": []
+    }
+  ],
+  "mechanics": [
+    {
+      "id": "grid.action_point_rule",
+      "system_id": "grid.turn_system",
+      "rule_text": "移动加行动两段制。每单位每回合一次移动与一次行动，执行行动后该单位本回合结束（allow_move_after_act=false）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "consume_resource",
+          "resource": "action_slot",
+          "formula": "1 per act"
+        },
+        {
+          "effect": "change_state",
+          "machine": "unit_turn_state",
+          "to_state": "acted"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.counter_attack_rule",
+      "system_id": "grid.combat_system",
+      "rule_text": "射程内自动反击。受击方存活且武器射程覆盖攻击方时，立即反击一次（counter_damage_ratio=1）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "modify_property",
+          "entity": "grid.unit_roster",
+          "property": "hp",
+          "formula": "attacker.hp - counter_damage * 1"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.damage_formula",
+      "system_id": "grid.combat_system",
+      "rule_text": "攻减防线性公式。伤害 = (攻击 − 防御) × 克制系数 − 地形减伤，带最低伤害保底（min_damage=1）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "modify_property",
+          "entity": "grid.unit_roster",
+          "property": "hp",
+          "formula": "hp - max((atk - def) * counter_coeff - terrain_def_bonus, 1)"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.exp_gain_rule",
+      "system_id": "grid.progression_system",
+      "rule_text": "行动经验制。攻击、击杀、辅助分别给固定经验，攒满定额升一级（exp_per_level=100, kill_bonus_multiplier=3）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "grant_resource",
+          "resource": "exp",
+          "formula": "base_action_exp * 3 on kill"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.move_rule",
+      "system_id": "grid.battlefield_system",
+      "rule_text": "地形移动力消耗。每进入一格消耗该地形的移动成本，路径总消耗不得超过单位移动力（zoc_enabled=true）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "modify_property",
+          "entity": "grid.unit_roster",
+          "property": "position",
+          "formula": "path_min_cost(terrain_move_cost) <= move"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.terrain_effect_rule",
+      "system_id": "grid.battlefield_system",
+      "rule_text": "地形修正数值叠加。站位地形按地形表提供回避与减伤加值，叠加进战斗公式（flier_ignore_terrain=true）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "modify_property",
+          "entity": "grid.unit_roster",
+          "property": "evade",
+          "formula": "evade + terrain_evade_bonus"
+        },
+        {
+          "effect": "modify_property",
+          "entity": "grid.unit_roster",
+          "property": "def",
+          "formula": "def + terrain_def_bonus"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    },
+    {
+      "id": "grid.victory_condition_rule",
+      "system_id": "grid.stage_system",
+      "rule_text": "目标制胜负。每关声明胜利与失败目标（歼灭、占点、坚守、护送），达成即结算（default_turn_limit=20）",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect": "emit_signal",
+          "signal": "stage_victory"
+        },
+        {
+          "effect": "emit_signal",
+          "signal": "stage_defeat"
+        }
+      ],
+      "state_machine": null,
+      "design_notes": []
+    }
+  ],
+  "entities": [
+    {
+      "id": "grid.terrain_table.plain",
+      "name": "plain",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "move_cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "evade_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 60.0
+          }
+        },
+        {
+          "key": "def_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "passable",
+          "kind": {
+            "kind": "bool"
+          },
+          "constraint": null
+        }
+      ]
+    },
+    {
+      "id": "grid.terrain_table.forest",
+      "name": "forest",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "move_cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "evade_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 60.0
+          }
+        },
+        {
+          "key": "def_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "passable",
+          "kind": {
+            "kind": "bool"
+          },
+          "constraint": null
+        }
+      ]
+    },
+    {
+      "id": "grid.terrain_table.mountain",
+      "name": "mountain",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "move_cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "evade_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 60.0
+          }
+        },
+        {
+          "key": "def_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "passable",
+          "kind": {
+            "kind": "bool"
+          },
+          "constraint": null
+        }
+      ]
+    },
+    {
+      "id": "grid.terrain_table.river",
+      "name": "river",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "move_cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "evade_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 60.0
+          }
+        },
+        {
+          "key": "def_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "passable",
+          "kind": {
+            "kind": "bool"
+          },
+          "constraint": null
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_blade_a",
+      "name": "unit_blade_a",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_blade_b",
+      "name": "unit_blade_b",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_pike_a",
+      "name": "unit_pike_a",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_bow_a",
+      "name": "unit_bow_a",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_bow_b",
+      "name": "unit_bow_b",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "grid.unit_roster.unit_mystic_a",
+      "name": "unit_mystic_a",
+      "visual_form": "sprite2d",
+      "properties": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "id": "grid.class_counter_matrix",
+      "columns": [
+        {
+          "key": "coeff",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 3.0
+          }
+        }
+      ],
+      "row_key": "row",
+      "rows": [],
+      "cells": [
+        {
+          "row": "blade",
+          "col": "blade",
+          "value": 1.0
+        },
+        {
+          "row": "blade",
+          "col": "pike",
+          "value": 1.0
+        },
+        {
+          "row": "blade",
+          "col": "bow",
+          "value": 1.0
+        },
+        {
+          "row": "blade",
+          "col": "mystic",
+          "value": 1.0
+        },
+        {
+          "row": "pike",
+          "col": "blade",
+          "value": 1.0
+        },
+        {
+          "row": "pike",
+          "col": "pike",
+          "value": 1.0
+        },
+        {
+          "row": "pike",
+          "col": "bow",
+          "value": 1.0
+        },
+        {
+          "row": "pike",
+          "col": "mystic",
+          "value": 2.0
+        },
+        {
+          "row": "bow",
+          "col": "blade",
+          "value": 1.5
+        },
+        {
+          "row": "bow",
+          "col": "pike",
+          "value": 1.0
+        },
+        {
+          "row": "bow",
+          "col": "bow",
+          "value": 1.0
+        },
+        {
+          "row": "bow",
+          "col": "mystic",
+          "value": 1.0
+        },
+        {
+          "row": "mystic",
+          "col": "blade",
+          "value": 1.0
+        },
+        {
+          "row": "mystic",
+          "col": "pike",
+          "value": 1.0
+        },
+        {
+          "row": "mystic",
+          "col": "bow",
+          "value": 1.0
+        },
+        {
+          "row": "mystic",
+          "col": "mystic",
+          "value": 1.0
+        }
+      ],
+      "design_notes": []
+    },
+    {
+      "id": "grid.class_roster",
+      "columns": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "mobility",
+          "kind": {
+            "kind": "enum",
+            "variants": [
+              "infantry",
+              "cavalry",
+              "armored",
+              "flier"
+            ]
+          },
+          "constraint": null
+        },
+        {
+          "key": "base_move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "counter_tag",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        }
+      ],
+      "row_key": "id",
+      "rows": [
+        {
+          "base_move": 5,
+          "counter_tag": "melee",
+          "id": "blade",
+          "mobility": "infantry"
+        },
+        {
+          "base_move": 4,
+          "counter_tag": "anti_cavalry",
+          "id": "pike",
+          "mobility": "armored"
+        },
+        {
+          "base_move": 5,
+          "counter_tag": "ranged",
+          "id": "bow",
+          "mobility": "infantry"
+        },
+        {
+          "base_move": 7,
+          "counter_tag": "magic",
+          "id": "mystic",
+          "mobility": "cavalry"
+        }
+      ],
+      "cells": [],
+      "design_notes": []
+    },
+    {
+      "id": "grid.progression_table",
+      "columns": [
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp_gain",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "atk_gain",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "def_gain",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "skill_gain",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "speed_gain",
+          "kind": {
+            "kind": "float"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        }
+      ],
+      "row_key": "class_id",
+      "rows": [
+        {
+          "atk_gain": 1.0,
+          "class_id": "blade",
+          "def_gain": 0.8,
+          "hp_gain": 2.0,
+          "skill_gain": 1.0,
+          "speed_gain": 0.7
+        },
+        {
+          "atk_gain": 1.0,
+          "class_id": "pike",
+          "def_gain": 0.8,
+          "hp_gain": 2.0,
+          "skill_gain": 1.0,
+          "speed_gain": 0.7
+        },
+        {
+          "atk_gain": 1.0,
+          "class_id": "bow",
+          "def_gain": 0.8,
+          "hp_gain": 2.0,
+          "skill_gain": 1.0,
+          "speed_gain": 0.7
+        },
+        {
+          "atk_gain": 1.0,
+          "class_id": "mystic",
+          "def_gain": 0.8,
+          "hp_gain": 2.0,
+          "skill_gain": 1.0,
+          "speed_gain": 0.7
+        }
+      ],
+      "cells": [],
+      "design_notes": []
+    },
+    {
+      "id": "grid.terrain_table",
+      "columns": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "move_cost",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "evade_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 60.0
+          }
+        },
+        {
+          "key": "def_bonus",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 10.0
+          }
+        },
+        {
+          "key": "passable",
+          "kind": {
+            "kind": "bool"
+          },
+          "constraint": null
+        }
+      ],
+      "row_key": "id",
+      "rows": [
+        {
+          "def_bonus": 0,
+          "evade_bonus": 0,
+          "id": "plain",
+          "move_cost": 1,
+          "passable": true
+        },
+        {
+          "def_bonus": 1,
+          "evade_bonus": 20,
+          "id": "forest",
+          "move_cost": 2,
+          "passable": true
+        },
+        {
+          "def_bonus": 2,
+          "evade_bonus": 30,
+          "id": "mountain",
+          "move_cost": 3,
+          "passable": true
+        },
+        {
+          "def_bonus": 0,
+          "evade_bonus": 10,
+          "id": "river",
+          "move_cost": 9,
+          "passable": false
+        }
+      ],
+      "cells": [],
+      "design_notes": []
+    },
+    {
+      "id": "grid.unit_roster",
+      "columns": [
+        {
+          "key": "id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "class_id",
+          "kind": {
+            "kind": "text"
+          },
+          "constraint": null
+        },
+        {
+          "key": "hp",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 999.0
+          }
+        },
+        {
+          "key": "atk",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "def",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "skill",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "speed",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 99.0
+          }
+        },
+        {
+          "key": "move",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 12.0
+          }
+        },
+        {
+          "key": "range_min",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 0.0,
+            "max": 5.0
+          }
+        },
+        {
+          "key": "range_max",
+          "kind": {
+            "kind": "int"
+          },
+          "constraint": {
+            "constraint": "range",
+            "min": 1.0,
+            "max": 8.0
+          }
+        }
+      ],
+      "row_key": "id",
+      "rows": [
+        {
+          "atk": 6,
+          "class_id": "blade",
+          "def": 3,
+          "hp": 20,
+          "id": "unit_blade_a",
+          "move": 4,
+          "range_max": 1,
+          "range_min": 1,
+          "skill": 5,
+          "speed": 4
+        },
+        {
+          "atk": 7,
+          "class_id": "blade",
+          "def": 4,
+          "hp": 22,
+          "id": "unit_blade_b",
+          "move": 5,
+          "range_max": 2,
+          "range_min": 1,
+          "skill": 6,
+          "speed": 5
+        },
+        {
+          "atk": 8,
+          "class_id": "pike",
+          "def": 5,
+          "hp": 24,
+          "id": "unit_pike_a",
+          "move": 6,
+          "range_max": 1,
+          "range_min": 1,
+          "skill": 7,
+          "speed": 6
+        },
+        {
+          "atk": 9,
+          "class_id": "bow",
+          "def": 3,
+          "hp": 26,
+          "id": "unit_bow_a",
+          "move": 4,
+          "range_max": 2,
+          "range_min": 1,
+          "skill": 8,
+          "speed": 7
+        },
+        {
+          "atk": 10,
+          "class_id": "bow",
+          "def": 4,
+          "hp": 28,
+          "id": "unit_bow_b",
+          "move": 5,
+          "range_max": 1,
+          "range_min": 1,
+          "skill": 5,
+          "speed": 8
+        },
+        {
+          "atk": 11,
+          "class_id": "mystic",
+          "def": 5,
+          "hp": 30,
+          "id": "unit_mystic_a",
+          "move": 6,
+          "range_max": 2,
+          "range_min": 1,
+          "skill": 6,
+          "speed": 4
+        }
+      ],
+      "cells": [],
+      "design_notes": []
+    }
+  ],
+  "content": [
+    {
+      "id": "grid.enemy_deploy_table",
+      "content_kind": "enemy_layout",
+      "data": {
+        "rows": [
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 2,
+            "grid_y": 2,
+            "slot_id": "slot_s1_0",
+            "stage_no": 1,
+            "unit_id": "unit_blade_a"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 5,
+            "grid_y": 2,
+            "slot_id": "slot_s1_1",
+            "stage_no": 1,
+            "unit_id": "unit_blade_b"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 8,
+            "grid_y": 2,
+            "slot_id": "slot_s1_2",
+            "stage_no": 1,
+            "unit_id": "unit_pike_a"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 2,
+            "grid_y": 3,
+            "slot_id": "slot_s2_0",
+            "stage_no": 2,
+            "unit_id": "unit_bow_a"
+          },
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 5,
+            "grid_y": 3,
+            "slot_id": "slot_s2_1",
+            "stage_no": 2,
+            "unit_id": "unit_bow_b"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 8,
+            "grid_y": 3,
+            "slot_id": "slot_s2_2",
+            "stage_no": 2,
+            "unit_id": "unit_mystic_a"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 2,
+            "grid_y": 4,
+            "slot_id": "slot_s3_0",
+            "stage_no": 3,
+            "unit_id": "unit_blade_a"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 5,
+            "grid_y": 4,
+            "slot_id": "slot_s3_1",
+            "stage_no": 3,
+            "unit_id": "unit_blade_b"
+          },
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 8,
+            "grid_y": 4,
+            "slot_id": "slot_s3_2",
+            "stage_no": 3,
+            "unit_id": "unit_pike_a"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 2,
+            "grid_y": 5,
+            "slot_id": "slot_s4_0",
+            "stage_no": 4,
+            "unit_id": "unit_bow_a"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 5,
+            "grid_y": 5,
+            "slot_id": "slot_s4_1",
+            "stage_no": 4,
+            "unit_id": "unit_bow_b"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 8,
+            "grid_y": 5,
+            "slot_id": "slot_s4_2",
+            "stage_no": 4,
+            "unit_id": "unit_mystic_a"
+          },
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 2,
+            "grid_y": 6,
+            "slot_id": "slot_s5_0",
+            "stage_no": 5,
+            "unit_id": "unit_blade_a"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 5,
+            "grid_y": 6,
+            "slot_id": "slot_s5_1",
+            "stage_no": 5,
+            "unit_id": "unit_blade_b"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 8,
+            "grid_y": 6,
+            "slot_id": "slot_s5_2",
+            "stage_no": 5,
+            "unit_id": "unit_pike_a"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 2,
+            "grid_y": 7,
+            "slot_id": "slot_s6_0",
+            "stage_no": 6,
+            "unit_id": "unit_bow_a"
+          },
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 5,
+            "grid_y": 7,
+            "slot_id": "slot_s6_1",
+            "stage_no": 6,
+            "unit_id": "unit_bow_b"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 8,
+            "grid_y": 7,
+            "slot_id": "slot_s6_2",
+            "stage_no": 6,
+            "unit_id": "unit_mystic_a"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 2,
+            "grid_y": 8,
+            "slot_id": "slot_s7_0",
+            "stage_no": 7,
+            "unit_id": "unit_blade_a"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 5,
+            "grid_y": 8,
+            "slot_id": "slot_s7_1",
+            "stage_no": 7,
+            "unit_id": "unit_blade_b"
+          },
+          {
+            "ai_stance": "aggressive",
+            "grid_x": 8,
+            "grid_y": 8,
+            "slot_id": "slot_s7_2",
+            "stage_no": 7,
+            "unit_id": "unit_pike_a"
+          },
+          {
+            "ai_stance": "hold_position",
+            "grid_x": 2,
+            "grid_y": 1,
+            "slot_id": "slot_s8_0",
+            "stage_no": 8,
+            "unit_id": "unit_bow_a"
+          },
+          {
+            "ai_stance": "patrol",
+            "grid_x": 5,
+            "grid_y": 1,
+            "slot_id": "slot_s8_1",
+            "stage_no": 8,
+            "unit_id": "unit_bow_b"
+          },
+          {
+            "ai_stance": "guard_objective",
+            "grid_x": 8,
+            "grid_y": 1,
+            "slot_id": "slot_s8_2",
+            "stage_no": 8,
+            "unit_id": "unit_mystic_a"
+          }
+        ],
+        "values": "rows"
+      },
+      "design_notes": []
+    },
+    {
+      "id": "grid.stage_table",
+      "content_kind": "stage_schedule",
+      "data": {
+        "rows": [
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 11,
+            "objective": "rout",
+            "stage_no": 1,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 12,
+            "objective": "seize",
+            "stage_no": 2,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 10,
+            "objective": "survive",
+            "stage_no": 3,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 11,
+            "objective": "escort",
+            "stage_no": 4,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 12,
+            "objective": "rout",
+            "stage_no": 5,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 10,
+            "objective": "seize",
+            "stage_no": 6,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 11,
+            "objective": "survive",
+            "stage_no": 7,
+            "turn_limit": 20
+          },
+          {
+            "deploy_limit": 6,
+            "map_height": 10,
+            "map_width": 12,
+            "objective": "escort",
+            "stage_no": 8,
+            "turn_limit": 20
+          }
+        ],
+        "values": "rows"
+      },
+      "design_notes": []
+    }
+  ],
+  "graphs": [],
+  "acceptance": [],
+  "source_map": [
+    {
+      "spec_path": "mechanics/grid.action_point_rule",
+      "decision_id": "grid.action_point_rule"
+    },
+    {
+      "spec_path": "systems/grid.battlefield_system",
+      "decision_id": "grid.battlefield_system"
+    },
+    {
+      "spec_path": "tables/grid.class_counter_matrix",
+      "decision_id": "grid.class_counter_matrix"
+    },
+    {
+      "spec_path": "tables/grid.class_roster",
+      "decision_id": "grid.class_roster"
+    },
+    {
+      "spec_path": "systems/grid.combat_system",
+      "decision_id": "grid.combat_system"
+    },
+    {
+      "spec_path": "mechanics/grid.counter_attack_rule",
+      "decision_id": "grid.counter_attack_rule"
+    },
+    {
+      "spec_path": "mechanics/grid.damage_formula",
+      "decision_id": "grid.damage_formula"
+    },
+    {
+      "spec_path": "content/grid.enemy_deploy_table",
+      "decision_id": "grid.enemy_deploy_table"
+    },
+    {
+      "spec_path": "mechanics/grid.exp_gain_rule",
+      "decision_id": "grid.exp_gain_rule"
+    },
+    {
+      "spec_path": "mechanics/grid.move_rule",
+      "decision_id": "grid.move_rule"
+    },
+    {
+      "spec_path": "systems/grid.progression_system",
+      "decision_id": "grid.progression_system"
+    },
+    {
+      "spec_path": "tables/grid.progression_table",
+      "decision_id": "grid.progression_table"
+    },
+    {
+      "spec_path": "systems/grid.stage_system",
+      "decision_id": "grid.stage_system"
+    },
+    {
+      "spec_path": "content/grid.stage_table",
+      "decision_id": "grid.stage_table"
+    },
+    {
+      "spec_path": "mechanics/grid.terrain_effect_rule",
+      "decision_id": "grid.terrain_effect_rule"
+    },
+    {
+      "spec_path": "tables/grid.terrain_table",
+      "decision_id": "grid.terrain_table"
+    },
+    {
+      "spec_path": "entities/grid.terrain_table.plain",
+      "decision_id": "grid.terrain_table"
+    },
+    {
+      "spec_path": "entities/grid.terrain_table.forest",
+      "decision_id": "grid.terrain_table"
+    },
+    {
+      "spec_path": "entities/grid.terrain_table.mountain",
+      "decision_id": "grid.terrain_table"
+    },
+    {
+      "spec_path": "entities/grid.terrain_table.river",
+      "decision_id": "grid.terrain_table"
+    },
+    {
+      "spec_path": "systems/grid.turn_system",
+      "decision_id": "grid.turn_system"
+    },
+    {
+      "spec_path": "tables/grid.unit_roster",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_blade_a",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_blade_b",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_pike_a",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_bow_a",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_bow_b",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "entities/grid.unit_roster.unit_mystic_a",
+      "decision_id": "grid.unit_roster"
+    },
+    {
+      "spec_path": "systems/grid.unit_system",
+      "decision_id": "grid.unit_system"
+    },
+    {
+      "spec_path": "mechanics/grid.victory_condition_rule",
+      "decision_id": "grid.victory_condition_rule"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.business_model"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.experience"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.genre"
+    },
+    {
+      "spec_path": "intent",
+      "decision_id": "u.platform"
+    }
+  ]
+}

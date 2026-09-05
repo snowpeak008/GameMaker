@@ -388,12 +388,29 @@ impl AppServices {
     // ------------------------------------------------------------------
 
     /// 创建项目：草稿 → 初始 authoring_state → 原子提交为正式存档。
+    ///
+    /// 模板通道对 `smoke_test` 模板**默认拒绝**（T-W7-4b）：冒烟模板的答卷数据
+    /// 未经产线校准，预填进真实项目属误用。显式放行走
+    /// [`AppServices::project_new_allowing_smoke`]（CLI `--allow-smoke`）。
     pub fn project_new(
         &self,
         project_name: &str,
         pack_id: &str,
         depth: DesignLevel,
         template_id: Option<&str>,
+    ) -> Adm4Result<String> {
+        self.project_new_allowing_smoke(project_name, pack_id, depth, template_id, false)
+    }
+
+    /// `project_new` 的显式放行形态：`allow_smoke=true` 时 smoke_test 模板可预填
+    /// （放行是调用方的显式手势，日志留痕）。
+    pub fn project_new_allowing_smoke(
+        &self,
+        project_name: &str,
+        pack_id: &str,
+        depth: DesignLevel,
+        template_id: Option<&str>,
+        allow_smoke: bool,
     ) -> Adm4Result<String> {
         let space = self.load_space_shared(pack_id)?;
         let depth_profile = DepthProfile::new(depth).map_err(Adm4Error::invalid_input)?;
@@ -405,6 +422,18 @@ impl AppServices {
         );
         if let Some(template_id) = template_id {
             let template = self.templates.approved_for_prefill(pack_id, template_id)?;
+            if template.smoke_test && !allow_smoke {
+                return Err(Adm4Error::blocked(format!(
+                    "模板 {template_id} 带 smoke_test 标记（冒烟测试模板，答卷数据未经产线校准），\
+                     预填默认拒绝；确需使用请显式放行（CLI：project new … --allow-smoke）"
+                )));
+            }
+            if template.smoke_test {
+                self.log.append(
+                    "project",
+                    &format!("smoke_test 模板 {template_id} 经显式放行（--allow-smoke）用于预填"),
+                )?;
+            }
             let mut engine = AuthoringEngine::new(space, state)?;
             let report = engine.prefill_from_template(&template)?;
             self.log.append(
@@ -2452,6 +2481,7 @@ impl AppServices {
             origin: TemplateOrigin::Reverse,
             mapping_hash: String::new(),
             crosscheck_proof: None,
+            smoke_test: false,
         };
         self.templates.save_draft(&template)?;
         self.log.append(
@@ -2579,6 +2609,7 @@ impl AppServices {
             },
             mapping_hash: String::new(),
             crosscheck_proof: None,
+            smoke_test: false,
         };
         template.record_project_export_review(reviewer, note)?;
 

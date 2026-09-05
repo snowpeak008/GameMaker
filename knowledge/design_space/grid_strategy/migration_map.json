@@ -1,0 +1,10 @@
+{
+  "exact": {},
+  "prefix": [],
+  "ignore_paths": [
+    "identity.frozen_hash",
+    "identity.project_id",
+    "systems[grid.tier]",
+    "source_map[systems/grid.tier|grid.tier]"
+  ]
+}

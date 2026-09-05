@@ -1,0 +1,144 @@
+{
+  "entries": [
+    {
+      "id": "pl.social.forced_or_optional",
+      "domain": "social_community_design",
+      "question_zh": "组队收益强绑到什么程度——组队效率显著高于单人才能催生社交生态，但独狼玩家被结构性歧视、被迫社交的怨气反噬；组队无收益则社交系统白建，强制度定哪？",
+      "follow_ups": [
+        "『组队更快但单人可达全部内容』这条折中线，效率差多大时会名存实亡？",
+        "路人自动匹配算不算社交——无交流的搭子队伍对社交生态贡献是零还是负？"
+      ],
+      "source_ref": "v2:v2.social_collaboration_decision.xie_zuo_men_kan.social_relation_experience"
+    },
+    {
+      "id": "pl.social.coop_blame",
+      "domain": "social_community_design",
+      "question_zh": "协作失败的归因暴露多少——战斗数据全公开让划水者无所遁形、努力者被看见，但菜鸟被数据公开处刑后再也不敢进本，成绩单亮到哪层？",
+      "follow_ups": [
+        "只给本人看自己的数据、给队长看全队，这种分级视图挡得住多少撕逼？",
+        "补位惩罚（中途退出禁赛）对被队友气走的人是不是二次伤害？"
+      ],
+      "source_ref": "v2:v2.social_collaboration_decision.xie_zuo_shi_bai.social_abuse_boundary"
+    },
+    {
+      "id": "pl.social.rank_season_reset",
+      "domain": "social_community_design",
+      "question_zh": "排名重置的深度定多狠——赛季全清让新赛季人人有戏、上分动力重启，但高分段玩家每季重爬低分段虐菜的『恐怖时段』也随之重演，重置刀落多深？",
+      "follow_ups": [
+        "软重置（按上季衰减）保住了什么、牺牲了什么——定位赛的样本量够定位准吗？",
+        "重置日的低分段保护（新手隔离池）要开多久？"
+      ],
+      "source_ref": "v2:v2.social_competition_decision.pai_ming_gui_ze.social_mechanic"
+    },
+    {
+      "id": "pl.social.ladder_anxiety",
+      "domain": "social_community_design",
+      "question_zh": "排名的可见范围给多大——全服天梯让顶端荣耀最大化但普通人永远在十万名开外、比较即挫败；好友榜、区域榜缩小参照系让多数人有奔头，聚光灯打给谁？",
+      "follow_ups": [
+        "『打败了全服 x% 的玩家』这类百分位话术能不能替代绝对排名？",
+        "掉分保护（护盾/免赛）保护了情绪还是稀释了排名的真实性？"
+      ],
+      "source_ref": "v2:v2.social_competition_decision.jing_zheng_mu_biao.social_abuse_boundary"
+    },
+    {
+      "id": "pl.social.chat_default",
+      "domain": "social_community_design",
+      "question_zh": "陌生人聊天的默认态开还是关——默认全开社区活性最大但骚扰、引战、开盒的治理成本全跟着来；默认关闭安全但社交冷启动死在第一步，默认值押哪边？",
+      "follow_ups": [
+        "快捷短语（预制轮盘）替代自由文字能保住多少交流、挡住多少毒性？",
+        "语音默认态和文字分开定吗——语音的毒性烈度和治理难度都翻倍？"
+      ],
+      "source_ref": "v2:v2.compliance_community_safety_decision.wei_gui_xing_wei_ding_yi.compliance_protection_goal"
+    },
+    {
+      "id": "pl.social.punish_gradient",
+      "domain": "social_community_design",
+      "question_zh": "违规处罚的梯子怎么搭——阶梯宽容（警告-禁言-封号）给改过空间但惯犯在梯子上反复横跳，一击重罚震慑强但误判的冤案成本和申诉洪水全来，梯子搭几级？",
+      "follow_ups": [
+        "处罚公示（全服通告封禁）的震慑收益和示众的伦理成本怎么权衡？",
+        "小号逃罚的成本几乎为零时，处罚账号还是处罚设备/支付指纹？"
+      ],
+      "source_ref": "v2:v2.compliance_community_safety_decision.cheng_fa_ceng_ji.compliance_protection_mechanic"
+    },
+    {
+      "id": "pl.social.gift_channel",
+      "domain": "social_community_design",
+      "question_zh": "玩家间赠礼开不开——赠礼是最暖的社交动作、也是拉新裂变的天然钩子，但它同时就是工作室洗钱和代充黑产的主干道，这条通道开多宽？",
+      "follow_ups": [
+        "只允许赠送『不可变现』的东西（体力/装饰）能不能既留温度又断财路？",
+        "赠礼记录做成社交资产（感谢墙）会不会把人情变成绩效？"
+      ],
+      "source_ref": "v2:v2.social_relationship_decision.hao_you_guan_xi.social_mechanic"
+    },
+    {
+      "id": "pl.social.guild_weight",
+      "domain": "social_community_design",
+      "question_zh": "公会绑走多少玩法——公会专属玩法和奖励越厚社群粘性越强、以社带留的模型越稳，但无会玩家沦为二等公民、小会被大会虹吸兼并，公会在生态里配多重？",
+      "follow_ups": [
+        "公会义务（每日捐献/出勤）的下限画哪——低于多少像俱乐部、高于多少像上班？",
+        "散人保底通道（系统托管的临时公会）能兜住多少无会玩家的公会级奖励？"
+      ],
+      "source_ref": "v2:v2.social_relationship_decision.tuan_dui_guan_xi.social_relation_experience"
+    },
+    {
+      "id": "pl.social.mentor_economy",
+      "domain": "social_community_design",
+      "question_zh": "师徒系统给不给硬奖励——带新奖励丰厚则老玩家真有动力接新人、新手着陆软，但奖励一硬师徒立刻沦为小号刷奖励的流水线，人情和刷子的界线画哪？",
+      "follow_ups": [
+        "奖励绑徒弟的长期留存（出师后 30 日活跃才结算）能不能逼出真教学？",
+        "无奖励的纯荣誉师徒制在你的用户盘子里能自发运转吗？"
+      ],
+      "source_ref": "v2:v2.social_relationship_decision.shi_tu_huo_yin_dao_guan_xi.social_mechanic"
+    },
+    {
+      "id": "pl.social.spectate_expose",
+      "domain": "social_community_design",
+      "question_zh": "个人资料页曝光多少战绩——战绩全公开方便组队筛选、高玩的资本有处安放，但胜率谷底的玩家被查户口式歧视（低分不带），隐私开关给不给？",
+      "follow_ups": [
+        "给了隐藏开关后，『隐藏战绩=菜』的新歧视链怎么接？",
+        "生涯高光（最佳一战）代替全量数据展示，筛选功能受损多少？"
+      ],
+      "source_ref": "v2:v2.social_expression_decision.cheng_jiu_zhan_shi.social_abuse_boundary"
+    },
+    {
+      "id": "pl.social.ugc_moderation_gate",
+      "domain": "social_community_design",
+      "question_zh": "玩家创作内容先审后发还是先发后审——先审安全但审核时延杀死创作热情、审核成本随量爆炸，先发后审生态活跃但违规内容的曝光窗口就是你的舆情敞口，闸门放哪端？",
+      "follow_ups": [
+        "分级审核（新人先审、信用户免审）的信用体系冷启动怎么做？",
+        "机审兜底的误杀率多高时，创作者的申诉体验会反噬创作生态？"
+      ],
+      "source_ref": "v2:v2.community_behavior_decision.fu_xiang_xing_wei_yue_shu.social_abuse_boundary"
+    },
+    {
+      "id": "pl.social.veteran_newbie_bridge",
+      "domain": "social_community_design",
+      "question_zh": "新老玩家的活动空间隔不隔离——同场让新人见识高玩生态、有直观的成长目标，但也直接暴露在碾压与嘲讽下；分层保护新人但社区被切成互不往来的平行世界，桥怎么搭？",
+      "follow_ups": [
+        "跨层交互只保留正向通道（老带新有奖、禁止越级对抗）工程上做得住吗？",
+        "新人毕业融入大池的时机谁定——系统按数据踢出新手村，还是玩家自己选？"
+      ],
+      "source_ref": "v2:v2.community_behavior_decision.xin_lao_wan_jia_guan_xi.social_relation_experience"
+    },
+    {
+      "id": "pl.social.report_feedback_loop",
+      "domain": "social_community_design",
+      "question_zh": "举报的处理结果要不要回执——回执（你举报的人已被处罚）让举报者有正义兑现感、举报率健康，但也把处罚变成可验证的武器、诬告钓鱼跟着精细化，回执给多细？",
+      "follow_ups": [
+        "模糊回执（已处理，不说怎么处理的）保住多少反馈感、防住多少滥用？",
+        "举报者信用分（诬告降权）公开吗——公开等于教玩家养举报小号？"
+      ],
+      "source_ref": "v2:v2.community_behavior_decision.ju_bao_fan_kui.social_community_signal"
+    },
+    {
+      "id": "pl.social.emote_toxicity",
+      "domain": "social_community_design",
+      "question_zh": "情绪表达工具给多锋利——嘲讽表情、坟头蹦迪类动作是对抗游戏的盐、传播名场面的原料，但它们也是零成本的毒性输出器，这把刀开几分刃？",
+      "follow_ups": [
+        "对手可屏蔽嘲讽（只有己方看得见）之后，嘲讽的乐趣还剩几成？",
+        "付费嘲讽表情的营收和它制造的毒性治理成本，两本账合算过吗？"
+      ],
+      "source_ref": "v2:v2.social_expression_decision.qing_xu_biao_da.social_abuse_boundary"
+    }
+  ]
+}

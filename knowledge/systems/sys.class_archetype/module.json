@@ -1,0 +1,664 @@
+{
+  "module_id": "sys.class_archetype",
+  "semver": "1.0.0",
+  "label_zh": "职业流派",
+  "summary": "创建期与构筑期的身份约束与标签系统（#40，定稿 §9.2a 用户二轮修正为真源）：职业不是固定职业表，而是从技能构筑涌现的身份概念——外形是皮肤层，职业 = 安装约束 + 构筑标签。两档形态：轻·涌现式（无职业表——安装约束规则（技能槽位类型/装备前置/互斥组）+ 派生标签规则（火系技能占比≥60% → 展示为法师），标签仅供 UI/叙事）→ 重·预设式（职业定义表 + 技能子集门控 + 成长偏向 + 转职规则）。另设裁量极重档：多职业并行（主副职/职业池切换 + 跨职业继承；转生/重置不入此档——附录 D15 已判归 #35 prestige）。按修订 R7 扩义涵盖种族/血统（创建期一次性安装约束 + 初始修饰器，与涌现式同构）。",
+  "nouns": [
+    {
+      "id": "install_constraint",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "安装约束条目",
+      "summary": "一条约束规则行：作用对象（技能/装备）、前置谓词（须持盾/属性≥X）、槽位类型或互斥组归属。轻档独占状态『安装约束表』的载体。"
+    },
+    {
+      "id": "build_identity_label",
+      "kind": { "kind": "property", "of": "character_build" },
+      "label_zh": "构筑身份标签",
+      "summary": "从当前构筑派生出的展示身份（法师/战士），挂在角色构筑上；仅供 UI 与叙事引用，不回写任何机制数值——用户修正的红线。"
+    },
+    {
+      "id": "class_definition",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "职业定义条目",
+      "summary": "预设式职业表的一行：职业 id、开放技能范围、成长偏向、转职前置。重档独占状态『职业定义表』的载体。"
+    },
+    {
+      "id": "class_state",
+      "kind": { "kind": "property", "of": "character" },
+      "label_zh": "当前职业状态",
+      "summary": "角色当前生效的职业（或主副职组合）读数，挂在角色上；门控与成长偏向按它裁定生效范围。"
+    },
+    {
+      "id": "class_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "身份变更事件",
+      "summary": "转职完成或派生标签跳变的时点信号，载荷为旧新身份；供叙事分支、任务门控、称号成就监听。"
+    },
+    {
+      "id": "install_gate_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "安装门规则挂点",
+      "summary": "安装合法性裁定的规则位，本系统机制核心的落点：『必须安装盾牌才能释放』即向此挂点 AddPrecondition 一条读装备槽位状态的谓词；也允许他系统 ModifyRule（如饰品解除某互斥组）。"
+    }
+  ],
+  "interface": {
+    "provides": ["build_identity_label", "class_state", "class_signal", "install_gate_rule_slot"],
+    "consumes": [
+      "sys.loot.skill_effect_def",
+      "sys.equipment.equipment_entity",
+      "sys.progression.level_state"
+    ],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "安装约束形态/互斥组/标签派生规则（涌现式）；职业表结构/技能子集门控/成长偏向/转职规则/相克矩阵（预设式）；主副职结构/跨职业继承（多职业档）的机制群。",
+    "dynamics_notes": [
+      "涌现式下玩家先装技能后获得身份，构筑分享以『我拼出了一个 XX』的命名权为传播点（信号：自定义构筑命名率、同标签构筑的社区聚类度）",
+      "安装约束成为构筑谜题：为了解锁某技能玩家反推装备与前置链（信号：约束不满足时的界面查询次数、前置装备的定向获取行为）",
+      "预设式下转职节点是生涯里程碑，转职前的比较研究显著拉长决策会话（信号：转职界面停留时长、转职后 24h 留存差）"
+    ],
+    "aesthetics_primary": ["表达", "幻想"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "a0_emergent",
+        "label_zh": "A0 涌现式（无职业表）",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 3,
+        "activates": [
+          "sys.class_archetype.constraint_form",
+          "sys.class_archetype.exclusion_groups",
+          "sys.class_archetype.label_derivation"
+        ],
+        "inductions": [
+          {
+            "when_tier": "a0_emergent",
+            "target": { "noun_provided": "skill_effect_def" },
+            "min_tier": "",
+            "reason": "安装约束的作用对象必须有源：组合中任一实例 provides 技能效果定义（技能系统或掉落技能石析取任一即满足），否则『约束谁的安装』无从谈起"
+          },
+          {
+            "when_tier": "a0_emergent",
+            "target": { "noun_provided": "equipment_entity" },
+            "min_tier": "",
+            "reason": "『须持盾才能释放』类装备前置要能读到装备槽位状态：任一实例 provides 装备实体即满足（sys.equipment 已提供）"
+          }
+        ],
+        "summary": "无职业表：安装约束规则（槽位类型/装备前置/互斥组）+ 派生标签规则（构筑占比 → 展示身份），标签仅 UI/叙事。用户原话的直接建模：装一堆法师技能他就是法师。独占状态 = 安装约束表 + 标签规则。种族/血统按 R7 落此档（创建期一次性约束 + 初始修饰器）。"
+      },
+      {
+        "id": "a1_preset",
+        "label_zh": "A1 预设式（职业定义表）",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 4,
+        "activates": [
+          "sys.class_archetype.constraint_form",
+          "sys.class_archetype.exclusion_groups",
+          "sys.class_archetype.label_derivation",
+          "sys.class_archetype.class_table_structure",
+          "sys.class_archetype.skill_gating",
+          "sys.class_archetype.growth_bias",
+          "sys.class_archetype.job_change_rule",
+          "sys.class_archetype.counter_matrix"
+        ],
+        "inductions": [],
+        "summary": "显式职业定义表 + 技能子集门控 + 成长偏向 + 转职规则（传统 MMO 形态）。独占状态另加职业定义表。安装约束机制与 A0 共用——预设式是在涌现式的约束底座上加一张官方身份表。相克关系复用 Matrix 参数。"
+      },
+      {
+        "id": "a2_multiclass",
+        "label_zh": "A2 多职业并行",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.class_archetype.constraint_form",
+          "sys.class_archetype.exclusion_groups",
+          "sys.class_archetype.label_derivation",
+          "sys.class_archetype.class_table_structure",
+          "sys.class_archetype.skill_gating",
+          "sys.class_archetype.growth_bias",
+          "sys.class_archetype.job_change_rule",
+          "sys.class_archetype.counter_matrix",
+          "sys.class_archetype.multiclass_structure",
+          "sys.class_archetype.cross_class_inheritance"
+        ],
+        "inductions": [],
+        "summary": "裁量档（两档形态是底线，本档是其上的真实重度增量）：多职业并行持有与切换（FF5/FF14 型主副职/职业池）+ 跨职业继承。身份从单选变成组合规划，P 推满。转生/重生体系不入此档——那是 #35 局外解锁的 prestige 轨道（附录 D15 判定），本档只管『同一角色的多身份并行』。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.class_archetype.constraint_form",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "安装约束以什么形态声明？",
+      "design_question": "『这个技能你装不上』的理由是槽位对不上，还是条件没满足？槽位类型是静态分类学，前置谓词是动态检查——后者才能表达『须持盾才能释放』。",
+      "tier_gate": "a0_emergent",
+      "options": [
+        {
+          "id": "slot_type_matching",
+          "label": "槽位类型匹配",
+          "summary": "构筑栏分类型槽（主动/被动/姿态），技能带槽位类型标签，类型对上才能装入",
+          "implications": [
+            "约束在界面结构里自解释：拖不进去就是装不了，零文案教学成本",
+            "表达力封顶于静态分类，『持盾才能装』这类跨系统条件表达不了——需与谓词前置并用或升级",
+            "槽位类型表是构筑维度的骨架，加一种槽位类型等于加一个构筑维度"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "slot_type_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "slot_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ], "row_key": "slot_type_id", "cardinality_key": "slot_type_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "install_constraint" },
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "skill_slot_type == target_slot_type" }, "priority": 0 }
+          ]
+        },
+        {
+          "id": "prerequisite_predicates",
+          "label": "前置谓词检查",
+          "summary": "每条约束是一个可求值谓词（持盾在手/力量≥30/已装某技能），安装与持续生效都要过谓词",
+          "implications": [
+            "『必须安装盾牌才能释放』的直接表达位——谓词读装备槽位状态，卸盾即技能失效",
+            "持续生效检查意味着运行时要监听装备/属性变更，卸装连锁失效的反馈必须显式可读",
+            "谓词池的每一种条件类型都是一条跨系统读线，接口耦合随谓词种类线性增长"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "constraint_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "target_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "predicate_expr", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "constraint_id", "cardinality_key": "constraint_predicate_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "install_constraint" },
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "evaluate(predicate_expr, equipped_state(sys.equipment.equipment_entity))" }, "priority": 0 },
+            { "effect": "attach", "modifier_id": "constraint_watch", "target": "character_build", "duration_expr": "while_installed", "priority": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.exclusion_groups",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "互斥组按什么口径生效？",
+      "design_question": "水火不同炉是装不上，还是装上了两败俱伤？硬互斥切干净构筑空间，软惩罚留给玩家越线的自由。",
+      "tier_gate": "a0_emergent",
+      "options": [
+        {
+          "id": "hard_exclusive_groups",
+          "label": "硬互斥组",
+          "summary": "同互斥组内最多装一个成员，装新的必须先卸旧的",
+          "implications": [
+            "构筑空间被切成清晰的流派分支，平衡按组内横向对比即可",
+            "玩家没有『混装试错』的空间，跨流派的创造性组合被规则前置封死",
+            "互斥组归属是内容侧必填字段，新技能入库先回答『它和谁不共戴天』"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "group_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "member_selector", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "group_id", "cardinality_key": "exclusion_group_rows" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "count_installed(group_id) == 0" }, "priority": 10 },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        },
+        {
+          "id": "soft_penalty_stacking",
+          "label": "软惩罚叠装",
+          "summary": "同组可以多装，但每多装一个全组效果按惩罚系数递减",
+          "implications": [
+            "越线是合法策略：接受惩罚换取覆盖面的混装流派会自发出现",
+            "惩罚系数是流派纯度的定价旋钮——系数狠则近似硬互斥，系数松则互斥名存实亡",
+            "递减结算需要在装备/技能面板明示生效值，否则玩家感知为暗改数值"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "penalty_per_extra", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.05, "max": 0.9 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "exclusion_penalty", "target": "character_build", "duration_expr": "while(group_installed_count > 1)", "priority": 10 },
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "scale_coefficient", "expr": "effect * (1 - {param:penalty_per_extra}) ^ (group_installed_count - 1)" }, "priority": 10 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.label_derivation",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "构筑身份标签按什么规则派生？",
+      "design_question": "装到什么程度他才『是』法师？占比门槛给身份一个明确的成为时刻，最高占比让人人随时有身份——标签仅展示，但成为感是真体验。",
+      "tier_gate": "a0_emergent",
+      "options": [
+        {
+          "id": "proportion_threshold",
+          "label": "占比门槛派生",
+          "summary": "某标签族技能占构筑比例达到门槛（火系≥60%）即展示对应身份，不达线则展示为无流派",
+          "implications": [
+            "跨过门槛是可感知的『成为法师』时刻，身份获得本身成为一个构筑目标",
+            "门槛线附近的一次换装会导致身份跳变，标签抖动需要滞后带（换出后保留若干秒）兜底",
+            "多标签同时过线的并列规则（取最高/展示复合身份）必须显式定义"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "threshold_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.3, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character_build", "property": "build_identity_label", "formula": "tag_family where installed_ratio(tag_family) >= {param:threshold_ratio} else unaligned" },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        },
+        {
+          "id": "dominant_tag_ranking",
+          "label": "最高占比派生",
+          "summary": "无门槛，恒取当前构筑中占比最高的标签族作为展示身份，随构筑实时改变",
+          "implications": [
+            "人人任何时刻都有身份，无『无流派』空窗——身份是镜子不是奖励",
+            "五五开构筑的身份归属靠平手规则（字典序/最近安装优先）裁定，语义上略显随意",
+            "身份变化过于频繁时叙事引用（NPC 称呼你为法师）会与实况脱节，引用方要读快照而非实时值"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character_build", "property": "build_identity_label", "formula": "argmax(tag_family, installed_ratio)" },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.class_table_structure",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "职业定义表按什么结构组织？",
+      "design_question": "职业是并列的一排门，还是一棵越走越窄的树？平表卖横向选择，进阶树卖纵向生涯。",
+      "tier_gate": "a1_preset",
+      "options": [
+        {
+          "id": "flat_class_list",
+          "label": "并列职业表",
+          "summary": "全部职业平级并列，创建/转职时从全表任选，无进阶层级",
+          "implications": [
+            "职业间只有横向差异没有先后序，平衡是全表两两对拍的对称问题",
+            "无进阶意味着职业身份从选定起终身完整，生涯纵深要靠职业内成长（专精/天赋）另行供给",
+            "加新职业是加一行并回查全表克制/强度，扩展成本可控"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "class_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "skill_scope_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "growth_profile_ref", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "class_id", "cardinality_key": "class_definition_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "class_definition" },
+            { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "selected(class_id)" },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        },
+        {
+          "id": "tiered_advancement_tree",
+          "label": "进阶职业树",
+          "summary": "基础职在等级/条件节点分化为进阶职（战士→狂战/骑士），职业表带父子引用成树",
+          "implications": [
+            "转职分叉是生涯级里程碑决策，一次选择关闭一整支树——重量与不可逆感是卖点也是劝退点",
+            "树深与分叉度直接乘出职业总数，内容供给按叶子数估算而非根数",
+            "回头路政策（能否洗掉分化）必须与转职规则点联合回答，否则玩家卡在后悔里"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "class_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "parent_class_ref", "kind": { "kind": "text" }, "required": false },
+            { "key": "advance_condition_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "skill_scope_ref", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "class_id", "cardinality_key": "class_definition_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "class_definition" },
+            { "effect": "roll_check", "formula": "evaluate(advance_condition_expr)", "difficulty_expr": "1", "on_success": [
+              { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "advance_to(class_id)" },
+              { "effect": "emit_signal", "signal": "class_signal" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.skill_gating",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "职业对技能子集的门控怎么裁定？",
+      "design_question": "法师的技能书是逐条点名的白名单，还是『火系/奥术系随便学』的族谱授权？点名可控，族谱可扩。",
+      "tier_gate": "a1_preset",
+      "options": [
+        {
+          "id": "whitelist_per_class",
+          "label": "逐职业白名单",
+          "summary": "每个职业一张显式可学技能清单，清单外一律不可安装",
+          "implications": [
+            "每个职业的能力边界被精确圈定，跨职业组合爆炸被白名单硬性抑制",
+            "新技能入库要逐职业决定进不进清单，内容维护成本随职业数×技能数增长",
+            "白名单交集可以刻意制造共享技能（各职业都会的基础打击），身份重叠度可精确控制"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "entry_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "class_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "skill_ref", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "entry_id", "cardinality_key": "skill_whitelist_rows" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "whitelist_contains(class_state, skill_ref)" }, "priority": 5 }
+          ]
+        },
+        {
+          "id": "tag_family_access",
+          "label": "标签族授权",
+          "summary": "职业声明可用的技能标签族（火系/治疗系），族内技能自动开放，新技能挂标签即入范围",
+          "implications": [
+            "新技能挂对标签即全职业自动生效，扩展零回查——内容量产友好",
+            "族授权的边界是模糊的：一个『火系+治疗』双标签技能会同时进两类职业的范围，语义溢出要靠互斥组兜",
+            "职业身份由标签族组合定义，与涌现式的标签派生共用同一族谱——两档形态的语义桥"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "grant_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "class_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "tag_family", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "grant_id", "cardinality_key": "tag_grant_rows" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "skill_tag_family in granted_families(class_state)" }, "priority": 5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.growth_bias",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "职业成长偏向怎么落数？",
+      "design_question": "战士的力量是系统替他长的，还是他自己加点时便宜些？固定成长率保证身材标准，加点折扣保留玩家的塑形权。",
+      "tier_gate": "a1_preset",
+      "options": [
+        {
+          "id": "fixed_growth_rates",
+          "label": "固定成长率表",
+          "summary": "每职业一组逐属性成长率，升级时按率自动加成长，玩家无干预",
+          "implications": [
+            "同职业同等级身材完全一致，平衡与数值验证只需按职业抽样",
+            "玩家对成长零决策，职业身份感全部由技能与门控供给——成长层是纯背景",
+            "成长率表与等级曲线联动，改任何一处都要跑全等级段回归"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "growth_row_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "class_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "attribute_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "per_level_gain", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true }
+          ], "row_key": "growth_row_id", "cardinality_key": "growth_rate_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character", "property": "combat_attribute", "formula": "attribute + per_level_gain(class_state, attribute_key) per level_up" }
+          ]
+        },
+        {
+          "id": "discounted_point_buy",
+          "label": "职业折扣加点",
+          "summary": "升级发通用点数由玩家自由分配，本职偏向属性按折扣价购入，跨职属性原价或加价",
+          "implications": [
+            "玩家保留塑形权：力量法师是合法（但更贵的）选择，身份约束以经济压力而非禁止表达",
+            "折扣率决定越轨成本，是『职业该多硬』的连续旋钮——与涌现式的构筑自由哲学同源",
+            "自由加点必然产生废号风险，洗点服务成为必须一起回答的配套决策"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "favored_discount", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 0.9 }, "required": true },
+            { "key": "points_per_level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "attribute_point", "formula": "{param:points_per_level} per level_up" },
+            { "effect": "consume_resource", "resource": "attribute_point", "formula": "cost * {param:favored_discount} if attribute in favored(class_state) else cost" },
+            { "effect": "modify_property", "entity": "character", "property": "combat_attribute", "formula": "attribute + allocated_points" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.job_change_rule",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "转职按什么规则执行？",
+      "design_question": "转职是一次性的成人礼，还是付费可逆的换装间？不可逆卖承诺的重量，可逆卖试错的自由。",
+      "tier_gate": "a1_preset",
+      "options": [
+        {
+          "id": "milestone_permanent",
+          "label": "里程碑不可逆转职",
+          "summary": "达成条件（等级/试炼任务）后执行转职，选择永久生效，不提供回退",
+          "implications": [
+            "转职是生涯叙事的高光节点，试炼任务可承载职业幻想的仪式感",
+            "不可逆选择的重量要求信息前置：转职预览（技能表/成长对比）必须完整，否则等于骗新手",
+            "选错职业的玩家只剩练小号一条路，账号级挫败是留存风险——用二档确认与冷静期缓释"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unlock_level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "character_level", "difficulty_expr": "{param:unlock_level}", "on_success": [
+              { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "target_class permanently" },
+              { "effect": "change_state", "machine": "job_change", "to_state": "committed" },
+              { "effect": "emit_signal", "signal": "class_signal" }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "paid_reversible_change",
+          "label": "付费可逆转职",
+          "summary": "消耗货币/道具即可转职，可反复更换，费用随次数或等级递增",
+          "implications": [
+            "试错自由让玩家敢选敢换，职业人口分布随版本强度自然流动",
+            "转职费是稳定货币沉没点，但也让职业身份变轻——『本命职业』的叙事感被稀释",
+            "旧职业进度（已学技能/专精）的保留口径必须显式定义，全清和全留是两个游戏"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_change_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 1000000.0 }, "required": true },
+            { "key": "cost_growth_per_change", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "{param:base_change_cost} * {param:cost_growth_per_change} ^ change_count" },
+            { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "target_class" },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.counter_matrix",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "职业间相克关系怎么建模？",
+      "design_question": "克制是一张逐格可调的矩阵，还是一个人人能背的环？矩阵给平衡师手术刀，环给玩家口诀。",
+      "tier_gate": "a1_preset",
+      "options": [
+        {
+          "id": "pairwise_counter_matrix",
+          "label": "逐格相克矩阵",
+          "summary": "职业×职业的系数矩阵，每格独立填克制倍率，非对称可调（定稿 §9.2a：相克复用 Matrix 参数）",
+          "implications": [
+            "任意一对职业的克制强度可单独手术，版本平衡不必牵一发动全身",
+            "格数是职业数的平方，职业超过 8 个后矩阵维护与玩家认知同时超载",
+            "非对称格（A 克 B 但 B 不弱于 A）能表达微妙关系，也最容易埋进说不清的暗账"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "matrix",
+            "row_axis": { "axis": "table_rows", "decision": "sys.class_archetype.class_table_structure" },
+            "col_axis": { "axis": "table_rows", "decision": "sys.class_archetype.class_table_structure" },
+            "cell": { "key": "counter_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.25, "max": 4.0 }, "required": true },
+            "cardinality_key": "class_definition_rows"
+          },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character", "property": "outgoing_effect_scale", "formula": "counter_multiplier(attacker_class_state, defender_class_state)" }
+          ]
+        },
+        {
+          "id": "cyclic_triad",
+          "label": "环形克制链",
+          "summary": "职业归入若干阵营组成克制环（战克敏、敏克法、法克战），环上统一一个克制系数",
+          "implications": [
+            "一句口诀讲完全部克制关系，新玩家零表格记忆负担",
+            "单系数调平：动一个数字全环生效，代价是无法单独微调某一对",
+            "环结构强制职业数按环点分组，新职业必须先回答『它站环上哪一点』"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "cycle_advantage_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.05, "max": 3.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character", "property": "outgoing_effect_scale", "formula": "{param:cycle_advantage_multiplier} if beats_in_cycle(attacker_class_state, defender_class_state) else 1" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.multiclass_structure",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "多职业并行按什么结构持有？",
+      "design_question": "副职是主职的挂件，还是全部职业平等随切？主副制保住主身份，职业池把身份变成装备。",
+      "tier_gate": "a2_multiclass",
+      "options": [
+        {
+          "id": "main_sub_pairing",
+          "label": "主副职结构",
+          "summary": "一个主职全额生效，一个副职以折减比例借出部分能力（FF11 口径），主副组合即构筑",
+          "implications": [
+            "主职身份仍是第一叙事，副职是构筑的第二维度——组合数为职业数的平方但身份不碎",
+            "副职折减率是强度阀：折得狠副职沦为点缀，折得松主副倒挂",
+            "主副搭配的版本答案（最优组合）会快速收敛，冷门组合需要专属协同位对冲"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "sub_class_efficiency", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 0.9 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "pair(main_class, sub_class)" },
+            { "effect": "attach", "modifier_id": "sub_class_grant", "target": "character", "duration_expr": "while(sub_class_selected)", "priority": 0 },
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "scale_coefficient", "expr": "sub_class_effect * {param:sub_class_efficiency}" }, "priority": 5 }
+          ]
+        },
+        {
+          "id": "job_pool_switching",
+          "label": "职业池随切",
+          "summary": "一个角色持有全部已解锁职业各自的独立进度，局外任意切换当前职业（FF14 口径）",
+          "implications": [
+            "练小号的需求被账号内消化，一个角色就是全职业图鉴——长线留存的大杀器",
+            "每个职业独立进度意味着成长内容按职业数复制，内容供给压力是全口径中最大",
+            "切换在局外免费即无承诺重量，职业身份完全装备化——与涌现式殊途同归的『身份=当前配置』"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "switch_cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 3600.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "character", "property": "class_state", "formula": "switch_to(target_class) keeping per_class_progress" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:switch_cooldown_seconds}", "unit": "seconds", "inner": [
+              { "effect": "emit_signal", "signal": "class_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.class_archetype.cross_class_inheritance",
+      "domain": "class_archetype",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "跨职业继承什么、继承多少？",
+      "design_question": "练过的职业给现在的你留下什么？技能借用让旧职业活在当下构筑里，账号被动让它化作底蕴数值。",
+      "tier_gate": "a2_multiclass",
+      "options": [
+        {
+          "id": "shared_skill_subset",
+          "label": "技能子集借用",
+          "summary": "各职业标记若干可外借技能，其他职业可装入有限的借用槽（FF5 素质继承口径）",
+          "implications": [
+            "练冷门职业的动机=为主构筑采集借用件，全职业都有『被练一遍』的理由",
+            "借用槽数量与可借技能表是组合爆炸的总阀门，两者都要保守起步",
+            "借用组合会产出设计外的超模拼装，上线前需按借用槽全组合做自动化数值扫描"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "borrow_slot_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "install_gate_rule_slot", "patch": { "patch": "add_precondition", "condition": "skill_is_borrowable and borrow_slots_used < {param:borrow_slot_count}" }, "priority": 5 },
+            { "effect": "attach", "modifier_id": "borrowed_skill_grant", "target": "character", "duration_expr": "while_slotted", "priority": 0 }
+          ]
+        },
+        {
+          "id": "account_level_passives",
+          "label": "账号被动沉淀",
+          "summary": "每个职业练度达标即点亮一条全职业生效的被动加成，旧职业化作永久底蕴",
+          "implications": [
+            "全职业练度成为账号数值的一部分，完成主义者的清单动机被直接货币化为强度",
+            "被动是纯数值不进构筑决策，继承的深度低于技能借用但平衡风险也小一个量级",
+            "被动总量随职业数增长，后入坑玩家与老号的底蕴差距需要追赶机制封顶"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.class_archetype" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "passive_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "source_class_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "mastery_condition_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "bonus_summary", "kind": { "kind": "text" }, "required": true, "is_skin": true }
+          ], "row_key": "passive_id", "cardinality_key": "account_passive_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "account_passive_bonus", "target": "character", "duration_expr": "while(mastery_condition_met(source_class_ref))", "priority": 0 },
+            { "effect": "emit_signal", "signal": "class_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "slot_type_rows": { "min": 2, "max": 8 },
+    "constraint_predicate_rows": { "min": 3, "max": 60 },
+    "exclusion_group_rows": { "min": 2, "max": 20 },
+    "class_definition_rows": { "min": 3, "max": 24 },
+    "skill_whitelist_rows": { "min": 10, "max": 400 },
+    "tag_grant_rows": { "min": 3, "max": 60 },
+    "growth_rate_rows": { "min": 6, "max": 120 },
+    "account_passive_rows": { "min": 3, "max": 24 }
+  },
+  "consistency_rules": [
+    {
+      "id": "counter_matrix_axes_match_class_table",
+      "kind": "matrix_axis_matches_table_rows",
+      "matrix_decision": "sys.class_archetype.counter_matrix",
+      "table_decision": "sys.class_archetype.class_table_structure"
+    },
+    {
+      "id": "class_table_and_gating_answered_together",
+      "kind": "answered_together",
+      "first": "sys.class_archetype.class_table_structure",
+      "second": "sys.class_archetype.skill_gating"
+    }
+  ],
+  "skin_fields": ["class_title_theme", "identity_label_display_name"]
+}

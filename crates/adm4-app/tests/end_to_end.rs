@@ -3631,6 +3631,7 @@ fn skin_exemption_only_covers_words_registered_by_this_archives_own_export() {
         origin: adm4_template::TemplateOrigin::Reverse,
         mapping_hash: String::new(),
         crosscheck_proof: None,
+        smoke_test: false,
     };
     services.templates().save_draft(&rival).unwrap();
     let scanner_a_after = services
@@ -3747,6 +3748,84 @@ fn prefill_requires_verifiable_evidence_while_builtin_templates_still_work() {
         .unwrap_err();
     assert_eq!(refused.kind, adm4_foundation::Adm4ErrorKind::RedLine);
     assert!(refused.message.contains("指纹"), "{}", refused.message);
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// T-W7-4b：smoke_test 模板的预填拦截（默认拒 / --allow-smoke 显式放行）
+// ---------------------------------------------------------------------------
+
+/// 25 份内置模板已标 smoke_test：project_new 模板通道默认拒绝，显式放行后照常预填。
+#[test]
+fn smoke_test_templates_are_rejected_by_default_and_allowed_explicitly() {
+    let temp = std::env::temp_dir().join(format!("adm4_e2e_4b_smoke_{}", std::process::id()));
+    let services = services_with_isolated_space(&temp);
+
+    // 前提：内置模板确实带标记（25 份逐份标注，answers_digest 不含该字段 → 登记指纹仍可核）。
+    let builtins = services.templates().list("universal").unwrap();
+    assert!(builtins.len() >= 25);
+    for template in &builtins {
+        assert!(
+            template.smoke_test,
+            "内置模板 {} 应带 smoke_test 标记",
+            template.template_id
+        );
+        template
+            .require_certification_evidence()
+            .expect("加 smoke_test 标记不得破坏迁移登记指纹");
+    }
+
+    // 负测试 1（拒）：默认通道被拒，错误点名模板与放行开关。
+    let refused = services
+        .project_new(
+            "冒烟模板默认拒",
+            "lane_defense",
+            DesignLevel::L4,
+            Some("builtin_midcore_arknights"),
+        )
+        .unwrap_err();
+    assert_eq!(refused.kind, adm4_foundation::Adm4ErrorKind::Blocked);
+    assert!(
+        refused.message.contains("smoke_test"),
+        "{}",
+        refused.message
+    );
+    assert!(
+        refused.message.contains("--allow-smoke"),
+        "{}",
+        refused.message
+    );
+
+    // 负测试 2（放行）：显式 allow_smoke=true 后照常预填成功。
+    let archive_id = services
+        .project_new_allowing_smoke(
+            "冒烟模板显式放行",
+            "lane_defense",
+            DesignLevel::L4,
+            Some("builtin_midcore_arknights"),
+            true,
+        )
+        .unwrap();
+    let state = services.load_authoring_state(&archive_id).unwrap();
+    assert!(!state.selections.is_empty(), "放行后模板答卷应写入项目");
+
+    // 无标记模板不受影响：手工造一份 smoke_test=false 的可预填模板走默认通道照常成功。
+    let mut normal = services
+        .templates()
+        .get("universal", "builtin_midcore_arknights")
+        .unwrap();
+    normal.template_id = "builtin_not_smoke".into();
+    normal.smoke_test = false;
+    services.templates().save_draft(&normal).unwrap();
+    services
+        .project_new(
+            "正常模板默认通道",
+            "lane_defense",
+            DesignLevel::L4,
+            Some("builtin_not_smoke"),
+        )
+        .expect("无 smoke_test 标记的模板默认通道不受拦截");
 
     std::fs::remove_dir_all(&temp).ok();
 }

@@ -20,5 +20,8 @@ adm4-ai = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+adm4-spec-diff = { workspace = true }
+
 [lints]
 workspace = true

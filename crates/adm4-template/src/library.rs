@@ -310,6 +310,7 @@ mod tests {
             origin,
             mapping_hash: String::new(),
             crosscheck_proof: None,
+            smoke_test: false,
         }
     }
 

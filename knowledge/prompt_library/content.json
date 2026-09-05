@@ -1,0 +1,174 @@
+{
+  "entries": [
+    {
+      "id": "pl.content.linear_or_open",
+      "domain": "content_design",
+      "question_zh": "关卡结构走线性还是开放——线性把节奏和演出攥在导演手里、每一分钟都调过，开放给自由但玩家会用错误顺序把你的曲线踩碎，缰绳放多长？",
+      "follow_ups": [
+        "开放结构里的软引导（视觉焦点/难度落差）挡得住多少乱序，挡不住时补救预案是什么？",
+        "线性主干+开放支线的混合里，支线做太好喧宾夺主怎么办？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.kong_jian_jie_gou.content_experience"
+    },
+    {
+      "id": "pl.content.pacing_valley",
+      "domain": "content_design",
+      "question_zh": "节奏低谷主动排不排——全程高潮的密度不可持续且让高潮贬值，刻意安排的安全屋、慢段落给情绪留呼吸位，但『无聊』的差评风险也是真的，低谷敢排多长？",
+      "follow_ups": [
+        "低谷段的留人手段（环境叙事/整备决策）够不够撑住不想快进的理由？",
+        "手机上的碎片会话遇到低谷段直接下线，平台特性要不要推翻节奏理论？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.jie_zou_jie_dian.content_experience"
+    },
+    {
+      "id": "pl.content.quest_fail_state",
+      "domain": "content_design",
+      "question_zh": "任务允不允许永久失败——可失败（错过时限/NPC死亡则线索关闭）让世界有真实的重量，但完美主义玩家读档重来或直接查攻略，失败的口子开不开？",
+      "follow_ups": [
+        "失败分支的内容产能（失败线也要写剧情）和被看到的概率成正比吗？",
+        "失败后的世界状态变化要多显眼，玩家才承认『这是后果』而不是『这是bug』？"
+      ],
+      "source_ref": "v2:v2.quest_event_decision.ren_wu_shi_bai.content_experience"
+    },
+    {
+      "id": "pl.content.branch_budget",
+      "domain": "content_design",
+      "question_zh": "任务分支的预算怎么花——真分支（选择改变后续内容）每条岔路都是产能黑洞且多数玩家只见一条，伪分支（殊途同归）省钱但被识破时选择感崩塌，岔路修几条真的？",
+      "follow_ups": [
+        "关键节点真分支+过程伪分支的配比，玩家的『选择有意义』体感需要几个真节点撑住？",
+        "分支可视化（流程图回顾）是炫耀诚意还是自曝伪分支？"
+      ],
+      "source_ref": "v2:v2.quest_event_decision.ren_wu_fen_zhi.content_cost_boundary"
+    },
+    {
+      "id": "pl.content.narrative_dose",
+      "domain": "content_design",
+      "question_zh": "叙事剂量给多大——重叙事（长对话/强演出）树立品格但玩法党狂点跳过、产能被文本吃掉，轻叙事流畅但世界像纸片，剂量和跳过权怎么配？",
+      "follow_ups": [
+        "跳过的粒度（跳单句/跳整段/跳全程）里哪一档最能同时保住两类玩家？",
+        "跳过剧情的玩家后续拿到剧情梗概吗——不给则后续叙事对他们全是噪音？"
+      ],
+      "source_ref": "v2:v2.narrative_content_decision.xu_shi_jie_zou.content_consumption_dynamic"
+    },
+    {
+      "id": "pl.content.lore_delivery",
+      "domain": "content_design",
+      "question_zh": "世界观塞正面还是埋碎片——强制过场把设定喂到嘴里保底传达但被动灌输惹烦，碎片化（道具描述/环境细节）尊重挖掘但九成玩家对世界观一无所知就通关了，埋多深？",
+      "follow_ups": [
+        "核心设定（影响玩法理解的）和风味设定的传达策略要不要分层？",
+        "社区考据生态起来之后，官方留白和官方补完的边界怎么守？"
+      ],
+      "source_ref": "v2:v2.narrative_content_decision.shi_jie_guan_xin_xi.content_signal"
+    },
+    {
+      "id": "pl.content.unlock_gate_type",
+      "domain": "content_design",
+      "question_zh": "内容解锁卡进度还是卡实力——进度解锁（通关开下一章）人人可达节奏可控，实力解锁（达标才开高难）保证内容被正确消费但卡住的人看着门兴叹，闸门用哪种？",
+      "follow_ups": [
+        "付费直接买解锁算第三种闸门还是算作弊——它对前两种的稀释算过吗？",
+        "解锁预告（让你看见但摸不着）的馋人效果和挫败效果，哪个占上风取决于什么？"
+      ],
+      "source_ref": "v2:v2.content_consumption_decision.nei_rong_jie_suo_jie_zou.content_consumption_dynamic"
+    },
+    {
+      "id": "pl.content.replay_value_source",
+      "domain": "content_design",
+      "question_zh": "重复消耗的价值从哪来——随机变化（词缀/随机层）让同一内容常玩常新但记忆点被随机稀释，固定内容+精通深度（速通/无伤）让重复有目标但只筛选高玩，复用引擎装哪台？",
+      "follow_ups": [
+        "随机词缀的组合空间多大时开始出现『垃圾组合直接退』的重开筛选行为？",
+        "为重复玩设计的挑战目标（限制条件通关）要不要给独占奖励逼一把？"
+      ],
+      "source_ref": "v2:v2.content_consumption_decision.chong_fu_xiao_hao_lu_jing.content_supply_mechanic"
+    },
+    {
+      "id": "pl.content.depletion_horizon",
+      "domain": "content_design",
+      "question_zh": "内容见底的预警线画哪——按重度玩家消耗速度备货则产能永远追不上，放任见底则毕业玩家流失且回不来，你接受玩家『玩完了』这件事吗，还是要用刷子内容无限续杯？",
+      "follow_ups": [
+        "『体面的见底』（明示内容边界+预告下批）和『无限刷子』的留存曲线差多少？",
+        "见底玩家的休眠管理（主动说再见+回归钩子）比硬留他们更划算吗？"
+      ],
+      "source_ref": "v2:v2.content_consumption_decision.nei_rong_ku_jie_yu_jing.content_cost_boundary"
+    },
+    {
+      "id": "pl.content.quality_tiering",
+      "domain": "content_design",
+      "question_zh": "内容质量分层敢不敢做——全内容一个规格产能撑不住，明着分层（主线电影级、支线量产级）诚实但量产层直接被打上『垃圾内容』标签，层差摆多开？",
+      "follow_ups": [
+        "量产层的底线规格怎么定——低于哪条线的内容不如不做？",
+        "高规格演出偶尔下放到支线（惊喜彩蛋）能不能给量产层续命？"
+      ],
+      "source_ref": "v2:v2.content_supply_structure_decision.nei_rong_zhi_liang_fen_ceng.content_cost_boundary"
+    },
+    {
+      "id": "pl.content.proc_gen_share",
+      "domain": "content_design",
+      "question_zh": "程序生成吃掉多大盘子——PCG 供给无限且省人力，但生成内容的平庸中位数会稀释手工内容的浓度，玩家学会识别生成模板后地图再大也是同一张，配比切哪？",
+      "follow_ups": [
+        "手工地标+生成填充的混合里，地标密度低到什么程度玩家开始觉得『这地图是机器吐的』？",
+        "生成规则本身当内容卖（种子码社区/每日挑战同种子）能回收多少价值？"
+      ],
+      "source_ref": "v2:v2.content_supply_structure_decision.ke_fu_yong_nei_rong_mu_ban.content_supply_mechanic"
+    },
+    {
+      "id": "pl.content.time_cost_honesty",
+      "domain": "balance_design",
+      "question_zh": "内容时长的水分挤多干——跑图、等待、重复对话这些注水工时把游戏时长报表撑得好看、也真能多卖几天留存，挤干则总时长缩水一半、『太短』差评来袭，水兑多少？",
+      "follow_ups": [
+        "快速旅行的解锁时机就是注水阀门——多早给传送等于多早承认跑图是水？",
+        "时长焦虑是不是伪命题——你的定价和时长的绑定关系到底多强？"
+      ],
+      "source_ref": "v2:v2.balance_content_decision.nei_rong_shi_jian_cheng_ben.balance_goal"
+    },
+    {
+      "id": "pl.content.event_fomo_axis",
+      "domain": "liveops_version_design",
+      "question_zh": "限时活动的错过成本定多重——重错过成本（限定奖励永绝版）拉全勤但把游戏变成考勤机，轻错过成本佛系但活动参与率腰斩，FOMO 的旋钮拧到哪？",
+      "follow_ups": [
+        "活动奖励的补领通道（下届返场/代币慢兑）开了之后，『限时』的动员力还剩多少？",
+        "全勤压力的受害者是最忠诚的玩家——燃尽他们的代价进过报表吗？"
+      ],
+      "source_ref": "v2:v2.liveops_activity_structure_decision.huo_dong_jiang_li.liveops_rhythm_boundary"
+    },
+    {
+      "id": "pl.content.version_cliff",
+      "domain": "liveops_version_design",
+      "question_zh": "版本节奏的间隔怎么切——高频小版本流水不断、玩家总有新东西但团队永远在冲刺、质量事故率涨，低频大版本从容出精品但版本末期的内容旱季流失谁接，鼓点敲多密？",
+      "follow_ups": [
+        "旱季的填充物（复刻活动/平衡性调整）算不算内容——玩家买不买账？",
+        "版本大小交替（大-小-小-大）的节拍比匀速更优吗，你的团队回血周期是多久？"
+      ],
+      "source_ref": "v2:v2.liveops_version_rhythm_decision.ban_ben_xiao_hao_zhou_qi.liveops_rhythm_boundary"
+    },
+    {
+      "id": "pl.content.launch_stock",
+      "domain": "liveops_version_design",
+      "question_zh": "首发备多少货——首发内容堆太厚开发周期拖长、错过窗口且玩家一个月吃完照样喊饿，备太薄口碑定型『内容空洞』再无翻身，首发弹药和长线弹药怎么分仓？",
+      "follow_ups": [
+        "首发藏一手（做完但压后放）保第二个月的内容感，算欺诈还是算运营？",
+        "『首发内容量』的对外口径（多少小时流程）敢不敢写实数？"
+      ],
+      "source_ref": "v2:v2.liveops_launch_content_decision.shou_fa_he_xin_nei_rong.liveops_version_experience"
+    },
+    {
+      "id": "pl.content.difficulty_options",
+      "domain": "balance_design",
+      "question_zh": "难度选项开几档、允不允许中途改——多档+随时切最大化可达性但『打不过就调简单』蚕食成就的含金量，锁档尊重挑战但把一批玩家永久关在门外，档位和切换权怎么设？",
+      "follow_ups": [
+        "难度档间的奖励差要不要有——有则低难度玩家二等公民，无则高难度是自虐？",
+        "辅助选项拆散卖（单独调伤害/调节奏）比难度档更精准，但配置负担谁来背？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.chu_qi_nan_du.balance_tuning_lever"
+    },
+    {
+      "id": "pl.content.tutorial_island",
+      "domain": "content_design",
+      "question_zh": "第一小时的内容浓度怎么勾兑——把最炫的机制和演出前置抓住首因效应，但透支后正篇前中期显得平淡；按正常曲线铺垫则第一小时的流失闸口拦不住人，开场那勺糖放多少？",
+      "follow_ups": [
+        "垂直切片式开场（借你后期角色打一场）结束后的能力回收，落差感怎么软着陆？",
+        "首小时的流失数据和首周的口碑数据打架时（前者要爽、后者要曲线），听谁的？"
+      ],
+      "source_ref": "v2:v2.content_type_decision.he_xin_nei_rong.content_experience"
+    }
+  ]
+}

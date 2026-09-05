@@ -72,6 +72,7 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
             let mut pack = None;
             let mut depth = "L4".to_string();
             let mut template = None;
+            let mut allow_smoke = false;
             let remaining: Vec<&str> = rest.collect();
             let mut index = 0;
             while index < remaining.len() {
@@ -91,12 +92,22 @@ fn dispatch(args: &[String]) -> Adm4Result<()> {
                         template = remaining.get(index + 1).map(|value| value.to_string());
                         index += 2;
                     }
+                    "--allow-smoke" => {
+                        allow_smoke = true;
+                        index += 1;
+                    }
                     _ => index += 1,
                 }
             }
             let pack = required(pack.as_deref(), "--pack")?;
             let level = parse_level(&depth)?;
-            let archive_id = services.project_new(name, pack, level, template.as_deref())?;
+            let archive_id = services.project_new_allowing_smoke(
+                name,
+                pack,
+                level,
+                template.as_deref(),
+                allow_smoke,
+            )?;
             println!("已创建项目：{archive_id}");
             if template.is_some() {
                 println!(
@@ -2392,11 +2403,13 @@ const SPACE_HELP: &str = r#"设计空间（space）——品类包结构校验
 const PROJECT_HELP: &str = r#"项目生命周期（project）
 
 用法：
-  adm4 project new <名称> --pack <包id> [--depth L4|L5|L6] [--template <模板id>]
+  adm4 project new <名称> --pack <包id> [--depth L4|L5|L6] [--template <模板id>] [--allow-smoke]
       创建新项目存档。--depth 为设计深度档，默认 L4。
       --template 用已认证（Certified）模板预填；未认证、或状态写着 Certified 但
       查不到认证证据的模板一律被拒（见 template certify --help 的取用说明）。
       模板先在项目品类包里找，找不到落通用层（genre_pack=universal 的模板跨包可预填）。
+      带 smoke_test 标记的模板（冒烟测试用，答卷未经产线校准）默认拒绝预填，
+      --allow-smoke 显式放行（放行留运行日志）。
       预填条目需逐条用户确认（authoring confirm），并改写选择理由完成换皮
       （authoring set-rationale）——预填理由含模板游戏名会被冻结换皮门拦截（R5）。
 

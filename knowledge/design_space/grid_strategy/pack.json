@@ -19,11 +19,25 @@
     "u.region_scope",
     "u.dimension"
   ],
+  "core_nouns": ["grid_unit_entity", "grid_move_command", "grid_board_occupancy"],
+  "system_refs": [
+    {
+      "instance_id": "grid",
+      "module_id": "sys.tactical_board",
+      "version_req": "^1.1.0",
+      "allowed_tiers": ["mg0_migration_base", "mg1_terrain_carrier"],
+      "noun_bindings": {
+        "sys.turn_combat.unit_entity": "grid_unit_entity",
+        "sys.turn_combat.move_command": "grid_move_command",
+        "board_occupancy": "grid_board_occupancy"
+      },
+      "core_link": "core"
+    }
+  ],
   "cardinality_expectations": {
     "unit_types": { "min": 6, "max": 30 },
     "class_types": { "min": 4, "max": 12 },
     "class_counter_cells": { "min": 16, "max": 144 },
-    "terrain_types": { "min": 4, "max": 12 },
     "asset_specs": { "min": 8, "max": 42 },
     "stage_count": { "min": 8, "max": 40 },
     "progression_rows": { "min": 4, "max": 12 },
@@ -91,30 +105,6 @@
     {"id":"grid_unit","domain_id":"content_design","name":"网格战棋·单位与兵种内容","description":"单位名单、兵种表等内容实体。","role_class":"content_concrete"}
   ],
   "decision_points": [
-    {
-      "id": "grid.battlefield_system",
-      "node_id": "grid_battlefield",
-      "domain": "battlefield",
-      "level": "L3",
-      "genre_scope": { "pack": "grid_strategy" },
-      "question": "战场采用什么网格结构？",
-      "options": [
-        {
-          "id": "square_grid",
-          "label": "方形网格",
-          "summary": "战场由方形格组成，四方向邻接，移动与射程按格计算",
-          "implications": ["需要逐格移动规则", "需要地形效果规则", "射程与距离按曼哈顿距离计算"],
-          "unlocks": ["grid.move_rule", "grid.terrain_effect_rule"]
-        },
-        {
-          "id": "hex_grid",
-          "label": "六边形网格",
-          "summary": "战场由六边形格组成，六方向邻接，包抄与侧翼路线更多",
-          "implications": ["需要逐格移动规则", "需要地形效果规则", "寻路与射程按六向邻接计算"],
-          "unlocks": ["grid.move_rule", "grid.terrain_effect_rule"]
-        }
-      ]
-    },
     {
       "id": "grid.turn_system",
       "node_id": "grid_turn",
@@ -235,43 +225,6 @@
           "summary": "关键节点提供路线分支，不同路线经过不同关卡集合",
           "implications": ["需要胜负判定规则", "需要关卡表与敌方配置表", "各分支路线的难度与奖励需要对齐"],
           "unlocks": ["grid.victory_condition_rule", "grid.stage_table", "grid.enemy_deploy_table"]
-        }
-      ]
-    },
-    {
-      "id": "grid.move_rule",
-      "node_id": "grid_battlefield",
-      "domain": "battlefield",
-      "level": "L4",
-      "genre_scope": { "pack": "grid_strategy" },
-      "question": "网格移动的机制规则是什么？",
-      "options": [
-        {
-          "id": "move_point_cost",
-          "label": "地形移动力消耗",
-          "summary": "每进入一格消耗该地形的移动成本，路径总消耗不得超过单位移动力",
-          "implications": ["地形表成为走位策略核心", "寻路采用最小消耗路径", "机动类别可对特定地形改写消耗"],
-          "unlocks": ["grid.terrain_table"],
-          "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "zoc_enabled", "kind": { "kind": "bool" }, "required": true }
-          ] },
-          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
-          "effects_template": [
-            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "path_min_cost(terrain_move_cost) <= move" }
-          ]
-        },
-        {
-          "id": "fixed_range_move",
-          "label": "固定范围移动",
-          "summary": "移动范围为以自身为中心的固定格数，无视地形差异",
-          "implications": ["地形只影响战斗不影响机动", "数值调优集中在移动力字段", "规则可读性高，适合快节奏关卡"],
-          "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "pass_through_allies", "kind": { "kind": "bool" }, "required": true }
-          ] },
-          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
-          "effects_template": [
-            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "position", "formula": "grid_distance(origin, target) <= move" }
-          ]
         }
       ]
     },
@@ -426,45 +379,6 @@
           "effects_template": [
             { "effect": "modify_property", "entity": "grid.unit_roster", "property": "crit_chance", "formula": "max(raw_hit_chance - hit_cap, 0) * {param:overflow_ratio}" },
             { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * ({param:crit_multiplier} - 1) if crit_roll < crit_chance" }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "grid.terrain_effect_rule",
-      "node_id": "grid_terrain",
-      "domain": "terrain",
-      "level": "L4",
-      "genre_scope": { "pack": "grid_strategy" },
-      "question": "地形加成的机制规则是什么？",
-      "options": [
-        {
-          "id": "terrain_modifier_stack",
-          "label": "地形修正数值叠加",
-          "summary": "站位地形按地形表提供回避与减伤加值，叠加进战斗公式",
-          "implications": ["地形表数值直接进战斗公式", "抢占强势地形成为核心走位动机", "飞行类机动可豁免地形修正"],
-          "unlocks": ["grid.terrain_table"],
-          "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "flier_ignore_terrain", "kind": { "kind": "bool" }, "required": true }
-          ] },
-          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
-          "effects_template": [
-            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "evade", "formula": "evade + terrain_evade_bonus" },
-            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "def", "formula": "def + terrain_def_bonus" }
-          ]
-        },
-        {
-          "id": "terrain_binary_cover",
-          "label": "二元掩体规则",
-          "summary": "地形只区分掩体与非掩体，处于掩体时按固定比例减伤",
-          "implications": ["地形理解成本低，可读性优先", "数值杠杆集中在单一减伤比例上"],
-          "unlocks": ["grid.terrain_table"],
-          "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "cover_reduction", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 0.9 }, "required": true }
-          ] },
-          "compiler_tags": { "spec_role": "mechanic", "system": "grid.battlefield_system" },
-          "effects_template": [
-            { "effect": "modify_property", "entity": "grid.unit_roster", "property": "hp", "formula": "hp - damage * (1 - {param:cover_reduction}) if in_cover" }
           ]
         }
       ]
@@ -721,45 +635,6 @@
           "id": "custom_counter_structure",
           "label": "自定义克制结构",
           "summary": "以结构化描述声明与预设不同的克制关系结构",
-          "implications": ["自定义结构需通过冻结门的结构化描述审查"],
-          "is_custom": true,
-          "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "structure_description", "kind": { "kind": "text" }, "constraint": { "constraint": "min_len", "min": 8 }, "required": true }
-          ] }
-        }
-      ]
-    },
-    {
-      "id": "grid.terrain_table",
-      "node_id": "grid_terrain",
-      "domain": "terrain",
-      "level": "L5",
-      "genre_scope": { "pack": "grid_strategy" },
-      "question": "地形效果表的结构是什么？",
-      "skin_fields": ["id"],
-      "options": [
-        {
-          "id": "terrain_effect_table",
-          "label": "地形效果表",
-          "summary": "每种地形一行：标识、移动消耗、回避加成、减伤加成、可通行性",
-          "implications": ["移动消耗列被移动规则消费", "回避与减伤列被战斗公式消费"],
-          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
-          "parameter_schema": { "schema": "table",
-            "columns": [
-              { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
-              { "key": "move_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
-              { "key": "evade_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 60.0 }, "required": true },
-              { "key": "def_bonus", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true },
-              { "key": "passable", "kind": { "kind": "bool" }, "required": true }
-            ],
-            "row_key": "id",
-            "cardinality_key": "terrain_types"
-          }
-        },
-        {
-          "id": "custom_terrain_table",
-          "label": "自定义地形表结构",
-          "summary": "以结构化描述声明与预设不同的地形效果表结构",
           "implications": ["自定义结构需通过冻结门的结构化描述审查"],
           "is_custom": true,
           "parameter_schema": { "schema": "scalar", "fields": [

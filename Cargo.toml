@@ -14,6 +14,7 @@ members = [
     "crates/adm4-app",
     "apps/adm4-cli",
     "apps/adm4-desktop",
+    "tools/spec_diff",
 ]
 resolver = "3"
 
@@ -41,6 +42,7 @@ adm4-build = { path = "crates/adm4-build" }
 adm4-archive = { path = "crates/adm4-archive" }
 adm4-ai = { path = "crates/adm4-ai" }
 adm4-app = { path = "crates/adm4-app" }
+adm4-spec-diff = { path = "tools/spec_diff" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

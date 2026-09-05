@@ -1,0 +1,174 @@
+{
+  "entries": [
+    {
+      "id": "pl.econ.pity_price",
+      "domain": "economy_monetization_design",
+      "question_zh": "保底成本折算成钱定在哪——保底线低抽卡温和口碑好但大R的付费深度被削平，保底线高深度足但单价吓退中氪、舆论把你钉成赌场，一井的价码标多少？",
+      "follow_ups": [
+        "硬保底和软保底（概率递增）哪种在同样期望成本下体感更善良？",
+        "保底进度跨池继承吗——不继承的沉没成本设计还能撑几年舆论？"
+      ],
+      "source_ref": "v2:v2.compliance_player_protection_decision.sui_ji_gai_lv_biao_da.compliance_protection_mechanic"
+    },
+    {
+      "id": "pl.econ.battle_pass_pace",
+      "domain": "economy_monetization_design",
+      "question_zh": "通行证满级线卡给谁——按重度玩家日程标定则休闲党买了也拿不完、退款和差评跟着来，按休闲标定则肝帝提前两周毕业空窗，满级工时按谁的表调？",
+      "follow_ups": [
+        "赛季末补票（差几级直接买）开不开——开了等于承认等级就是标价？",
+        "免费轨和付费轨的奖励差距摆多开，白嫖玩家才愿意留在场内当人气？"
+      ],
+      "source_ref": "v2:v2.payment_point_decision.ding_yue_fu_fei.economy_value_experience"
+    },
+    {
+      "id": "pl.econ.skin_stat_line",
+      "domain": "economy_monetization_design",
+      "question_zh": "外观付费掺不掺数值——纯外观清白、竞技公平立得住但客单价天花板低，外观带微数值（哪怕1%）转化立涨但 pay-to-win 的口子一开就收不回来，红线守不守？",
+      "follow_ups": [
+        "间接数值（皮肤改判定体积/音效更隐蔽）算不算越线——玩家判例早于官方态度怎么办？",
+        "守住纯外观后，外观的价值感全靠稀缺和审美撑，产能跟得上吗？"
+      ],
+      "source_ref": "v2:v2.payment_point_decision.wai_guan_fu_fei.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.econ.f2p_reachability",
+      "domain": "economy_monetization_design",
+      "question_zh": "免费玩家的可达上限画哪——全内容可达（肝能替代氪）口碑与生态健康但付费理由只剩省时间，关键内容付费独占转化硬但白嫖池流失、匹配生态跟着塌，天花板给多高？",
+      "follow_ups": [
+        "『肝氪等价』的兑换率公开吗——公开后肝的工时被标价，健康还是残酷？",
+        "免费可达但延迟一个版本（付费尝鲜期）算不算两全，还是两头都嫌？"
+      ],
+      "source_ref": "v2:v2.payment_fairness_decision.fei_fu_fei_ke_da_xing.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.econ.whale_ceiling",
+      "domain": "economy_monetization_design",
+      "question_zh": "单人付费深度封不封顶——不封顶大R贡献大盘但军备竞赛劝退中氪、舆情风险悬顶，封顶（月消费上限）自证清白但营收模型要重画，坑挖多深？",
+      "follow_ups": [
+        "封顶后大R的溢出付费欲往哪导——荣誉性消费（冠名/公益皮肤）接得住吗？",
+        "付费深度和付费广度的战略权重，立项期就得定，你的品类适合哪头？"
+      ],
+      "source_ref": "v2:v2.balance_payment_decision.fu_fei_shang_xian.balance_break_boundary"
+    },
+    {
+      "id": "pl.econ.paid_efficiency_gap",
+      "domain": "economy_monetization_design",
+      "question_zh": "付费效率差拉到多少倍——付费省时是最体面的变现，但倍率超过某条线『省时间』就变成『买战力』的遮羞布，免费玩家用工时换的东西付费一秒跳过，倍率红线画哪？",
+      "follow_ups": [
+        "效率差在前中后期要不要不同——前期收敛保生态、后期放开收割意愿如何？",
+        "体力/次数上限这类时间闸门，卖上限和卖恢复哪种吃相更被接受？"
+      ],
+      "source_ref": "v2:v2.balance_payment_decision.fu_fei_xiao_lv_cha.balance_goal"
+    },
+    {
+      "id": "pl.econ.bundle_anchor",
+      "domain": "economy_monetization_design",
+      "question_zh": "礼包定价的锚点战术用多狠——原价划线、限时折扣、超值首档这些锚点确实抬转化，但玩家算清真实价值后每一次锚点都在折损定价信用，锚下多深？",
+      "follow_ups": [
+        "永远在打折的商品还有原价吗——合规红线和心理战术的距离还剩多少？",
+        "礼包内容捆绑滞销品（塞垃圾凑价值感）短期清库存、长期教会玩家什么？"
+      ],
+      "source_ref": "v2:v2.pricing_value_decision.zhe_kou_gui_ze.economy_signal"
+    },
+    {
+      "id": "pl.econ.gacha_or_direct",
+      "domain": "economy_monetization_design",
+      "question_zh": "商品卖直购还是卖概率——直购明码标价清白且合规压力小，但爆率带来的付费深度和开箱多巴胺全放弃；概率制营收强但监管与舆论成本逐年涨，主模式押哪个？",
+      "follow_ups": [
+        "混合制（新品先抽后进直购店）的进店延迟期定多长，才不背『逼氪窗口』的骂名？",
+        "概率公示的粒度（综合概率还是逐品概率）在你的目标市场是选择题还是法条？"
+      ],
+      "source_ref": "v2:v2.product_structure_decision.dan_pin_shang_pin.economy_mechanic"
+    },
+    {
+      "id": "pl.econ.trade_house_model",
+      "domain": "economy_monetization_design",
+      "question_zh": "拍卖行做全局市场还是点对点摊位——全局市场价格发现快、流动性好但价格战把物价打穿、脚本商人统治市场，摊位制有逛集市的人味但效率低，市场结构选哪种？",
+      "follow_ups": [
+        "全局市场的价格操纵（囤积拉盘）用涨跌停还是持仓上限治？",
+        "拍卖行数据公开（历史价格曲线）会不会培养出比策划更懂经济的玩家投机层？"
+      ],
+      "source_ref": "v2:v2.economy_security_dispute_decision.jiao_yi_zheng_yi_feng_xian.economy_mechanic"
+    },
+    {
+      "id": "pl.econ.faucet_sink_ledger",
+      "domain": "balance_design",
+      "question_zh": "产出口和回收口的账怎么配平——产出略大于回收让玩家资产缓涨、体感富足，但复利下三个月就通胀；严格平衡数学干净但玩家觉得白忙，水龙头和下水道的口径差留多少？",
+      "follow_ups": [
+        "配平的监控粒度到人均还是分层（大户和散户的通胀是两个病）？",
+        "新版本必然超发的部分，提前挖好的回收坑（新养成线/消耗玩法）够深吗？"
+      ],
+      "source_ref": "v2:v2.balance_economy_decision.tong_zhang_jian_kong.balance_numeric_dynamic"
+    },
+    {
+      "id": "pl.econ.scarcity_theater",
+      "domain": "economy_monetization_design",
+      "question_zh": "稀缺是真做还是演——真限量（错过永无）制造决断时刻和二级市场传奇，但错过者的怨与 FOMO 舆情同样真实；复刻轮回温和但『限定』二字逐渐没人信，稀缺的承诺敢不敢立死？",
+      "follow_ups": [
+        "复刻的间隔和形式（原样返场还是改色返场）怎么定才不背刺首发购买者？",
+        "绝版承诺一旦破例一次，挽回信用的成本估过吗？"
+      ],
+      "source_ref": "v2:v2.economy_security_dispute_decision.xi_you_jia_zhi_zheng_yi.economy_value_experience"
+    },
+    {
+      "id": "pl.econ.refund_policy_teeth",
+      "domain": "economy_monetization_design",
+      "question_zh": "误购补偿的口子开多大——无条件秒退口碑好但退款党白嫖两周内容再退款，严格不退干净但每单纠纷都升级成舆情，退款窗口和条件卡在哪？",
+      "follow_ups": [
+        "虚拟货币已消费部分怎么折算——按余额退还是按整单退，规则先例一开就是判例？",
+        "未成年误充的处理流程做多顺——太顺会不会成为成年人的退款剧本？"
+      ],
+      "source_ref": "v2:v2.economy_security_dispute_decision.tui_kuan_yu_bu_chang_bian_jie.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.econ.compensation_scale",
+      "domain": "liveops_version_design",
+      "question_zh": "事故补偿发多大——补偿超预期能把事故变成节日（全服白嫖狂欢），但也训练玩家盼着你出事，补偿抠门则事故的怨气二次发酵，补偿的价码怎么定才不养成『补偿经济学』？",
+      "follow_ups": [
+        "补偿分层（受影响者厚补、全服薄补）的界定成本和一刀切的超发成本哪个高？",
+        "补偿内容用限时资源还是硬通货——硬通货每次都在给经济注水？"
+      ],
+      "source_ref": "v2:v2.liveops_update_communication_decision.wan_jia_bu_chang.liveops_mechanic"
+    },
+    {
+      "id": "pl.econ.energy_gate",
+      "domain": "economy_monetization_design",
+      "question_zh": "体力闸门还敢不敢用——体力制控内容消耗速度、拉长命周期还顺手当付费点，一举三得但『想玩不让玩』在今天的市场是差评核弹，闸门立不立？",
+      "follow_ups": [
+        "反向体力（超时收益递减而非禁止游玩）能不能保住控速又不背骂名？",
+        "体力溢出的浪费焦虑（不上线就亏）和体力见底的付费转化，是同一枚硬币吗？"
+      ],
+      "source_ref": "v2:v2.balance_economy_decision.xiao_hao_su_lv.balance_tuning_lever"
+    },
+    {
+      "id": "pl.econ.newbie_bundle_ethics",
+      "domain": "economy_monetization_design",
+      "question_zh": "新手礼包在什么时机弹——首日就弹转化最高但吃相最难看、新玩家的第一印象是收银台，憋到玩家产生需求再弹体面但错过冲动窗口，弹窗时机卡哪？",
+      "follow_ups": [
+        "以卡关为触发（打不过时弹补给包）精准但等于把难度设计变成销售话术，做不做？",
+        "新手期全程免推销（前七日商店只读）的机会成本，市场部能接受吗？"
+      ],
+      "source_ref": "v2:v2.product_structure_decision.xin_shou_shang_pin.economy_signal"
+    },
+    {
+      "id": "pl.econ.minor_protection_depth",
+      "domain": "compliance_risk_design",
+      "question_zh": "未成年保护做到合规线还是超合规——照法条做（实名+限额）是底线成本，超配（消费冷静期/家长面板）口碑与风控双赢但转化和开发两头掏钱，做到哪层？",
+      "follow_ups": [
+        "疑似未成年用大人账号的行为识别（凌晨消费模式）要不要主动拦截——误伤成年人的道歉成本呢？",
+        "超配的保护措施要不要对外宣传——宣传了就是承诺，做不到就是把柄？"
+      ],
+      "source_ref": "v2:v2.payment_fairness_decision.wei_cheng_nian_ren_bao_hu_bian_jie.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.econ.reward_slot_split",
+      "domain": "economy_monetization_design",
+      "question_zh": "奖励投放走集中大奖还是细水长流——大奖池（周本大掉落）制造心跳时刻和周锚点，但一周只有一次心跳；流水化日日有小甜头但没有任何一次值得截图，投放形状怎么捏？",
+      "follow_ups": [
+        "两种形状按玩家类型分流（成就党吃大奖、日常党吃流水）还是全员同一配方？",
+        "大奖的失落面（没掉到的那些人）用保底安抚还是用围观补偿（看别人出货也算参与）？"
+      ],
+      "source_ref": "v2:v2.reward_distribution_decision.jie_duan_jiang_li.economy_resource_dynamic"
+    }
+  ]
+}

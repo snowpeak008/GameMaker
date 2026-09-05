@@ -1,0 +1,606 @@
+{
+  "module_id": "sys.squad_command",
+  "semver": "1.0.0",
+  "label_zh": "编队指挥",
+  "summary": "多单位的编成、上场集合与命令调度系统（缺口扫描 G8）。谱系四档：出战编成（上场名单：宝可梦 6 只/SRPG 出击 12 人/体育首发同档）→ 阵型站位+协同加成 → 编组+命令队列（RTS 移动/攻击/巡逻排队执行）→ 行为策略配置（FF12 Gambit 式自动战斗编程）。边界：真人组队关系归 #33 玩家社群，伴随实体自身培养归 #11 宠物，局内网格移动力/地形归战术棋盘系统——本系统只管我方单位『谁上场、听什么命令』。",
+  "nouns": [
+    {
+      "id": "squad_assignment",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "编队表条目",
+      "summary": "单位与编队槽的归属行：谁在第几队第几位、携带什么职责。编队表独占状态的载体。"
+    },
+    {
+      "id": "queued_command",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "队列命令",
+      "summary": "已入队待执行的命令实例：类型（移动/攻击/巡逻）、目标、入队序号。命令队列独占状态的载体。"
+    },
+    {
+      "id": "active_roster",
+      "kind": { "kind": "property", "of": "squad" },
+      "label_zh": "上场集合状态",
+      "summary": "当前出战单位集合的读数，挂在编队上；战斗与结算按它裁定谁参战、谁坐板凳。"
+    },
+    {
+      "id": "command_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "命令事件",
+      "summary": "一条命令开始执行的时点信号，载荷为命令类型与目标；供战斗/移动系统消费执行。"
+    },
+    {
+      "id": "roster_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "编成变更事件",
+      "summary": "上场名单发生变化的时点信号；供协同结算重算、任务/成就计数监听。"
+    },
+    {
+      "id": "command_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "命令合法性规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的命令裁定规则位（如眩晕状态为移动命令追加前置、装备重甲禁用冲锋命令）。"
+    }
+  ],
+  "interface": {
+    "provides": ["active_roster", "command_signal", "roster_signal", "command_rule_slot"],
+    "consumes": ["sys.combat.combat_unit", "sys.player_input.command_intent"],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "编成名额/换人时机/阵型站位/协同结算/编组绑定/命令队列语义/常驻命令/策略规则编写与仲裁的机制群。",
+    "dynamics_notes": [
+      "编成名额稀缺时上场名单成为赛前反复推演的对象（信号：进入战斗前的编队界面停留时长、换人操作频次）",
+      "命令队列档起玩家从逐单位微操转向批量调度心智（信号：单位均摊指令数下降、编组召回快捷键使用率上升）",
+      "Gambit 档策略表趋于稳定后玩家干预率下降、构筑焦点转向规则行的排列（信号：手动命令占比、策略表编辑会话数）"
+    ],
+    "aesthetics_primary": ["挑战", "表达"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "s0_roster",
+        "label_zh": "S0 出战编成",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.squad_command.roster_capacity",
+          "sys.squad_command.swap_policy"
+        ],
+        "inductions": [],
+        "summary": "上场名单两规则：名额口径 + 换人时机。宝可梦 6 只、SRPG 出击 12 人、体育首发阵容是同一档的不同皮。C≥2（consumes 单位实体来源；provides 上场集合）。"
+      },
+      {
+        "id": "s1_formation",
+        "label_zh": "S1 +阵型站位与协同",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.squad_command.roster_capacity",
+          "sys.squad_command.swap_policy",
+          "sys.squad_command.formation_structure",
+          "sys.squad_command.synergy_bonus"
+        ],
+        "inductions": [],
+        "summary": "阵型结构 + 协同结算：名单之上多了『怎么摆、和谁搭』，编成从选人升格为组合优化，P 升至会话级重复决策。站位仅为编成期布置——局内格上移动属战术棋盘系统射程。"
+      },
+      {
+        "id": "s2_command_queue",
+        "label_zh": "S2 +编组与命令队列",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 3, "o": 1 },
+        "p_floor": 3,
+        "interface_floor": 4,
+        "activates": [
+          "sys.squad_command.roster_capacity",
+          "sys.squad_command.swap_policy",
+          "sys.squad_command.formation_structure",
+          "sys.squad_command.synergy_bonus",
+          "sys.squad_command.group_binding",
+          "sys.squad_command.queue_semantics",
+          "sys.squad_command.standing_orders"
+        ],
+        "inductions": [],
+        "summary": "编组绑定 + 队列语义 + 常驻命令：RTS 的选取/编组/排队执行落此档（缺口扫描特别检查：编队与命令队列两项同居本系统不同档）。命令成为持续吞吐的实体流，P 推满。"
+      },
+      {
+        "id": "s3_gambit",
+        "label_zh": "S3 +行为策略配置",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.squad_command.roster_capacity",
+          "sys.squad_command.swap_policy",
+          "sys.squad_command.formation_structure",
+          "sys.squad_command.synergy_bonus",
+          "sys.squad_command.group_binding",
+          "sys.squad_command.queue_semantics",
+          "sys.squad_command.standing_orders",
+          "sys.squad_command.gambit_rules",
+          "sys.squad_command.gambit_arbitration"
+        ],
+        "inductions": [],
+        "summary": "FF12 Gambit 式自动战斗编程：条件-动作规则行 + 仲裁口径。玩家的操作对象从单位升维到『指挥策略本身』，规则表是可编辑内容，O 上探。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.squad_command.roster_capacity",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "上场名额按什么口径限定？",
+      "design_question": "出战 6 只还是人口 10？定额卖『带谁不带谁』的取舍，预算卖『大件小件』的规划。",
+      "tier_gate": "s0_roster",
+      "options": [
+        {
+          "id": "fixed_slot_count",
+          "label": "固定名额编成",
+          "summary": "上场名单有固定席位数，每个席位一个单位，满员即不能再上",
+          "implications": [
+            "取舍粒度是『换掉谁』的两两比较，编成决策清晰易读",
+            "所有单位等价占一席，强单位与弱单位的机会成本相同——强度差全靠数值层压制",
+            "席位数即协同组合的上限维度，加一个席位就是指数级放大搭配空间"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "roster_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "chosen_units limited_to {param:roster_size}" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        },
+        {
+          "id": "population_budget",
+          "label": "人口预算编成",
+          "summary": "单位各带人口占用值，名单在总预算内自由混搭，大单位挤占多个小单位的空间",
+          "implications": [
+            "编成变成背包问题：一个 4 人口大件 vs 四个 1 人口小件是真策略分歧",
+            "人口占用值成为平衡的第二旋钮，强单位可以用高占用而非砍数值来压制",
+            "UI 必须常驻展示预算余量，否则玩家无法在招募/上场时做出取舍"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "population_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "chosen_units where sum(unit_population) <= {param:population_cap}" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.swap_policy",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "上场名单在什么时机允许更换？",
+      "design_question": "名单锁在赛前还是随时热换？锁定让编成成为承诺，热换让编成成为操作。",
+      "tier_gate": "s0_roster",
+      "options": [
+        {
+          "id": "lobby_locked",
+          "label": "局外锁定编成",
+          "summary": "名单只能在战斗/对局外调整，入局即锁定到结束",
+          "implications": [
+            "编成是赛前承诺，情报与预判的价值被放大——猜错阵容就要打完这一局",
+            "局内无换人操作，战斗层不必处理替补进出场的状态迁移",
+            "克制关系一旦在局内暴露无法弥补，容易催生赛前情报玩法（BP、侦查）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "roster_lock", "to_state": "locked_in_session" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        },
+        {
+          "id": "in_session_swap",
+          "label": "局内热换",
+          "summary": "战斗中可将场上单位换下、替补换上，受冷却或次数约束",
+          "implications": [
+            "换人本身成为战术动词（宝可梦换属性挡刀），单局决策密度显著上升",
+            "冷却/次数是唯一节流阀，调得太松会让编成取舍失去意义——反正能换",
+            "替补单位的状态（血量/冷却是否保留）需要显式定义，是隐藏的规则复杂度"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "swap_cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 300.0 }, "required": true },
+            { "key": "swap_charges_per_session", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "swap(bench_unit, field_unit) if swap_charges > 0" },
+            { "effect": "consume_resource", "resource": "swap_charge", "formula": "1" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:swap_cooldown_seconds}", "unit": "seconds", "inner": [
+              { "effect": "emit_signal", "signal": "roster_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.formation_structure",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "阵型站位按什么结构定义？",
+      "design_question": "给玩家几套现成阵型，还是给一块格盘自己摆？预设卖识别与克制，自由卖布置的表达。",
+      "tier_gate": "s1_formation",
+      "options": [
+        {
+          "id": "preset_formation_table",
+          "label": "预设阵型表",
+          "summary": "阵型是一张有限表（鱼鳞/锋矢/雁行），选阵型即整队套用其站位与加成",
+          "implications": [
+            "阵型可读可记忆，阵型间克制关系可以显式设计成博弈层",
+            "站位自由度归零，玩家表达被收敛为『选哪套』——上手快、深度靠表的行数",
+            "每加一行阵型都要与既有阵型对拍克制与强度，维护成本线性增长"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "formation_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "position_pattern", "kind": { "kind": "text" }, "required": true },
+            { "key": "bonus_effect_ref", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "formation_id", "cardinality_key": "formation_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "formation_bonus_effect", "target": "squad", "duration_expr": "while(selected_formation == formation_id)", "priority": 0 },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        },
+        {
+          "id": "free_slot_grid",
+          "label": "自由格位布置",
+          "summary": "编成界面给一块 N×M 格盘，玩家逐单位摆位，位置本身产生前后排/邻接语义",
+          "implications": [
+            "布置是玩家表达：同一套单位不同摆法是不同答案，攻略产出天然丰富",
+            "前后排/邻接的语义规则要写死并可视化，否则摆位沦为玄学",
+            "格盘尺寸决定复杂度上限，也决定 UI 在小屏设备上的可用性下限"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "grid_width", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
+            { "key": "grid_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad_assignment", "property": "grid_position", "formula": "player_placed_cell within grid({param:grid_width}, {param:grid_height})" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.synergy_bonus",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "队伍协同加成按什么口径结算？",
+      "design_question": "协同是『这两个人有羁绊』还是『这类人凑够了数』？羁绊对卖叙事组合，标签计数卖构筑算术。",
+      "tier_gate": "s1_formation",
+      "options": [
+        {
+          "id": "bond_pairs",
+          "label": "羁绊对加成",
+          "summary": "指定单位对（或小组）同时在场时点亮固定加成，逐对显式建表",
+          "implications": [
+            "羁绊承载叙事关系（师徒/宿敌），编成决策与角色情感绑定",
+            "逐对建表意味着新单位入库要回查全表补羁绊，内容成本超线性",
+            "羁绊对锁死搭配：被点名的组合挤占没有羁绊的自由搭配的强度空间"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "bond_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "unit_a_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "unit_b_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "bonus_value", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 5.0 }, "required": true }
+          ], "row_key": "bond_id", "cardinality_key": "bond_pair_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "bond_bonus_effect", "target": "squad", "duration_expr": "while(on_roster(unit_a_ref) and on_roster(unit_b_ref))", "priority": 0 }
+          ]
+        },
+        {
+          "id": "tag_count_synergy",
+          "label": "标签计数协同",
+          "summary": "单位带流派/种族标签，同标签在场数量按计数曲线聚合加成（自走棋羁绊口径）",
+          "implications": [
+            "协同是连续可算的构筑算术，新单位只要挂标签即自动接入协同网",
+            "标签档位断点（凑 2/4/6）制造『再来一个就成型』的追逐张力",
+            "多标签单位是万金油也是平衡火药桶——占两个计数的单位价值天然虚高"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "per_tag_scaling", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "tag_synergy_bonus", "target": "squad", "duration_expr": "while(tag_count >= tag_threshold)", "priority": 0 },
+            { "effect": "modify_property", "entity": "sys.combat.combat_unit", "property": "combat_stat", "formula": "stat * (1 + roster_tag_count * {param:per_tag_scaling})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.group_binding",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "编组按什么方式绑定与召回？",
+      "design_question": "Ctrl+1 把选中的单位存进数字位，还是按职责自动归组？数字组卖操作自由，职责组卖调度语义。",
+      "tier_gate": "s2_command_queue",
+      "options": [
+        {
+          "id": "numbered_groups",
+          "label": "数字编组",
+          "summary": "玩家把任意选中集合绑定到编号位，按编号一键召回选中（RTS 经典口径）",
+          "implications": [
+            "编组内容完全由玩家定义，高手的编组习惯本身是操作技术资产",
+            "系统不理解组的语义，无法基于职责做智能辅助（自动补员/阵亡重编）",
+            "编号位数量是操作复杂度的天花板，也是新手与高手的操作分水岭"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "group_slot_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad_assignment", "property": "group_index", "formula": "bind(current_selection, slot) where slot <= {param:group_slot_count}" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        },
+        {
+          "id": "role_based_groups",
+          "label": "职责编组",
+          "summary": "单位按职责标签（前排/输出/后勤）自动归组，命令按职责组下发",
+          "implications": [
+            "系统理解组的语义，可做职责级命令（后勤单位自动避战）与阵亡自动补编",
+            "玩家失去跨职责自由混编的操作空间，微操上限低于数字编组",
+            "职责标签表成为单位设计的必填字段，新单位入库必须先回答『它是什么职责』"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "role_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "auto_assign_rule", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "role_id", "cardinality_key": "role_group_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "squad_assignment", "property": "group_index", "formula": "role_of(unit, auto_assign_rule)" },
+            { "effect": "emit_signal", "signal": "roster_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.queue_semantics",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "命令队列按什么语义执行？",
+      "design_question": "Shift+右键排一串命令后，新命令是排在队尾还是把队伍掐了插队？顺序队列卖规划，抢占卖响应。",
+      "tier_gate": "s2_command_queue",
+      "options": [
+        {
+          "id": "fifo_execution",
+          "label": "顺序执行队列",
+          "summary": "命令按入队顺序依次执行，前一条完成才开始下一条，新命令默认追加队尾",
+          "implications": [
+            "玩家可以预排长链（移动→攻击→巡逻）后把注意力交给别处，规划价值高",
+            "战况突变时排好的队列反而是负债，清队列的操作成本必须足够低",
+            "队列可视化（路径线/序号标记）是该口径可用性的前提，不是可选项"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "max_queue_length", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "queued_command" },
+            { "effect": "modify_property", "entity": "queued_command", "property": "queue_order", "formula": "tail_position if queue_length < {param:max_queue_length}" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "sum(preceding_commands_duration)", "unit": "seconds", "inner": [
+              { "effect": "emit_signal", "signal": "command_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "priority_preempt",
+          "label": "优先级抢占",
+          "summary": "命令带优先级，高优先级新命令中断当前执行并插到队首，低的排队等待",
+          "implications": [
+            "紧急响应（集火/撤退）不需要清队列，操作的即时性显著更好",
+            "优先级表是新的设计负担：哪类命令天然高优、玩家能否手动改优先级都要定义",
+            "被抢占命令的恢复语义（作废还是挂起续跑）是隐藏规则，必须显式声明"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "priority_levels", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 9.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "queued_command" },
+            { "effect": "roll_check", "formula": "new_command_priority", "difficulty_expr": "executing_command_priority", "on_success": [
+              { "effect": "change_state", "machine": "executing_command", "to_state": "suspended" },
+              { "effect": "emit_signal", "signal": "command_signal" }
+            ], "on_failure": [
+              { "effect": "modify_property", "entity": "queued_command", "property": "queue_order", "formula": "insert_by_priority(priority, levels={param:priority_levels})" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.standing_orders",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "常驻命令（姿态/巡逻）如何持续生效？",
+      "design_question": "不给新命令时单位干什么？姿态开关定义『默认脾气』，巡逻路径定义『默认动线』。",
+      "tier_gate": "s2_command_queue",
+      "options": [
+        {
+          "id": "stance_toggle",
+          "label": "姿态开关",
+          "summary": "每单位/编组持有一个姿态档（主动攻击/还击/免战），姿态决定无命令时的自主行为",
+          "implications": [
+            "姿态是一次设置长期生效的低频决策，操作负担小、心智模型简单",
+            "姿态表的每一档都是一条自主行为规则，档数少表达力弱、档数多记不住",
+            "姿态与显式命令冲突时的优先序（命令压姿态）必须写进规则"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "stance_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "auto_behavior_rule", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "stance_id", "cardinality_key": "stance_rows" },
+          "effects_template": [
+            { "effect": "attach", "modifier_id": "stance_behavior", "target": "squad_assignment", "duration_expr": "while(stance_selected == stance_id)", "priority": 0 },
+            { "effect": "emit_signal", "signal": "command_signal" }
+          ]
+        },
+        {
+          "id": "waypoint_patrol",
+          "label": "路径点巡逻",
+          "summary": "玩家铺设路径点序列，单位循环沿点移动并在途中按遭遇规则响应",
+          "implications": [
+            "巡逻把空间控制变成可铺设的内容，防守布置有了持续表达位",
+            "途中遭遇的响应规则（追多远、何时归位）是巡逻体验的真实主体，路径只是壳",
+            "路径点的编辑/可视化成本高，移动端交互尤其昂贵"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "max_waypoints", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 20.0 }, "required": true },
+            { "key": "leash_distance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "per_waypoint_travel_time", "unit": "seconds", "inner": [
+              { "effect": "emit_signal", "signal": "command_signal" }
+            ] },
+            { "effect": "modify_property", "entity": "queued_command", "property": "patrol_loop", "formula": "cycle(waypoints, max={param:max_waypoints}, leash={param:leash_distance})" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.gambit_rules",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "行为策略规则以什么形态编写？",
+      "design_question": "给玩家一张『条件→动作』的表，还是一棵能嵌套的行为树？表平坦好上手，树表达力强但编辑器贵。",
+      "tier_gate": "s3_gambit",
+      "options": [
+        {
+          "id": "condition_action_rows",
+          "label": "条件-动作规则表",
+          "summary": "每行一条『条件谓词→动作』（FF12 Gambit：队友 HP<30% → 治疗），自上而下逐行匹配",
+          "implications": [
+            "行序即优先级，玩家用拖动排序表达策略——编辑成本极低",
+            "平坦结构表达不了嵌套逻辑（如『仅当 A 且非 B 时才考虑后续三行』），复杂策略要靠冗余行堆",
+            "条件谓词池与动作池是两张前置内容表，其广度直接决定本档的实际深度"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "condition_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "action_ref", "kind": { "kind": "text" }, "required": true },
+            { "key": "row_order", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true }
+          ], "row_key": "rule_id", "cardinality_key": "gambit_rule_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "evaluate(condition_expr)", "difficulty_expr": "1", "on_success": [
+              { "effect": "spawn_entity", "entity": "queued_command" },
+              { "effect": "emit_signal", "signal": "command_signal" }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "behavior_tree_graph",
+          "label": "行为树图",
+          "summary": "策略是一棵可嵌套的决策树（选择/序列节点），单位沿树评估落到叶子动作",
+          "implications": [
+            "嵌套结构能表达『战况分支下的子策略』，策略深度上限远高于平坦表",
+            "树编辑器是一整个 UI 子项目，开发与教学成本都要按编辑器立项估",
+            "玩家分享/复制策略树成为社区内容生态的天然抓手"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "graph",
+            "node_payload": [
+              { "key": "node_kind", "kind": { "kind": "enum", "variants": ["selector", "sequence", "condition", "action"] }, "required": true },
+              { "key": "payload_ref", "kind": { "kind": "text" }, "required": false }
+            ],
+            "edge_payload": [],
+            "directed": true,
+            "acyclic": true,
+            "entry": "single",
+            "cardinality_key": "gambit_tree_nodes"
+          },
+          "effects_template": [
+            { "effect": "change_state", "machine": "behavior_tree_cursor", "to_state": "next_matched_node" },
+            { "effect": "spawn_entity", "entity": "queued_command" },
+            { "effect": "emit_signal", "signal": "command_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.squad_command.gambit_arbitration",
+      "domain": "squad_command",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "多条策略规则同时命中时如何仲裁？",
+      "design_question": "两条规则都想让单位动，听谁的？独占仲裁产出确定性执行，加权随机产出带脾气的部下。",
+      "tier_gate": "s3_gambit",
+      "options": [
+        {
+          "id": "top_priority_exclusive",
+          "label": "最高优先级独占",
+          "summary": "命中集合里只执行序号最靠前的一条，其余静默跳过，结果完全确定",
+          "implications": [
+            "策略执行可复现，玩家能通过排序完全掌控单位行为——调试型玩家的最爱",
+            "低序规则可能永远轮不上（被高序饿死），需要给玩家命中率统计做诊断",
+            "确定性让 AI 行为可被完全预测，PVP 场景下策略表本身成为可破解对象"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "command_rule_slot", "patch": { "patch": "add_precondition", "condition": "no_lower_row_order_rule_matched" }, "priority": 0 },
+            { "effect": "emit_signal", "signal": "command_signal" }
+          ]
+        },
+        {
+          "id": "weighted_random_among_valid",
+          "label": "合法项加权随机",
+          "summary": "命中集合按权重随机选一条执行，权重随行序衰减，单位行为带受控随机",
+          "implications": [
+            "单位行为有『活物感』，同一策略表跑出不同过程，重复可看性高",
+            "随机性牺牲精确控制，硬核策略玩家会感知为不听话",
+            "权重衰减系数是手感旋钮：衰减陡近似独占仲裁，衰减缓近似均匀乱选"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "weight_decay_per_row", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "matched_gambit_rules", "draw_count_expr": "1", "draw_rule": "weighted_by(row_order, decay={param:weight_decay_per_row})", "destination": "queued_command" },
+            { "effect": "emit_signal", "signal": "command_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "formation_rows": { "min": 3, "max": 12 },
+    "bond_pair_rows": { "min": 4, "max": 60 },
+    "role_group_rows": { "min": 2, "max": 8 },
+    "stance_rows": { "min": 2, "max": 6 },
+    "gambit_rule_rows": { "min": 4, "max": 40 },
+    "gambit_tree_nodes": { "min": 3, "max": 30 }
+  },
+  "consistency_rules": [
+    {
+      "id": "gambit_rules_and_arbitration_answered_together",
+      "kind": "answered_together",
+      "first": "sys.squad_command.gambit_rules",
+      "second": "sys.squad_command.gambit_arbitration"
+    }
+  ],
+  "skin_fields": ["squad_banner_appearance", "formation_name_theme"]
+}

@@ -1,0 +1,174 @@
+{
+  "entries": [
+    {
+      "id": "pl.meta.session_promise",
+      "domain": "core_experience_design",
+      "question_zh": "单次会话的承诺定多长——十分钟一局适配碎片时间、进出无压力，但十分钟装不下深度决策的展开；一小时一局体验完整但『没时间开一局』直接劝退，会话的原子大小切多大？",
+      "follow_ups": [
+        "长短两种会话模式并存（快速局/完整局）会不会把玩家池切成两半、匹配双输？",
+        "『随时可停』的暂停/挂起做到多彻底，长会话的门槛才真的降下来？"
+      ],
+      "source_ref": "v2:v2.session_rhythm_decision.dan_ci_hui_hua_mu_biao.core_rhythm_boundary"
+    },
+    {
+      "id": "pl.meta.entry_friction",
+      "domain": "core_experience_design",
+      "question_zh": "从点图标到玩上手的路铺多短——登录、公告、签到、弹窗把进场路拉成机场安检，每层都有运营KPI但每层都在漏人；一键进局爽快但运营触点全被砍，进场动线留几道门？",
+      "follow_ups": [
+        "运营弹窗挪到局后结算页（打完再看）转化掉多少、体验回多少？",
+        "冷启动直接恢复上次进度（跳过大厅）技术上做得到，运营侧答应吗？"
+      ],
+      "source_ref": "v2:v2.session_rhythm_decision.hui_hua_ru_kou_cheng_ben.core_behavior_mechanic"
+    },
+    {
+      "id": "pl.meta.exit_summary",
+      "domain": "core_experience_design",
+      "question_zh": "退出时刻给什么收尾——结算页展示本次收获+下次目标能种下回访钩子，但夜里最后一局的人只想关游戏、多一屏都是挽留式纠缠，送客的分寸怎么拿？",
+      "follow_ups": [
+        "『下次上线有什么』的预告钩子和『再来一局』按钮，哪个才是健康的临别语？",
+        "退出挽留弹窗（真的要走吗）的留存收益和体验恶心度，数据和口碑各说什么？"
+      ],
+      "source_ref": "v2:v2.session_rhythm_decision.hui_hua_tui_chu_fan_kui.core_playtest_signal"
+    },
+    {
+      "id": "pl.meta.first_kpi_pick",
+      "domain": "data_validation_design",
+      "question_zh": "立项期北极星指标选留存还是变现——盯 D7 团队会把一切做成钩子、内容为钩子服务，盯 LTV 则前期就掺付费点污染体验，先立哪块牌坊决定团队三年怎么走？",
+      "follow_ups": [
+        "北极星换轨（先留存后变现）的切换点谁说了算——数据阈值还是融资节奏？",
+        "反北极星（体验质量类指标：投诉率/差评关键词）要不要跟主指标同权挂墙？"
+      ],
+      "source_ref": "v2:v2.data_goal_metric_decision.liu_cun_zhi_biao.data_validation_goal"
+    },
+    {
+      "id": "pl.meta.playtest_read",
+      "domain": "data_validation_design",
+      "question_zh": "测试期听嘴还是看手——问卷访谈拿到的是玩家的说法（会说好玩但不再登录），行为数据拿到的是真相但不知道为什么，两种证据打架时判给谁？",
+      "follow_ups": [
+        "『行为定问题、访谈定原因』的两段法，访谈样本被健谈者偏置怎么校正？",
+        "内部试玩的老化（团队麻木、觉得什么都不好玩）用外部新鲜样本置换的频率是多少？"
+      ],
+      "source_ref": "v2:v2.data_feedback_collection_decision.xing_wei_guan_cha.data_behavior_evidence"
+    },
+    {
+      "id": "pl.meta.experiment_ethics",
+      "domain": "data_validation_design",
+      "question_zh": "灰度实验的对照组敢不敢开在体验上——价格AB、难度AB能拿到最硬的因果证据，但同服玩家不同价被发现的那天就是舆情审判日，实验的伦理红线画哪？",
+      "follow_ups": [
+        "只在新增用户上做实验（老玩家全量一致）能规避多少风险、损失多少样本代表性？",
+        "实验被玩家察觉后的应对预案（承认口径/补偿方案）先写好了吗？"
+      ],
+      "source_ref": "v2:v2.data_experiment_decision.yang_ben_fen_ceng.data_misread_boundary"
+    },
+    {
+      "id": "pl.meta.iterate_or_kill",
+      "domain": "data_validation_design",
+      "question_zh": "不达标的系统再修一版还是砍——再修一版的沉没成本诱惑（都做了这么多）和砍掉重来的机会成本，判死刑的证据标准定在哪，谁有权按下按钮？",
+      "follow_ups": [
+        "『修三版不见起色即砍』这类硬规则和逐案裁量，哪种更能对抗团队的感情用事？",
+        "被砍系统的资产回收（美术/代码转用）要不要提前设计成砍除决策的缓冲垫？"
+      ],
+      "source_ref": "v2:v2.data_iteration_decision.shan_chu_tiao_jian.data_decision_signal"
+    },
+    {
+      "id": "pl.meta.age_rating_tradeoff",
+      "domain": "compliance_risk_design",
+      "question_zh": "内容尺度对着哪个分级做——按更低年龄分级改内容（去血、改骷髅）市场盘子大但核心题材的表达被阉割，坚持尺度保表达但发行区域和渠道直接少一截，尺度卡哪级？",
+      "follow_ups": [
+        "分区域出不同版本的维护成本（双内容管线）比放弃市场更贵吗？",
+        "上线后追加的内容每次都要过一遍分级合规，题材脑洞要不要提前自我设限？"
+      ],
+      "source_ref": "v2:v2.compliance_age_rating_decision.nei_rong_chi_du.compliance_redline_boundary"
+    },
+    {
+      "id": "pl.meta.anti_cheat_depth",
+      "domain": "compliance_risk_design",
+      "question_zh": "反作弊的侵入深度定哪——内核级反作弊拦截率最高但隐私争议和兼容性事故全上门，行为检测温和但对新型外挂永远慢半拍，防线修多深？",
+      "follow_ups": [
+        "误封的申诉与平反流程投入多少——冤案的口碑杀伤比漏网外挂更大吗？",
+        "作弊处罚的时机（实时踢出还是攒一波封禁）里，波次封禁的战略价值是什么？"
+      ],
+      "source_ref": "v2:v2.compliance_abuse_fairness_decision.zuo_bi_xing_wei_ding_yi.compliance_protection_mechanic"
+    },
+    {
+      "id": "pl.meta.privacy_personalization",
+      "domain": "compliance_risk_design",
+      "question_zh": "个性化推荐吃多少玩家数据——按行为画像推内容推商品转化确实涨，但『它怎么知道我想要这个』的被窥视感和合规成本同步涨，画像画多细？",
+      "follow_ups": [
+        "推荐理由的透明化（因为你玩过X所以推Y）能不能把被窥视感转成被理解感？",
+        "关闭个性化的选项摆多显眼——藏太深是合规风险，太显眼是转化流失？"
+      ],
+      "source_ref": "v2:v2.compliance_privacy_data_decision.ge_xing_hua_tui_jian_bian_jie.compliance_risk_dynamic"
+    },
+    {
+      "id": "pl.meta.store_promise_gap",
+      "domain": "release_growth_design",
+      "question_zh": "商店页的卖相和实机的落差留多少——预告片按最好状态剪、截图挑最美一帧是行规，但落差超过阈值就是差评的第一来源，宣传的美颜开几档？",
+      "follow_ups": [
+        "实机演示（不剪辑的真实一局）放进商店页，转化率跌多少、差评率降多少？",
+        "『抢先体验』标签是不是落差的免罪符——玩家的宽容期实际有多长？"
+      ],
+      "source_ref": "v2:v2.release_store_entry_decision.shang_dian_wen_an_cheng_nuo.release_expectation_boundary"
+    },
+    {
+      "id": "pl.meta.prereg_reward_debt",
+      "domain": "release_growth_design",
+      "question_zh": "预约奖励开多大支票——里程碑奖励（千万预约送SSR）冲量有效，但开服当天全员起跑线被奖励抬高、前期养成设计直接被自己的营销打穿，支票开多大？",
+      "follow_ups": [
+        "预约奖励改成加速类（经验卡）而非资产类（角色/抽卡券），冲量效果掉多少？",
+        "预约数注水（渠道刷量）导致里程碑虚发的成本，风控方案是什么？"
+      ],
+      "source_ref": "v2:v2.release_preregistration_decision.yu_yue_jiang_li.release_conversion_dynamic"
+    },
+    {
+      "id": "pl.meta.launch_server_posture",
+      "domain": "launch_readiness_design",
+      "question_zh": "开服容量按峰值备还是按均值备——按首日峰值备成本浪费在第二周就开始，按均值备则开服排队一小时的差评海啸够喝一年，服务器的赌注押哪边？",
+      "follow_ups": [
+        "排队时的体验补偿（排队小游戏/预下载资源）能消解多少怨气？",
+        "分批开服（预约分流）压平峰值但也压掉开服狂欢的浓度，值不值？"
+      ],
+      "source_ref": "v2:v2.launch_rhythm_decision.kai_fu_jie_duan.launch_emergency_boundary"
+    },
+    {
+      "id": "pl.meta.day_one_patch",
+      "domain": "launch_readiness_design",
+      "question_zh": "上线前发现的非致命问题修完再上还是带病上线——延期修完口碑安全但窗口期、宣发节奏、渠道排期全要重谈，带病上线抢住窗口但首批评测的印象分永远回不来，闸口怎么判？",
+      "follow_ups": [
+        "『可带病清单』（哪类bug允许上线）提前立法，比临场拍板好在哪？",
+        "首日补丁的公关话术——主动预告『首日修复清单』是诚恳还是自曝？"
+      ],
+      "source_ref": "v2:v2.launch_version_decision.shou_fa_feng_xian_qing_dan.launch_emergency_boundary"
+    },
+    {
+      "id": "pl.meta.hotfix_speed_vs_rigor",
+      "domain": "launch_readiness_design",
+      "question_zh": "线上事故的响应快和稳怎么取——秒级热修安抚玩家但绕过测试的修复可能引爆二次事故，走完整流程稳妥但事故每多挂一小时舆情就翻一倍，快稳的边界画哪？",
+      "follow_ups": [
+        "热修权限的分级（数值配置可秒改、代码必须过流程）能兜住多少场景？",
+        "二次事故的信任损失是一次事故的几倍——这笔账要不要写进响应预案？"
+      ],
+      "source_ref": "v2:v2.launch_feedback_decision.kuai_su_tiao_zheng_bian_jie.launch_followup_mechanic"
+    },
+    {
+      "id": "pl.meta.patchnote_honesty",
+      "domain": "liveops_version_design",
+      "question_zh": "改动公告写多实——削弱写明原因和数据依据显得专业透明，但等于把每次砍刀的刀柄递给玩家逐条声讨；模糊话术（优化了体验）省事但社区自会拆包对帐，公告的坦白度定哪？",
+      "follow_ups": [
+        "『设计师留言』式的长文解释（为什么砍）在你的社区是加分还是递刀？",
+        "未写进公告的暗改被拆包发现的信任成本，比公告里挨骂贵多少？"
+      ],
+      "source_ref": "v2:v2.liveops_update_communication_decision.gai_dong_jie_shi.liveops_signal"
+    },
+    {
+      "id": "pl.meta.sunset_dignity",
+      "domain": "liveops_version_design",
+      "question_zh": "长线运营的退场姿势提前想吗——停服补偿、离线版本、资产纪念这些体面退场的准备从立项就有成本，不想则停服日的口碑清算连累公司下一款，这笔远期账计不计提？",
+      "follow_ups": [
+        "承诺『停服转单机/开私服授权』写进用户协议敢不敢——法务和技术各要多少预算？",
+        "运营末期的付费点（明知要停还卖）的伦理线画哪，玩家的最后印象值多少钱？"
+      ],
+      "source_ref": "v2:v2.launch_post_launch_followup_decision.chang_qi_nei_rong_yu_gao.launch_experience"
+    }
+  ]
+}

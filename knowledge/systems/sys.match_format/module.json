@@ -1,0 +1,581 @@
+{
+  "module_id": "sys.match_format",
+  "semver": "1.0.0",
+  "label_zh": "对局赛制",
+  "summary": "把多个单局胜负组织成局分、轮次、淘汰与名次的对局结构系统（附录 G2）。全谱系 MF0-MF3：单局胜负+名次结算 → 局分制 BO-N+回合换边 → 多人淘汰晋级树 → 联赛赛季+晋降级+赛程日历。与 #31 边界：#31 管单目标攻防过程并产出胜负，本系统消费胜负组织多局结构；与 #34 边界：#34 管跨对局段位与匹配（meta 层），本系统管一次赛事内的结构。",
+  "nouns": [
+    {
+      "id": "standing_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "名次实体",
+      "summary": "一次赛事的名次行：参赛方、最终排名、局分战绩、奖励领取状态都是它的列。赛事结束时定稿。"
+    },
+    {
+      "id": "advancement_state",
+      "kind": { "kind": "property", "of": "match_participant" },
+      "label_zh": "晋级状态",
+      "summary": "参赛方在赛事结构中的位置：存活/淘汰/晋级轮次/种子位——晋级树与联赛积分表读写的核心状态。"
+    },
+    {
+      "id": "series_score",
+      "kind": { "kind": "property", "of": "match_series" },
+      "label_zh": "局分状态",
+      "summary": "一组对局（series）内的比分累计（1-1、2-0），本系统独占：#31 只产单局胜负，局分归本系统记账。"
+    },
+    {
+      "id": "match_reward_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "赛事奖励事件",
+      "summary": "名次结算后发放奖励的时点信号，载荷为名次实体与奖励包；供经济/通行证/图鉴消费。"
+    },
+    {
+      "id": "fixture_schedule",
+      "kind": { "kind": "property", "of": "tournament" },
+      "label_zh": "赛程表",
+      "summary": "谁在何时对阵谁的日程结构：BO 系列的下一局、晋级树的下一轮、联赛的下一轮次都从它取。"
+    },
+    {
+      "id": "seeding_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "种子分配规则挂点",
+      "summary": "对阵抽签/种子保护规则的可修改挂点：允许他系统 ModifyRule 作用（如排位分影响种子位）。"
+    }
+  ],
+  "interface": {
+    "provides": ["standing_entity", "match_reward_signal", "seeding_rule_slot"],
+    "consumes": [
+      "sys.objective.win_signal",
+      "sys.objective.elimination_signal"
+    ],
+    "modifies": ["advancement_state", "series_score", "fixture_schedule"]
+  },
+  "mda": {
+    "mechanics_summary": "名次判定/结算奖励表/局分制 BO-N/回合换边/平局处置/晋级树构型/种子分配/联赛积分与晋降级/赛程日历的机制群。",
+    "dynamics_notes": [
+      "局分落后方进入背水一战的翻盘叙事（信号：决胜局观赛峰值、落后翻盘率）",
+      "MF2 档淘汰边缘产生最强张力，出局即终结（信号：淘汰赛弃赛率显著低于循环赛）",
+      "MF3 档保级区在赛季末期激活弱队对局的意义（信号：末轮保级战参与度、赛季末流失率拐点）"
+    ],
+    "aesthetics_primary": ["挑战", "社交"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "mf0_single_match",
+        "label_zh": "MF0 单局胜负与名次结算",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.match_format.placement_rule",
+          "sys.match_format.reward_mapping"
+        ],
+        "inductions": [],
+        "summary": "大逃杀/派对单场口径：消费胜负/淘汰事件，产出名次实体与奖励事件。C≥2（consumes 胜负事件；provides 名次与奖励）。"
+      },
+      {
+        "id": "mf1_series_bo_n",
+        "label_zh": "MF1 +局分制 BO-N 与回合换边",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.match_format.placement_rule",
+          "sys.match_format.reward_mapping",
+          "sys.match_format.series_length",
+          "sys.match_format.side_swap",
+          "sys.match_format.tiebreak_rule"
+        ],
+        "inductions": [],
+        "summary": "格斗 BO3/CS 半场口径：单局胜负累计成局分，换边抹平非对称优势。局间调整（换人/换策略/ban-pick 位）让 P 升至 2。"
+      },
+      {
+        "id": "mf2_elimination_bracket",
+        "label_zh": "MF2 +多人淘汰晋级树",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 5,
+        "activates": [
+          "sys.match_format.placement_rule",
+          "sys.match_format.reward_mapping",
+          "sys.match_format.series_length",
+          "sys.match_format.side_swap",
+          "sys.match_format.tiebreak_rule",
+          "sys.match_format.bracket_shape",
+          "sys.match_format.seeding_rule"
+        ],
+        "inductions": [],
+        "summary": "糖豆人多轮淘汰/自走棋 8 人循环/锦标赛口径：晋级树把参赛集合逐轮收缩到冠军，种子分配决定对阵公平性。"
+      },
+      {
+        "id": "mf3_league_season",
+        "label_zh": "MF3 +联赛赛季、晋降级与赛程日历",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 7,
+        "activates": [
+          "sys.match_format.placement_rule",
+          "sys.match_format.reward_mapping",
+          "sys.match_format.series_length",
+          "sys.match_format.side_swap",
+          "sys.match_format.tiebreak_rule",
+          "sys.match_format.bracket_shape",
+          "sys.match_format.seeding_rule",
+          "sys.match_format.league_promotion"
+        ],
+        "inductions": [
+          {
+            "when_tier": "mf3_league_season",
+            "target": { "noun_provided": "currency_main" },
+            "min_tier": "",
+            "reason": "联赛奖金与赛季奖励必须有账本承接：任一实例 provides 主货币即满足（析取语义——经济系统或其他货币源皆可）"
+          }
+        ],
+        "summary": "体育经理口径：多级联赛+晋降级+赛程日历，赛季是持续数周的承诺结构。名次牵动奖金/转会/下赛季席位，P 推满、C/O 进极重档。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.match_format.placement_rule",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "名次按什么规则从胜负/淘汰事件中判定？",
+      "design_question": "一场混战结束，第 3 名和第 4 名的差别是怎么算出来的——按死亡顺序倒排，还是按积分公式合成？",
+      "tier_gate": "mf0_single_match",
+      "options": [
+        {
+          "id": "elimination_order_rank",
+          "label": "淘汰顺序倒排",
+          "summary": "越晚被淘汰名次越高，最后存活者第一（大逃杀/吃鸡口径）",
+          "implications": [
+            "生存本身即名次：苟活是合法策略，玩法自然分化出刚枪流与伏地流",
+            "名次在淘汰发生时即时定格，无需终局结算，掉线/退出的名次处置也顺带清晰",
+            "击杀数不进名次的话要另设表现指标，否则高击杀早死者会觉得名次不公"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "rank = remaining_count_at(elimination_time)" },
+            { "effect": "spawn_entity", "entity": "standing_entity" }
+          ]
+        },
+        {
+          "id": "score_formula_rank",
+          "label": "积分公式合成",
+          "summary": "名次=生存名次分+表现分（击杀/目标/圈速）加权合成，终局统一排序",
+          "implications": [
+            "行为激励可调：加大击杀权重对局立刻变凶，权重表即玩法风向盘",
+            "终局才能定名次，观战与实时排名 UI 要处理『暂列』语义",
+            "权重公式必须公示，否则名次争议无法仲裁——竞技口碑的红线"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "component_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100.0 }, "required": true }
+          ], "row_key": "component_key", "cardinality_key": "rank_component_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "rank = order_by(sum(component_value * weight(component_key)))" },
+            { "effect": "spawn_entity", "entity": "standing_entity" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.reward_mapping",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "名次到奖励的映射按什么结构发放？",
+      "design_question": "第 1 名拿多少、第 10 名拿多少？奖励曲线的陡峭度决定玩家为名次拼到哪一档就躺平。",
+      "tier_gate": "mf0_single_match",
+      "options": [
+        {
+          "id": "podium_table",
+          "label": "头部阶梯表",
+          "summary": "只有头部名次（前三/前十）按表领奖，其余保底参与奖",
+          "implications": [
+            "冠军光环最大化，头部竞争白热，但中游名次之间零差异——中游玩家易躺",
+            "奖励表短、预算可控，赛事成本一眼可算",
+            "『差一名进前十』的挫败尖锐，边界名次的争议要靠回放仲裁兜底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "rank_from", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "rank_to", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "reward_pack", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "rank_from", "cardinality_key": "reward_bracket_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "rank_in_bracket(standing_entity.rank)", "difficulty_expr": "0", "on_success": [
+              { "effect": "grant_resource", "resource": "sys.economy.currency_main", "formula": "reward_pack_value(rank_bracket)" },
+              { "effect": "emit_signal", "signal": "match_reward_signal" }
+            ], "on_failure": [
+              { "effect": "grant_resource", "resource": "sys.economy.currency_main", "formula": "participation_floor" },
+              { "effect": "emit_signal", "signal": "match_reward_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "smooth_curve_payout",
+          "label": "平滑曲线全名次发放",
+          "summary": "每个名次按衰减曲线领奖，任何一名的提升都有边际收益",
+          "implications": [
+            "每前进一名都值得拼，尾部玩家也有名次动机，全场竞争密度均匀",
+            "曲线参数（顶值/衰减率）是发放总量的阀门，通胀审计要看曲线积分",
+            "名次间差异微小，冠军的符号价值被稀释——需要头衔/皮层荣誉另行补偿"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "top_payout", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 1000000.0 }, "required": true },
+            { "key": "decay_rate", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "sys.economy.currency_main", "formula": "{param:top_payout} * exp(-{param:decay_rate} * (rank - 1))" },
+            { "effect": "emit_signal", "signal": "match_reward_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.series_length",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "局分制的系列长度与终结条件怎么定？",
+      "design_question": "BO3 还是 BO5，先到 N 胜还是打满取多？系列长度买的是『强者更稳赢』的方差压缩，代价是时长。",
+      "tier_gate": "mf1_series_bo_n",
+      "options": [
+        {
+          "id": "first_to_n_wins",
+          "label": "先到 N 胜制",
+          "summary": "先取得 N 胜者赢下系列，2-0 即终结不打第三局（主流 BO-N 口径）",
+          "implications": [
+            "碾压局提前终结，时长自适应实力差——赛程效率高",
+            "赛程时长不定（BO5 可 3 局可 5 局），直播排期与玩家预期要按最长准备",
+            "决胜局（如 2-2 后的第 5 局）是天然的戏剧高潮，规则免费送叙事"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "wins_required", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 7.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_series", "property": "series_score", "formula": "winner_score + 1 on sys.objective.win_signal" },
+            { "effect": "roll_check", "formula": "max(score_a, score_b) >= {param:wins_required}", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_series.state", "to_state": "concluded" },
+              { "effect": "spawn_entity", "entity": "standing_entity" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "next_game_scheduled" }
+            ] }
+          ]
+        },
+        {
+          "id": "fixed_games_aggregate",
+          "label": "固定局数总分制",
+          "summary": "打满固定局数，按总分/小分定胜负（体育两回合总比分/瑞士轮单元口径）",
+          "implications": [
+            "每一局都计入总分，垃圾局不存在——已锁定胜局的一方仍要为小分而战",
+            "赛程时长恒定，日历排期与转播窗口精确可排——MF3 联赛档的天然搭档",
+            "总分并列概率高于先到 N 胜，平局处置规则从边角料升级为必答题"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "total_games", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_series", "property": "series_score", "formula": "aggregate_score += game_score per game" },
+            { "effect": "roll_check", "formula": "games_played >= {param:total_games}", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_series.state", "to_state": "concluded" },
+              { "effect": "spawn_entity", "entity": "standing_entity" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "next_game_scheduled" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.side_swap",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "回合换边按什么节奏执行？",
+      "design_question": "地图/先手不对称时，公平靠什么买回来——半场互换一次，还是逐局交替？换边节奏决定不对称优势被摊薄的粒度。",
+      "tier_gate": "mf1_series_bo_n",
+      "options": [
+        {
+          "id": "halftime_swap",
+          "label": "半场互换",
+          "summary": "打满半数回合后双方互换阵营/攻防，一场内各打一次两侧（CS 口径）",
+          "implications": [
+            "同一局内攻防各半，单局分数即已公平，系列层不再欠账",
+            "半场是天然的叙事分界与战术调整窗，暂停/布置的仪式感免费获得",
+            "上下半场的经济/状态是否继承要显式定义——继承则滚雪球跨越换边"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "rounds_per_half", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 30.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "rounds_played == {param:rounds_per_half}", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_series.side_assignment", "to_state": "swapped" },
+              { "effect": "emit_signal", "signal": "side_swapped" }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "alternate_per_game",
+          "label": "逐局交替",
+          "summary": "每局结束整体换边/换先手，系列内轮转（格斗选边/棋类先后手口径）",
+          "implications": [
+            "单局内部保持完整不打断，比赛节奏纯粹，适合短局高强度品类",
+            "公平在系列层而非单局层兑现：BO 局数为偶数时两侧场次相等，奇数局的决胜局选边权要单独立规",
+            "选边权本身可以变成资源（败者选边/掷硬币），是格斗社区的传统争点"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "match_series.side_assignment", "to_state": "alternated" },
+            { "effect": "emit_signal", "signal": "side_swapped" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.tiebreak_rule",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "平局按什么规则打破？",
+      "design_question": "12:12 之后发生什么——加赛到分出胜负，还是查小分表判定？加赛买绝对公平，判定表买赛程确定性。",
+      "tier_gate": "mf1_series_bo_n",
+      "options": [
+        {
+          "id": "overtime_playoff",
+          "label": "加赛决胜",
+          "summary": "平局进入加时/加赛循环直至分出胜负（CS 加时/足球点球口径）",
+          "implications": [
+            "冠军永远由比赛本身决出，竞技纯度最高，无判定争议",
+            "赛程时长无上界，连续加时的选手疲劳与转播超时都要预案",
+            "加时局的规则微调（经济重置/骤死制）本身又是一层设计决策"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "overtime_rounds", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "score_a == score_b at series_end", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_series.state", "to_state": "overtime" },
+              { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:overtime_rounds}", "unit": "turns", "inner": [
+                { "effect": "emit_signal", "signal": "overtime_concluded" }
+              ] }
+            ], "on_failure": [] }
+          ]
+        },
+        {
+          "id": "criteria_cascade",
+          "label": "判定链裁定",
+          "summary": "按优先级链逐条比较（净胜分→相互战绩→总得分→抽签）直到分出高下（联赛积分榜口径）",
+          "implications": [
+            "赛程时长恒定、结果即时可得，日历制赛事的唯一现实解",
+            "判定链的每一环都在塑造联赛末轮行为——净胜分优先会催生刷分大屠杀",
+            "链末兜底（抽签/掷币）出现时舆论必然不满，链要设计得基本用不到最后一环"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "priority", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "criterion_expr", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "priority", "cardinality_key": "tiebreak_criteria_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_series", "property": "series_score", "formula": "winner = first_decisive(criteria_cascade)" },
+            { "effect": "change_state", "machine": "match_series.state", "to_state": "concluded" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.bracket_shape",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "淘汰晋级树采用什么构型？",
+      "design_question": "输一场就回家，还是败者组再给一条命？树的构型决定『一场爆冷』能不能杀死整个赛事最强者。",
+      "tier_gate": "mf2_elimination_bracket",
+      "options": [
+        {
+          "id": "single_elimination",
+          "label": "单败淘汰树",
+          "summary": "输即出局，log2(N) 轮决出冠军",
+          "implications": [
+            "每场皆生死，张力最大、赛程最短，参赛规模可以做很大（糖豆人 60 人逐轮筛）",
+            "强者一次失手即出局，方差极大——冠军含金量与爆冷戏剧性同源",
+            "半数参赛者首轮即出局，陪跑体验差，需要副赛/复活赛垫底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "bracket_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 256.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "eliminated_on_loss" },
+            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "advance_winner_to(next_round_slot({param:bracket_size}))" }
+          ]
+        },
+        {
+          "id": "double_elimination",
+          "label": "双败淘汰树",
+          "summary": "首败落入败者组，再败才出局；总决赛胜者组选手带一条命优势",
+          "implications": [
+            "一次爆冷杀不死最强者，冠军成色更稳，竞技公信力高",
+            "对局总量近乎翻倍，赛程与转播成本同步翻倍",
+            "败者组一路打上来的翻盘叙事是双败制独有的故事引擎，但胜者组决赛失利者的『白赢一场』争议永存"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "grand_final_advantage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "loss_count(participant)", "difficulty_expr": "2", "on_success": [
+              { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "eliminated" }
+            ], "on_failure": [
+              { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "route_to(losers_bracket if loss_count == 1 else winners_bracket)" }
+            ] }
+          ]
+        },
+        {
+          "id": "round_robin_points",
+          "label": "循环积分晋级",
+          "summary": "组内人人互打按积分排名，前 K 名晋级（自走棋 8 人循环/小组赛口径）",
+          "implications": [
+            "无一轮游：每人都打满小组场次，参与量兜底、匹配压力低",
+            "积分制下末轮可能出现默契球/放水局，同刻开赛与判定链是标准解毒剂",
+            "对局总量 O(N²)，组的规模上限被时长硬约束——8-10 人是实践甜点"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "group_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 16.0 }, "required": true },
+            { "key": "advance_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "group_points += points(win_or_draw)" },
+            { "effect": "roll_check", "formula": "group_rank <= {param:advance_count} at group_end", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "advanced" }
+            ], "on_failure": [
+              { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "eliminated" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.seeding_rule",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "对阵种子按什么规则分配？",
+      "design_question": "强者会不会首轮就自相残杀？种子规则回答『树上的位置怎么分』——它是淘汰赛公平性的一半。",
+      "tier_gate": "mf2_elimination_bracket",
+      "options": [
+        {
+          "id": "strength_seeded",
+          "label": "实力种子保护",
+          "summary": "按外部成绩（排位分/预选赛名次）排种子，高种子与低种子先碰、强强对话留给深轮次",
+          "implications": [
+            "决赛大概率是最强对决，赛事含金量与观赏峰值后置——转播方的最爱",
+            "低种子首轮即撞最强，弱者体验被牺牲，爆冷因此更显珍贵",
+            "种子来源（消费 #34 排位或预选成绩）是一条显式外部依赖，数据不可用时要有抽签降级预案"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "tournament", "property": "fixture_schedule", "formula": "assign_slots(seed_rank vs reverse_seed_rank)" },
+            { "effect": "emit_signal", "signal": "bracket_drawn" }
+          ]
+        },
+        {
+          "id": "open_random_draw",
+          "label": "全开放抽签",
+          "summary": "全员随机入位，不设种子保护（杯赛抽签口径）",
+          "implications": [
+            "任何轮次都可能出现强强对话，每一轮都有爆点，公平以『机会均等』口径兑现",
+            "决赛质量方差大：可能提前打完真决赛，冠军战反而失色",
+            "抽签仪式本身是可运营的内容节点（直播抽签/嘉宾抽签）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "participant_pool", "draw_count_expr": "bracket_size", "draw_rule": "uniform_without_replacement", "destination": "tournament.fixture_schedule" },
+            { "effect": "emit_signal", "signal": "bracket_drawn" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.match_format.league_promotion",
+      "domain": "match_format",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "联赛晋降级按什么规则执行？",
+      "design_question": "赛季末榜首与垫底各去哪里——直接升降几个名额，还是打附加赛定生死？晋降级规则决定联赛中下游一整个赛季的意义。",
+      "tier_gate": "mf3_league_season",
+      "options": [
+        {
+          "id": "fixed_slots_exchange",
+          "label": "固定名额直升直降",
+          "summary": "赛季末上级末 K 名与下级前 K 名直接互换级别",
+          "implications": [
+            "规则一句话讲清，赛季全程每一分的升降价值都可精确计算",
+            "早早锁定升降的队伍剩余赛程失去意义，末段消极比赛要靠奖金曲线补动机",
+            "K 值决定联赛间流动速率：太小则阶层固化，太大则级别失去含金量"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "exchange_slots", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "season_rank > league_size - {param:exchange_slots}", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_participant.league_tier", "to_state": "relegated" }
+            ], "on_failure": [] },
+            { "effect": "roll_check", "formula": "season_rank <= {param:exchange_slots} in lower_league", "difficulty_expr": "0", "on_success": [
+              { "effect": "change_state", "machine": "match_participant.league_tier", "to_state": "promoted" }
+            ], "on_failure": [] },
+            { "effect": "emit_signal", "signal": "match_reward_signal" }
+          ]
+        },
+        {
+          "id": "playoff_gate",
+          "label": "附加赛升降",
+          "summary": "升降边缘名次进入跨级附加赛（上级倒数第 K+1 vs 下级第 K+1），胜者留/升级",
+          "implications": [
+            "赛季末多出一档淘汰赛式的高潮内容，边缘名次的最后几轮全是决赛",
+            "附加赛是赛制套赛制：日历要给它留窗口，赛程结构复杂度上一档",
+            "一场定级别的方差极大，整季积分被一晚推翻的争议与戏剧同在"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "playoff_slots", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 4.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "season_rank in playoff_band({param:playoff_slots})", "difficulty_expr": "0", "on_success": [
+              { "effect": "modify_property", "entity": "tournament", "property": "fixture_schedule", "formula": "append(playoff_fixture(upper_edge, lower_edge))" },
+              { "effect": "emit_signal", "signal": "playoff_scheduled" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "rank_component_rows": { "min": 2, "max": 10 },
+    "reward_bracket_rows": { "min": 2, "max": 20 },
+    "tiebreak_criteria_rows": { "min": 2, "max": 8 }
+  },
+  "consistency_rules": [
+    {
+      "id": "series_and_tiebreak_answered_together",
+      "kind": "answered_together",
+      "first": "sys.match_format.series_length",
+      "second": "sys.match_format.tiebreak_rule"
+    }
+  ],
+  "skin_fields": ["trophy_presentation", "bracket_theme"]
+}

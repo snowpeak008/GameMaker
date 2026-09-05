@@ -110,6 +110,7 @@ fn draft_template() -> Template {
         origin: TemplateOrigin::Reverse,
         mapping_hash: String::new(),
         crosscheck_proof: None,
+        smoke_test: false,
     }
 }
 

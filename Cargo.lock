@@ -156,6 +156,7 @@ dependencies = [
  "adm4-pipeline",
  "adm4-space",
  "adm4-spec",
+ "adm4-spec-diff",
  "adm4-template",
  "serde",
  "serde_json",
@@ -290,6 +291,15 @@ version = "0.1.0"
 dependencies = [
  "adm4-contracts",
  "adm4-foundation",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "adm4-spec-diff"
+version = "0.1.0"
+dependencies = [
+ "adm4-spec",
  "serde",
  "serde_json",
 ]

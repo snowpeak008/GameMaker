@@ -1,0 +1,184 @@
+{
+  "entries": [
+    {
+      "id": "pl.growth.level_pacing",
+      "domain": "gameplay_system_design",
+      "question_zh": "升级间隔怎么拉伸——前期几分钟一级的密集正反馈抓留存，但拉伸到后期几天一级时，同一套升级动画从惊喜变成嘲讽，斜率陡到哪玩家开始觉得被怠慢？",
+      "follow_ups": [
+        "后期把大级切成碎片级（威望点/星级）保频率，稀释感怎么控？",
+        "升级瞬间的收益（回满状态/解锁）前后期要不要不同配方？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.deng_ji_cheng_zhang.gameplay_control_experience"
+    },
+    {
+      "id": "pl.growth.vertical_or_horizontal",
+      "domain": "gameplay_system_design",
+      "question_zh": "能力成长走垂直变强还是水平变广——垂直（数值膨胀）成长感直白但旧内容秒变无聊、平衡永远追着通胀跑；水平（新招式新玩法）耐嚼但『我变强了』的直觉反馈弱，主轴押哪边？",
+      "follow_ups": [
+        "水平解锁的新能力要不要严格不劣于旧能力——严格更强就是变相垂直？",
+        "垂直成长封顶后转水平（毕业后刷 build）的两段式，衔接点摆哪？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.neng_li_cheng_zhang.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.growth.respec_cost",
+      "domain": "gameplay_system_design",
+      "question_zh": "洗点自由度给多大——免费随洗鼓励构筑实验、版本改动也有缓冲，但每个选择都失去承诺重量、加点变成草稿；洗点昂贵让选择郑重但一步错步步错的新手直接弃号，闸门怎么设？",
+      "follow_ups": [
+        "大版本平衡补丁后送免费洗点，算契约义务还是开恩？",
+        "局内试验场（沙盒里免费试 build）能不能替代洗点自由？"
+      ],
+      "source_ref": "v2:v2.build_system_decision.gou_zhu_geng_xin_jie_zou.gameplay_control_experience"
+    },
+    {
+      "id": "pl.growth.build_bandwidth",
+      "domain": "gameplay_system_design",
+      "question_zh": "构筑约束带宽卡多紧——槽位、消耗点数这类硬约束逼出取舍、构筑才有个性，但带宽太窄全服殊途同归只剩一套毕业模板，紧到什么程度多样性反而死了？",
+      "follow_ups": [
+        "约束的形状（点数制/槽位制/互斥制）哪种产出的 build 分布最散？",
+        "版本毕业模板固化后，用改约束还是改数值来砸开 meta？"
+      ],
+      "source_ref": "v2:v2.build_system_decision.gou_zhu_yue_shu.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.growth.synergy_ceiling",
+      "domain": "gameplay_system_design",
+      "question_zh": "组合联动的爆发上限放多高——组件间乘法联动让『拼出神机』的顿悟时刻封神，但乘法失控后无限连击破坏一切平衡，上限封在哪既保顿悟又保底线？",
+      "follow_ups": [
+        "用递减曲线软封顶还是数值硬上限——软封顶数学上安全但顿悟感被偷偷阉割？",
+        "刻意留几个超模组合当彩蛋（可控的破坏）值不值得赌社区传播？"
+      ],
+      "source_ref": "v2:v2.build_system_decision.gou_zhu_zu_he.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.growth.collection_endgame",
+      "domain": "gameplay_system_design",
+      "question_zh": "收藏成长要不要给数值钩子——图鉴集齐给属性让收集党的劳动变成战力、参与率暴涨，但数值玩家被迫清图鉴、收集沦为义务；纯观赏收藏纯粹但只养活 5% 的真爱，挂不挂钩？",
+      "follow_ups": [
+        "数值钩子按里程碑给（集满50个）还是每一个都给——粒度决定义务感强度？",
+        "限时获取的藏品绝版后，图鉴完成度永久残缺的焦虑怎么接？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.shou_cang_cheng_zhang.gameplay_playability_signal"
+    },
+    {
+      "id": "pl.growth.account_vs_character",
+      "domain": "gameplay_system_design",
+      "question_zh": "成长挂账号还是挂角色——账号级成长让多角色党无痛换角、大盘粘性归一处，但单角色的从零到一叙事被架空；角色级独立每个角色都是完整旅程但重复劳动劝退，账本记哪本？",
+      "follow_ups": [
+        "两本账并行时，账号层给多厚（只给便利性还是给战力）？",
+        "赛季模式强制角色级重置，和常驻账号级积累的心理账户怎么隔离？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.zhang_hao_cheng_zhang.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.growth.meta_conversion",
+      "domain": "gameplay_system_design",
+      "question_zh": "局内表现向局外成长的兑换率定多高——高兑换让每局都为长线打工、失败局也有慰藉，但局内胜负本身被工资化稀释；低兑换保局内纯粹但肉鸽死亡只剩纯痛，汇率定哪？",
+      "follow_ups": [
+        "兑换按表现分级还是按时长保底——保底工资养不养出挂机摸鱼局？",
+        "局外成长反哺局内的强度多大时，前期局会被后期玩家的资源碾成教学关？"
+      ],
+      "source_ref": "v2:v2.meta_structure_decision.ju_nei_ju_wai_zhuan_huan.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.growth.mastery_visibility",
+      "domain": "core_experience_design",
+      "question_zh": "长期精通的证明留给谁看——精通只体现在操作里（会玩的人看得出）纯粹但不可见、留存钩子空转；做成段位框、大师皮肤则精通被外化成通行证，但也招来代练和焦虑，外化到哪层？",
+      "follow_ups": [
+        "精通证明可租借（代练产物）泛滥后，标识的可信度还剩多少？",
+        "隐性精通（老玩家一眼认出的走位）要不要主动做进观战系统里放大？"
+      ],
+      "source_ref": "v2:v2.learning_curve_decision.chang_qi_jing_tong.core_feeling_target"
+    },
+    {
+      "id": "pl.growth.plateau_rescue",
+      "domain": "core_experience_design",
+      "question_zh": "技术瓶颈期玩家卡在平台期时系统出不出手——主动给降难度建议或数值补贴能救留存，但等于告诉玩家『你不行』；不出手尊重但多数人卡两周就走了，介入线画哪？",
+      "follow_ups": [
+        "介入用暗桥（悄悄放水）还是明桥（推荐训练营）——暗桥被发现的代价谁付？",
+        "平台期的判定信号（连败？停滞？）误报率多高时介入反而变成骚扰？"
+      ],
+      "source_ref": "v2:v2.learning_curve_decision.ji_chu_zhang_wo.core_rhythm_boundary"
+    },
+    {
+      "id": "pl.growth.catchup_mechanic",
+      "domain": "retention_lifecycle_design",
+      "question_zh": "追赶机制做多猛——回流玩家和新玩家追进度的坡道铺得太缓他们望山而逃，铺得太陡（直升满级/装备白送）则在坑里一直玩的忠诚玩家最受伤，坡度怎么修？",
+      "follow_ups": [
+        "追赶补贴用加速（经验翻倍）还是跳过（直升券）——跳过的人错过的教学谁补？",
+        "『在线时长的积累不可被追赶速通』这条底线要不要写死——写死后回流窗口多长？"
+      ],
+      "source_ref": "v2:v2.retention_returning_player_decision.hui_liu_zhui_gan.retention_fatigue_boundary"
+    },
+    {
+      "id": "pl.growth.midterm_anchor",
+      "domain": "retention_lifecycle_design",
+      "question_zh": "中期目标的锚点密度怎么排——里程碑排太密成就感通胀、每个都轻飘飘，排太疏两周看不到下一站、中期流失正好卡在空档，锚点间距拉多开？",
+      "follow_ups": [
+        "锚点的类型轮换（这周战力、下周收集、再下周社交）能不能骗过疲劳？",
+        "玩家自定义目标（自己立的flag）值不值得做成系统承认的锚点？"
+      ],
+      "source_ref": "v2:v2.retention_mid_long_goal_decision.jie_duan_cheng_zhang_mu_biao.retention_return_dynamic"
+    },
+    {
+      "id": "pl.growth.ultimate_goal",
+      "domain": "retention_lifecycle_design",
+      "question_zh": "终极目标做成可达还是渐进线——满收集、全通关这类可达终点让坚持有兑现日，但达成日就是流失日；无限梯度（无尽层数/天梯）永远有下一步但也永远没有『完成』的满足，终点设不设？",
+      "follow_ups": [
+        "可达终点后的『毕业生态』（帮新人/造内容）要不要提前设计而不是放任流失？",
+        "无限梯度的段位贬值（人人传说）多久发生一次重新标定？"
+      ],
+      "source_ref": "v2:v2.retention_mid_long_goal_decision.zhong_ju_mu_biao.retention_experience"
+    },
+    {
+      "id": "pl.growth.formula_transparency",
+      "domain": "balance_design",
+      "question_zh": "成长公式亮多少给玩家——面板全公开（伤害公式可查）养出理论党生态、构筑决策有据可依，但魔法感和探索空间归零；黑箱保神秘但玩家用错误理解做决策的怨气最后归你，开箱到哪层？",
+      "follow_ups": [
+        "官方不公开、社区拆包倒推出公式后，默许还是追认？",
+        "公开到『属性收益递减拐点』这一层，够不够支撑构筑决策？"
+      ],
+      "source_ref": "v2:v2.balance_model_decision.cheng_zhang_gong_shi.balance_monitor_signal"
+    },
+    {
+      "id": "pl.growth.attribute_width",
+      "domain": "balance_design",
+      "question_zh": "属性种类开多少维——属性维度多构筑辨识度高、装备词条有排列空间，但新手面对二十种属性直接失读；维度少易读但 build 同质化，属性表开多宽？",
+      "follow_ups": [
+        "边缘属性（命中/韧性这类修正值）藏进二级面板还是砍掉？",
+        "每个属性都必须回答『哪类玩家会主动堆它』——答不上来的属性凭什么活着？"
+      ],
+      "source_ref": "v2:v2.balance_model_decision.shu_xing_ding_yi.balance_goal"
+    },
+    {
+      "id": "pl.growth.softcap_shape",
+      "domain": "balance_design",
+      "question_zh": "收益递减的拐点摆哪——拐点靠前逼玩家换属性堆、构筑被迫多样但堆一门的爽快被剥夺，拐点靠后自由但极端堆叠（一波秒/无敌墙）迟早失控，软上限的膝盖弯在哪？",
+      "follow_ups": [
+        "拐点位置公开吗——不公开的递减等于对萌新征信息税？",
+        "递减曲线全属性统一还是各属性单调——统一好记，单调精准，选哪个？"
+      ],
+      "source_ref": "v2:v2.balance_model_decision.shou_yi_qu_xian.balance_break_boundary"
+    },
+    {
+      "id": "pl.growth.gear_vs_skill_share",
+      "domain": "balance_design",
+      "question_zh": "战力构成里装备和操作各占几成——装备权重高付费和肝有兑现、大盘商业模型立得住，但高手被装备差碾压的羞辱感传播极快；操作权重高竞技纯但成长投资显得没用，配比定哪？",
+      "follow_ups": [
+        "不同模式配比不同（排位重操作、大世界重装备）能不能双全？",
+        "配比对外话术怎么讲——讲『公平竞技』还是讲『成长有回报』，一个词得罪一半人？"
+      ],
+      "source_ref": "v2:v2.balance_model_decision.shu_xing_guan_xi.balance_goal"
+    },
+    {
+      "id": "pl.growth.daily_dose",
+      "domain": "retention_lifecycle_design",
+      "question_zh": "日常任务的剂量开多大——日课半小时以内轻盈但成长感稀薄，一小时以上成长扎实但迟到一天就欠债、游戏变成第二份工作，每日剂量开多少？",
+      "follow_ups": [
+        "日常做不完的溢出（攒到周末补）允许吗——允许后『每日』的仪式感还在吗？",
+        "日常奖励占总成长的比重压到多少，断签几天的人才不会觉得废号了？"
+      ],
+      "source_ref": "v2:v2.retention_daily_loop_decision.pi_lao_kong_zhi.retention_fatigue_boundary"
+    }
+  ]
+}

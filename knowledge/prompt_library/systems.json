@@ -1,0 +1,544 @@
+{
+  "entries": [
+    {
+      "id": "pl.build_placement.01",
+      "domain": "sys.build_placement",
+      "question_zh": "摆放走网格吸附还是自由落位——网格易读、碰撞与平衡好算，自由摆放表达力强但校验复杂度和穿模争议全要你兜，落在哪档？",
+      "follow_ups": [
+        "混合方案（网格底座+自由装饰层）值不值得为两头讨好多养一套规则？",
+        "网格粒度切多细——细到近似自由时，网格的易读优势还剩多少？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.kong_jian_jie_gou.content_supply_mechanic"
+    },
+    {
+      "id": "pl.build_placement.02",
+      "domain": "sys.build_placement",
+      "question_zh": "拆除建筑返还多少成本——全额返还鼓励大胆重构但落子失去承诺重量，低返还让每次建造都是决策但试错代价吓退新手，返还率定哪？",
+      "follow_ups": [
+        "返还率要不要随建筑服役时长衰减——刚建就拆全退、老建筑折旧？",
+        "限时活动里临时把返还率提到 100% 鼓励实验，会不会训练玩家只在活动期动工？"
+      ],
+      "source_ref": "v2:v2.economy_loop_decision.zi_yuan_xiao_hao.economy_value_experience"
+    },
+    {
+      "id": "pl.build_placement.03",
+      "domain": "sys.build_placement",
+      "question_zh": "落位前的合法性预览给多少——占地、阻挡、加成范围全预览决策顺滑，但玩家再也不会踩坑，规划的试错乐趣被系统没收，预览开到哪层？",
+      "follow_ups": [
+        "隐性影响（动线效率、相邻加成）也提前可视化吗——全透明后摆放最优解会不会一键抄？",
+        "预览错误（红色禁排）给不给原因说明——只标红省事但玩家撞墙式排查？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.lu_jing_xuan_ze.content_signal"
+    },
+    {
+      "id": "pl.build_placement.04",
+      "domain": "sys.build_placement",
+      "question_zh": "装饰建筑给不给数值加成——给了装饰位被最优解绑架、审美让位攻略，不给则装饰在寸土寸金的地块上永远竞争不过功能建筑，挂不挂钩？",
+      "follow_ups": [
+        "折中的『美观度』全局加成（不看具体摆什么）能不能既保表达又防抄作业？",
+        "展示型玩家和效率型玩家共用一块地，还是给独立的观赏用地？"
+      ],
+      "source_ref": "v2:v2.social_expression_decision.wai_guan_zhan_shi.social_mechanic"
+    },
+    {
+      "id": "pl.build_placement.05",
+      "domain": "sys.build_placement",
+      "question_zh": "布局对产出效率的影响做多强——强影响（相邻加成/动线科学）让摆放成为硬核决策但社区一键抄图，弱影响自由随心但摆放沦为皮肤，强度定哪？",
+      "follow_ups": [
+        "抄图不可避免时，要不要靠地形差异（每人地块不同）逼迫因地制宜？",
+        "最优布局和美观布局的产出差距压到百分之几，休闲玩家才不觉得被惩罚？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.jiang_li_qu_yu.content_experience"
+    },
+    {
+      "id": "pl.build_placement.06",
+      "domain": "sys.build_placement",
+      "question_zh": "地块扩张的节奏怎么放——开局给大地块玩家规划自由但迷茫且后期没了扩张追求，挤牙膏解锁有长线目标但中期憋屈感集中爆发，节奏怎么切？",
+      "follow_ups": [
+        "扩张解锁绑等级还是绑付费——绑付费等于把核心追求明码标价？",
+        "旧地块重规划的成本要不要随扩张降低，防止早期布局锁死后期？"
+      ],
+      "source_ref": "v2:v2.meta_structure_decision.ju_wai_cheng_zhang.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.match_format.01",
+      "domain": "sys.match_format",
+      "question_zh": "单局硬上限（时限/回合数）设不设——设了赛程可控转播友好，但史诗翻盘被闹钟掐断；不设则拉锯局把双方都熬成受害者，截断线画哪？",
+      "follow_ups": [
+        "临近上限时用加速规则（资源翻倍/区域收缩）逼决战，算不算变相改玩法？",
+        "上限到时的判定用当前优势还是直接判平——优势判定的公式玩家读得懂吗？"
+      ],
+      "source_ref": "v2:v2.session_rhythm_decision.dan_ci_hui_hua_mu_biao.core_rhythm_boundary"
+    },
+    {
+      "id": "pl.match_format.02",
+      "domain": "sys.match_format",
+      "question_zh": "赛制容错给多少——单败淘汰每局都是生死战浓度拉满，但一次失误直接出局劝退多数人；双败或积分制公平但赛程拉长、关键局稀释，容错定哪档？",
+      "follow_ups": [
+        "长赛程的中段垃圾局（出线已定）怎么处理——奖励挂钩每局还是只看名次？",
+        "不同段位用不同赛制（低段积分、高段淘汰）值不值得多养一套规则？"
+      ],
+      "source_ref": "v2:v2.social_competition_decision.sai_ji_gui_ze.social_mechanic"
+    },
+    {
+      "id": "pl.match_format.03",
+      "domain": "sys.match_format",
+      "question_zh": "匹配精度和等待时长怎么换——收紧分差对局质量高但深夜高分段排不到人，放宽秒进但虐菜局和被虐局双输，松紧的动态口径怎么定？",
+      "follow_ups": [
+        "等待超时后放宽的幅度公开吗——公开显得诚实，但高手会掐点排『放水局』？",
+        "组队与单排混排的分差补偿系数怎么标定——补多了单排怨，补少了车队碾压？"
+      ],
+      "source_ref": "v2:v2.balance_competition_decision.pi_pei_gong_ping.balance_tuning_lever"
+    },
+    {
+      "id": "pl.match_format.04",
+      "domain": "sys.match_format",
+      "question_zh": "先后手优势用什么补偿——不补则先手胜率结构性偏高竞技性打折，补偿资源或选边权又引入新的博弈复杂度且可能矫枉过正，补到什么程度？",
+      "follow_ups": [
+        "补偿定值还是随版本胜率数据浮动——浮动更准但规则每版变，玩家背不住？",
+        "让玩家竞价选先后手（出资源换先手）能不能把补偿问题变成决策乐趣？"
+      ],
+      "source_ref": "v2:v2.balance_competition_decision.xian_hou_shou_you_shi.balance_tuning_lever"
+    },
+    {
+      "id": "pl.match_format.05",
+      "domain": "sys.match_format",
+      "question_zh": "允不允许平局存在——保留平局对真实局势诚实但双方情绪都没有出口，强制加时或骤死赛有戏剧张力却让平衡精度让位给了戏剧性，怎么裁？",
+      "follow_ups": [
+        "骤死规则改变原玩法多少算越界——一分钟决胜的玩法还是原来的玩法吗？",
+        "积分赛里平局的分值怎么定才不会催生互相演戏的默契平局？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.sheng_fu_tiao_jian.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.match_format.06",
+      "domain": "sys.match_format",
+      "question_zh": "中途掉线怎么判——秒判负对故意逃跑者有效但网络波动的无辜者陪葬，托管或暂停保公平却给演员和拖时间者开了滥用口子，判定线画哪？",
+      "follow_ups": [
+        "重连窗口给多长——太短形同虚设，太长剩下的人在等待里熬完整局？",
+        "掉线惩罚按次数累进还是看历史信誉分——信誉系统的误伤申诉成本谁来背？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.zhong_shi_gui_ze.gameplay_control_experience"
+    },
+    {
+      "id": "pl.tactical_board.01",
+      "domain": "sys.tactical_board",
+      "question_zh": "下达指令时允不允许暂停——暂停给深思熟虑的指挥感、战术水平成为唯一变量，但动作节奏被切碎；实时下令保紧张但操作瓶颈盖过战术脑，选哪头？",
+      "follow_ups": [
+        "折中的子弹时间（慢放不暂停）两头各留几成——慢放倍率就是新的平衡参数？",
+        "多人对战里暂停权怎么分配——各自限次暂停会不会变成心理战工具？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.shi_jian_ya_li.core_behavior_mechanic"
+    },
+    {
+      "id": "pl.tactical_board.02",
+      "domain": "sys.tactical_board",
+      "question_zh": "战术板信息给到全知还是带迷雾——全知视图让规划像下棋纯粹比脑力，但侦察行为失去价值；迷雾保留信息博弈但新手连规划的原料都没有，开多透？",
+      "follow_ups": [
+        "迷雾下的历史情报（上次看到的位置）要不要在板上留残影？",
+        "教学期临时全知、正式局收紧——玩家会不会学到假战术？"
+      ],
+      "source_ref": "v2:v2.ux_information_architecture_decision.xin_xi_you_xian_ji.ux_understanding_experience"
+    },
+    {
+      "id": "pl.tactical_board.03",
+      "domain": "sys.tactical_board",
+      "question_zh": "预案槽位给几个——槽位多战术库深、临场切换有底牌，但赛前配置负担劝退轻度玩家；槽位少上手快但高手觉得被捆住手脚，容量定哪？",
+      "follow_ups": [
+        "预设模板（官方推荐预案）能不能垫底——会不会导致多数人一辈子用默认？",
+        "槽位随段位解锁还是一视同仁——解锁制把深度当奖励发，合理吗？"
+      ],
+      "source_ref": "v2:v2.learning_curve_decision.ce_lve_shen_hua.core_loop_dynamic"
+    },
+    {
+      "id": "pl.tactical_board.04",
+      "domain": "sys.tactical_board",
+      "question_zh": "指令粒度切到多细——格子级微操天花板高、高手表达空间大，但战术板玩成第二套操作系统；区域级意图指令轻量但关键时刻指挥不动细节，粒度定哪？",
+      "follow_ups": [
+        "粗细两档并存（平时区域令、关键单位可微操）会不会让微操单位成为唯一主角？",
+        "微操收益上限压到比意图指挥高多少，才配得上它的操作成本？"
+      ],
+      "source_ref": "v2:v2.input_control_decision.shu_ru_yi_tu.gameplay_control_experience"
+    },
+    {
+      "id": "pl.tactical_board.05",
+      "domain": "sys.tactical_board",
+      "question_zh": "指令执行的确定性取哪端——严格照令执行便于复盘归因但单位一根筋撞墙很蠢，智能修正能救场却让玩家分不清是自己指挥好还是 AI 兜底，忠实度定哪？",
+      "follow_ups": [
+        "修正行为要不要在回放里高亮标注，把 AI 的功劳和玩家的功劳分开记账？",
+        "『服从度』做成可调选项交给玩家，是尊重还是把设计难题外包？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_shi_bai_jie_guo.gameplay_control_experience"
+    },
+    {
+      "id": "pl.tactical_board.06",
+      "domain": "sys.tactical_board",
+      "question_zh": "布阵窗口放在哪——赛前一锤定音强调准备与预判、临场只看执行，局中可随时调整强调应变但赛前研究贬值，胜负重心压在准备还是应变？",
+      "follow_ups": [
+        "局中调整给次数限制还是冷却限制——哪种更能保住调整时机本身的决策感？",
+        "对手布阵的可见时机（同时亮牌还是先后手亮）怎么定才不偏袒信息后动者？"
+      ],
+      "source_ref": "v2:v2.meta_structure_decision.ju_wai_zhun_bei.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.squad_command.01",
+      "domain": "sys.squad_command",
+      "question_zh": "队员自主 AI 做多聪明——高自主减少微操负担、队员像活人，但玩家的指挥价值被蚕食；低自主每步都听令存在感强，但保姆式微操累死人，自主度定哪档？",
+      "follow_ups": [
+        "自主度按兵种分层（近卫自动、狙击手动）还是全队统一？",
+        "AI 自作主张导致的减员，玩家的怨气有没有申诉出口（行为日志回放）？"
+      ],
+      "source_ref": "v2:v2.character_unit_decision.xing_wei_gui_ze.content_experience"
+    },
+    {
+      "id": "pl.squad_command.02",
+      "domain": "sys.squad_command",
+      "question_zh": "指令队列还是即时打断——可排队的指令链条支持深度规划但战场突变时队列成为绞索，即时打断灵活但指挥退化成点哪打哪，两种模型选谁当骨架？",
+      "follow_ups": [
+        "队列执行中允许插队修改吗——修改成本（延迟惩罚）定多少才保住排队的严肃性？",
+        "打断旧令的沉没成本（已走的路白走）要不要做进机制里逼玩家想清楚再下令？"
+      ],
+      "source_ref": "v2:v2.input_control_decision.cao_zuo_jie_zou.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.squad_command.03",
+      "domain": "sys.squad_command",
+      "question_zh": "队员死亡做成永久还是可复活——永久死亡让每次接敌都有重量、老兵有传记价值，但一次团灭的挫败直接劝退存档党；可复活轻松但队员沦为耗材，咬多狠？",
+      "follow_ups": [
+        "折中的重伤缺阵（伤停几场）能不能保住重量又不至于绝望？",
+        "铁人模式（禁读档）做成可选难度，还是把防读档设计进机制本身？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.cheng_fa_jie_suan.gameplay_failure_boundary"
+    },
+    {
+      "id": "pl.squad_command.04",
+      "domain": "sys.squad_command",
+      "question_zh": "编队人数上限定多少——人多战术组合爆炸、阵型有排布空间，但单兵存在感被稀释成棋子；人少每个队员都认得脸有感情，但战术宽度受限，编制卡哪？",
+      "follow_ups": [
+        "上限内允许空位出战（少带人换机动性/收益加成）能不能把人数本身变成决策？",
+        "叙事戏份跟着编制走——大编制下每人的剧情预算还够立住角色吗？"
+      ],
+      "source_ref": "v2:v2.character_unit_decision.jue_se_ding_wei.content_supply_mechanic"
+    },
+    {
+      "id": "pl.squad_command.05",
+      "domain": "sys.squad_command",
+      "question_zh": "倒地队员给不给战场救援窗口——可救回让减员成为可挽回的中间态、催生救援小高潮，但削弱接敌前的谨慎动机；不可救让谨慎值钱但挫败一步到位，窗口开吗？",
+      "follow_ups": [
+        "救援动作的风险定多高（救人者暴露/耗行动力），才不至于救援永远是正确答案？",
+        "倒地次数累计留不留后遗症（属性疤痕），把救回来的人和没倒过的人区分开？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_shi_bai_jie_guo.gameplay_failure_boundary"
+    },
+    {
+      "id": "pl.squad_command.06",
+      "domain": "sys.squad_command",
+      "question_zh": "指挥视角用越肩跟随还是上帝俯瞰——跟随视角沉浸、队员的恐惧你亲眼看见，但战场全局信息残缺指挥变盲棋；俯瞰信息完备但代入感稀薄，镜头架哪？",
+      "follow_ups": [
+        "双视角自由切换会不会让俯瞰成为唯一正确、跟随沦为观光模式？",
+        "跟随视角下的越视野信息（小地图标记）给多少，才算盲得有乐趣而不是盲得冤枉？"
+      ],
+      "source_ref": "v2:v2.hud_feedback_decision.guan_jian_zhuang_tai_fan_kui.ux_understanding_experience"
+    },
+    {
+      "id": "pl.scoring_combo.01",
+      "domain": "sys.scoring_combo",
+      "question_zh": "连击断线的惩罚咬多深——一断清零让保连击成为全程心跳源、顶级局有窒息感，但手滑一次前功尽弃的挫败太烈；温和衰减友好但张力塌腰，断线代价定哪？",
+      "follow_ups": [
+        "给一次『护盾』（首断免罚）是仁慈还是稀释——护盾存在时玩家的心跳还真吗？",
+        "清零派和衰减派能不能用模式分开（排位清零、休闲衰减）而不是全局折中？"
+      ],
+      "source_ref": "v2:v2.settlement_system_decision.ping_fen_tiao_jian.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.scoring_combo.02",
+      "domain": "sys.scoring_combo",
+      "question_zh": "实时分数展示多显眼——分数跳动直给、每次操作即时兑现成反馈爽感，但玩家眼睛盯着数字不看演出，画面白做了；藏起来沉浸但反馈延迟，摆多前？",
+      "follow_ups": [
+        "只在连击里程碑（50/100 连）时闪现大数字，能不能两头兼顾？",
+        "结算时的分数构成复盘做多细——细到每一刀的人只有 1%，值得吗？"
+      ],
+      "source_ref": "v2:v2.hud_feedback_decision.cheng_gong_fan_kui.ux_understanding_experience"
+    },
+    {
+      "id": "pl.scoring_combo.03",
+      "domain": "sys.scoring_combo",
+      "question_zh": "风格分和效率分谁当主秤——奖励花式操作让表演有价值、录像好看，但速通党觉得被强迫跳舞；纯效率分公平直白但全服打法趋同成一套模板，权重怎么配？",
+      "follow_ups": [
+        "花式判定的口径（多样性计数/禁止重复招）怎么定才不会被脚本化刷花样？",
+        "两套评分并行发两种奖励，会不会把玩家群体切成互相看不起的两派？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.feng_xian_xuan_ze_ya_li.core_behavior_mechanic"
+    },
+    {
+      "id": "pl.scoring_combo.04",
+      "domain": "sys.scoring_combo",
+      "question_zh": "连击判定窗口开多宽——宽窗口人人连得起来、爽感普惠，但精通不再值钱高手没有炫耀资本；窄窗口是高手专属勋章但大众永远够不着，宽度卡哪？",
+      "follow_ups": [
+        "窗口宽度随难度档变化，会不会让低难度练的肌肉记忆到高难度全作废？",
+        "辅助判定（自动修正一帧误差）开给谁——开给全员算普惠还是算作弊？"
+      ],
+      "source_ref": "v2:v2.learning_curve_decision.ji_qiao_ti_sheng.core_feeling_target"
+    },
+    {
+      "id": "pl.scoring_combo.05",
+      "domain": "sys.scoring_combo",
+      "question_zh": "分数数量级放多大——百万千万的大数字膨胀感强、涨分像放烟花，但可读性崩坏且横向比较失去直觉；小数字克制易比较但爽感缩水，通胀开到哪？",
+      "follow_ups": [
+        "科学计数或单位缩写（1.2M）救可读性，但『看不懂的大』还算爽吗？",
+        "赛季重置分数标尺（新赛季重新标定量级），老玩家的分数记忆资产怎么办？"
+      ],
+      "source_ref": "v2:v2.readability_decision.shu_zhi_zhan_shi.ux_load_boundary"
+    },
+    {
+      "id": "pl.scoring_combo.06",
+      "domain": "sys.scoring_combo",
+      "question_zh": "评级和奖励绑多紧——S 评价绑独占奖励让每局都被认真对待、评级有牙齿，但休闲局也变成考试焦虑的来源；纯荣誉评级无压力但多数人看都不看，绑定强度定哪？",
+      "follow_ups": [
+        "奖励绑『累计评级』而非『单局评级』能不能把考试焦虑摊薄成长期动力？",
+        "低评级要不要给改进提示——给了像教练，给不好像嘲讽，口吻怎么拿捏？"
+      ],
+      "source_ref": "v2:v2.reward_experience_decision.cheng_jiu_jiang_li.core_feeling_target"
+    },
+    {
+      "id": "pl.class_archetype.01",
+      "domain": "sys.class_archetype",
+      "question_zh": "职业定位做硬三角还是软分工——硬定位（缺坦不开团）让每个职业结构性被需要，但组队等待和职业绑架随之而来；软定位自由组队但职业存在感稀释，绑多死？",
+      "follow_ups": [
+        "硬定位下的冷门位（奶妈荒）用奖励补贴还是机制减负来救？",
+        "软定位下怎么防止全队清一色版本最强职业——多样性还需要别的抓手吗？"
+      ],
+      "source_ref": "v2:v2.character_unit_decision.jue_se_ding_wei.content_experience"
+    },
+    {
+      "id": "pl.class_archetype.02",
+      "domain": "sys.class_archetype",
+      "question_zh": "转职成本定多高——免费随切鼓励全职业尝试、版本适应快，但职业认同感稀释成换装；高成本锁定强化『我是谁』的身份叙事，但选错职业等于劝退，切换税收多少？",
+      "follow_ups": [
+        "成长进度跨职业继承多少——全继承则职业只剩技能差，零继承则切换即重开？",
+        "第一次转职免费、后续加价的阶梯方案，是引导尝试还是钓鱼收费？"
+      ],
+      "source_ref": "v2:v2.character_unit_decision.cheng_zhang_lu_jing.content_cost_boundary"
+    },
+    {
+      "id": "pl.class_archetype.03",
+      "domain": "sys.class_archetype",
+      "question_zh": "版本强度轮换要不要主动做——轮流坐庄保 meta 新鲜、冷门职业都有翻身日，但被识破后『平衡性』口碑变成营销工具；恒定微调诚实但 meta 板结，动不动手？",
+      "follow_ups": [
+        "轮换的幅度压到多小可以既撬动 meta 又不至于上版本投入作废？",
+        "强度轮换和新职业发售期重叠时，『新职业必超模』的指控怎么自证清白？"
+      ],
+      "source_ref": "v2:v2.balance_competition_decision.jue_se_ping_heng.balance_break_boundary"
+    },
+    {
+      "id": "pl.class_archetype.04",
+      "domain": "sys.class_archetype",
+      "question_zh": "职业间机制差异做多深——操作逻辑全异（连招式/资源式/宠物式各成体系）重玩价值翻倍，但开发与平衡成本按职业数乘算；同框架换技能省产能但换汤不换药，深度切哪？",
+      "follow_ups": [
+        "差异深度分层（主推职业全异、补充职业换皮）会不会让补充职业沦为二等公民？",
+        "每个新机制职业都要重教学一次——教学成本要不要反过来约束机制脑洞？"
+      ],
+      "source_ref": "v2:v2.character_unit_decision.neng_li_jie_gou.content_cost_boundary"
+    },
+    {
+      "id": "pl.class_archetype.05",
+      "domain": "sys.class_archetype",
+      "question_zh": "新职业的入场强度怎么摆——首发即一线战力拉动购买和话题，但老职业玩家的投入相对贬值；首发保守平衡口碑好但销量和话题双淡，超模红线画哪？",
+      "follow_ups": [
+        "发售后第几周开始回调算契约内——快割韭菜和慢摆烂之间的时间窗多宽？",
+        "新职业锁排位若干周（竞技隔离期）能不能既卖爽又护公平？"
+      ],
+      "source_ref": "v2:v2.content_supply_structure_decision.ban_ben_nei_rong_cao_wei.content_supply_mechanic"
+    },
+    {
+      "id": "pl.class_archetype.06",
+      "domain": "sys.class_archetype",
+      "question_zh": "职业专属内容配多少产能——专属任务线和专属装备把职业认同做实，但内容成本按职业数翻倍且换职业者内容清零；全共享省产能但职业只剩技能面板差异，比例定哪？",
+      "follow_ups": [
+        "专属内容集中在前期（出身剧情）还是贯穿全程——前者省但中后期认同断供？",
+        "小众职业的专属内容消费人数注定少，产能公平按人头还是按职业头？"
+      ],
+      "source_ref": "v2:v2.content_type_decision.he_xin_nei_rong.content_cost_boundary"
+    },
+    {
+      "id": "pl.onboarding.01",
+      "domain": "sys.onboarding",
+      "question_zh": "引导的强制度定多硬——强制引导保证人人学会关键机制、事故率可控，但老玩家和二周目在铁轨上煎熬；全可跳过尊重自由但漏学机制的挫败最后还是算在游戏头上，锁多紧？",
+      "follow_ups": [
+        "跳过资格做检测（老手识别/完成度测验）还是无条件放行？",
+        "被跳过的教学内容之后从哪补——玩家卡关时系统怎么知道他是没学过而不是不会？"
+      ],
+      "source_ref": "v2:v2.onboarding_guidance_decision.yin_dao_tiao_guo.ux_understanding_experience"
+    },
+    {
+      "id": "pl.onboarding.02",
+      "domain": "sys.onboarding",
+      "question_zh": "教学时机选前置还是即时——开局一次教完系统全貌省得回头补课，但信息轰炸后玩家什么都没记住；用到才教（just-in-time）记忆牢，但首小时被教学弹窗切碎，节奏怎么排？",
+      "follow_ups": [
+        "即时教学的触发时机怎么防误判——玩家自己摸索到一半被弹窗打断最伤？",
+        "高级机制（隐藏于三十级后的系统）也即时教，还是允许攻略社区代劳？"
+      ],
+      "source_ref": "v2:v2.onboarding_guidance_decision.yin_dao_shun_xu.ux_operation_dynamic"
+    },
+    {
+      "id": "pl.onboarding.03",
+      "domain": "sys.onboarding",
+      "question_zh": "新手保护期怎么摘——保护期内匹配放水、数值宽松让首周顺滑，但摘除瞬间的难度悬崖比从不保护更伤人；不设保护真实但首日流失直接拉满，坡道怎么修？",
+      "follow_ups": [
+        "保护摘除做成渐进斜坡时，玩家察觉『之前赢是放水』会不会反噬信任？",
+        "保护期时长按局数、按天数还是按表现自适应——自适应的判据公开吗？"
+      ],
+      "source_ref": "v2:v2.retention_onboarding_decision.xin_shou_liu_shi_yu_jing.retention_fatigue_boundary"
+    },
+    {
+      "id": "pl.onboarding.04",
+      "domain": "sys.onboarding",
+      "question_zh": "教学关允不允许失败——能失败的教学教出来的是真本事、第一次胜利有含金量，但首体验受挫的流失代价直接前置；不可失败顺滑但学到的是假把式，闸门开吗？",
+      "follow_ups": [
+        "教学失败的重试要不要缩短流程（从失败点续）——完整重来的惩罚在教学期是否过重？",
+        "『假失败』（剧本安排的败仗）算不算两全——被识破后教学的诚信还剩多少？"
+      ],
+      "source_ref": "v2:v2.learning_curve_decision.chu_ci_li_jie.core_playtest_signal"
+    },
+    {
+      "id": "pl.onboarding.05",
+      "domain": "sys.onboarding",
+      "question_zh": "新手期资源发多肥——猛发货币装备让开局爽感拉满、首日留存好看，但前期成长内容被跳过、正常获取节奏显得寒酸；抠着发保节奏但开局清汤寡水，发放曲线怎么画？",
+      "follow_ups": [
+        "新手礼发『体验券』（限时高级装备）而非永久资产，透支感能不能降下来？",
+        "七日签到的大奖摆第七天钓留存，会不会让前六天变成打卡上班？"
+      ],
+      "source_ref": "v2:v2.retention_onboarding_decision.xin_shou_jiang_li.retention_experience"
+    },
+    {
+      "id": "pl.onboarding.06",
+      "domain": "sys.onboarding",
+      "question_zh": "复习系统值不值得建——训练场、图鉴、机制回放这类主动复习入口建设成本高且使用率注定低，但没有它漏课玩家永久断层、只能去站外看攻略，修不修这条路？",
+      "follow_ups": [
+        "复习入口做成被动推荐（检测到连败推训练营）会不会变成伤口撒盐？",
+        "用攻略社区外包复习功能省成本，官方对内容正确性的责任边界画哪？"
+      ],
+      "source_ref": "v2:v2.onboarding_guidance_decision.yin_dao_fu_xi.ux_interface_mechanic"
+    },
+    {
+      "id": "pl.equipment.06",
+      "domain": "sys.equipment",
+      "question_zh": "洗练词条允许定向到什么程度——全随机洗练让刷取长线绵长但怨气随机沉淀，锁词条定向尊重玩家投入但毕业提前、追求缩短，定向的口子开多大？",
+      "follow_ups": [
+        "锁定词条的代价按锁定数量指数递增，曲线陡到什么程度玩家还愿意用？",
+        "洗练结果可保留旧值二选一，是仁慈设计还是让沉没成本更粘人的钩子？"
+      ],
+      "source_ref": "v2:v2.randomness_system_decision.ke_kong_sui_ji.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.equipment.07",
+      "domain": "sys.equipment",
+      "question_zh": "装备可交易还是绑定——开放交易激活玩家经济、捡到就是钱包鼓，但工作室和打金链随行；全绑定生态干净但装备只剩自用价值、社交与市场层直接砍掉，闸门怎么设？",
+      "follow_ups": [
+        "折中的『交易后绑定』和『限次交易』各堵住哪些漏洞、留下哪些？",
+        "顶级装备单独禁售保荣誉纯度，还是恰恰顶级装备最该流通？"
+      ],
+      "source_ref": "v2:v2.economy_security_dispute_decision.jiao_yi_zheng_yi_feng_xian.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.equipment.08",
+      "domain": "sys.equipment",
+      "question_zh": "版本更迭时旧装备贬值多快——快速淘汰逼全员追新、版本流水有保障，但玩家积累被作废的背叛感累积；保值温和但新装备失去必买理由，贬值斜率定哪？",
+      "follow_ups": [
+        "旧装备转化通道（分解出新版本材料）回收多少残值算有诚意？",
+        "传家宝式的成长型装备（跟随版本升级）会不会反而杀死刷新装的乐趣？"
+      ],
+      "source_ref": "v2:v2.progression_system_decision.zhuang_bei_cheng_zhang.gameplay_control_experience"
+    },
+    {
+      "id": "pl.inventory.05",
+      "domain": "sys.inventory",
+      "question_zh": "背包整理本身做不做成玩法——异形格子（俄罗斯方块式收纳）把空间管理变成决策乐趣，但对收集型玩家是每十分钟一次的刑罚；列表式无感高效但少了一层取舍，做不做？",
+      "follow_ups": [
+        "自动整理按钮给了之后，异形格子的设计意义还剩多少？",
+        "战斗中和据点里用不同背包规则（战场紧、家里松）值不值得双轨复杂度？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.dao_ju_ding_wei.content_experience"
+    },
+    {
+      "id": "pl.inventory.06",
+      "domain": "sys.inventory",
+      "question_zh": "仓库做账号共享还是角色独立——共享仓库让多角色玩家资源互通、便利拉满，但小号灌注让新角色的成长曲线形同虚设；独立仓库保成长纯度但重复劳动怨声载道，通不通？",
+      "follow_ups": [
+        "只共享材料不共享装备的折中线，挡得住成长跳级吗？",
+        "赛季角色与常驻仓库的隔离期怎么设——赛季结束后资产并入的通胀怎么消化？"
+      ],
+      "source_ref": "v2:v2.meta_structure_decision.ju_wai_shou_cang.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.inventory.07",
+      "domain": "sys.inventory",
+      "question_zh": "贵重品占仓储特权还是拟真——按体积重量拟真（越贵越占地）强化稀有实感和取舍张力，但顶级战利品变成仓储噩梦；贵重品免格子爽快但珍稀感少了一个感官维度，哪头？",
+      "follow_ups": [
+        "专属珍品柜（贵重品独立空间）是解法还是把矛盾挪了个地方？",
+        "占格特权反着做（垃圾自动堆叠、贵品独占格）对拾取心理的暗示够不够？"
+      ],
+      "source_ref": "v2:v2.item_resource_content_decision.jia_zhi_ceng_ji.content_consumption_dynamic"
+    },
+    {
+      "id": "pl.loot.06",
+      "domain": "sys.loot",
+      "question_zh": "掉落揭晓放在拾取瞬间还是回城开箱——即时鉴定爽点密集、捡到即高潮，但情绪曲线扁平化；未鉴定品攒着回城开保留延迟满足的仪式，但战场上的掉落瞬间变哑炮，揭晓点放哪？",
+      "follow_ups": [
+        "未鉴定品的外观暴露多少信息（品质光柱但不显词条）才吊得住胃口？",
+        "鉴定收费（NPC 鉴定费）是经济回收口还是纯粹的体验税？"
+      ],
+      "source_ref": "v2:v2.randomness_system_decision.sui_ji_ru_kou.gameplay_playability_signal"
+    },
+    {
+      "id": "pl.loot.07",
+      "domain": "sys.loot",
+      "question_zh": "组队掉落用个人独立还是队伍分配——个人掉落各刷各的零纠纷，但让装备的人情和拍卖的戏剧一并消失；队伍分配有社交温度但 ninja 抢装的撕逼成本回来了，分配制选谁？",
+      "follow_ups": [
+        "需求优先（need/greed）投骰制的规则复杂度，新玩家几局能学会？",
+        "个人掉落下允许战利品互赠吗——赠送窗口多长不至于变成场外交易通道？"
+      ],
+      "source_ref": "v2:v2.social_collaboration_decision.xie_zuo_jiang_li.social_abuse_boundary"
+    },
+    {
+      "id": "pl.loot.08",
+      "domain": "sys.loot",
+      "question_zh": "赛季重置要不要动掉落资产——赛季清空装备让刷取循环每季可再售、开荒感重复出售，但老玩家资产焦虑与疲惫感逐季累积；不重置资产安全但掉落池一季比一季难做，重置深度定哪？",
+      "follow_ups": [
+        "赛季资产转常驻时打几折入库——全额入库通胀，归零入库背叛？",
+        "开荒疲惫的信号（第几个赛季参与率跳水）出现后，重置节奏还有救吗？"
+      ],
+      "source_ref": "v2:v2.liveops_season_decision.sai_ji_zhong_zhi.liveops_rhythm_boundary"
+    },
+    {
+      "id": "pl.economy.06",
+      "domain": "sys.economy",
+      "question_zh": "玩家间交易抽多少税——高税率抑制工作室搬砖、给经济装刹车，但正常玩家的互通有无也被误伤；低税市场活跃但打金产业链畅通无阻，税率卡哪个点？",
+      "follow_ups": [
+        "累进税（高频/大额交易加税）能不能只打工作室不伤平民？",
+        "税收的去向要不要做成可见的回收叙事（城市建设税）让玩家认账？"
+      ],
+      "source_ref": "v2:v2.economy_loop_decision.zi_yuan_tong_zhang_kong_zhi.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.economy.07",
+      "domain": "sys.economy",
+      "question_zh": "付费货币允不允许免费攒——可肝出付费币公平口碑好、白嫖玩家有盼头，但大盘付费率被自己人截流；完全隔离变现清晰但 pay-to-win 的指控失去挡箭牌，通道开多宽？",
+      "follow_ups": [
+        "免费获取的月度上限压到付费月卡的几分之一，两边才都不炸？",
+        "免费攒币的来源绑深度玩法（高难副本）还是绑日常签到——绑哪边改变谁在攒？"
+      ],
+      "source_ref": "v2:v2.currency_system_decision.fu_fei_huo_bi.economy_fairness_boundary"
+    },
+    {
+      "id": "pl.economy.08",
+      "domain": "sys.economy",
+      "question_zh": "首充礼包让利到什么深度——一元神器式的超值首充转化率暴涨，但全场价格锚点被砸穿、后续商品显得抢钱；克制让利保价值体系但转化漏斗第一环就漏，深度定哪？",
+      "follow_ups": [
+        "首充特权（永久标识/专属外观）代替数值让利，转化力够不够？",
+        "首充档位做一档还是三档——三档的『中杯陷阱』定价术要不要用在新人身上？"
+      ],
+      "source_ref": "v2:v2.pricing_value_decision.jia_ge_ti_du.economy_value_experience"
+    }
+  ]
+}

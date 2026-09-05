@@ -1,0 +1,104 @@
+{
+  "entries": [
+    {
+      "id": "pl.pos.fantasy_or_reach",
+      "domain": "product_positioning_design",
+      "question_zh": "核心幻想的浓度和受众的宽度怎么换——幻想越锋利（当一个海上拾荒者）越能刺穿目标人群，但每加一分锋利就切掉一圈路人盘；命题越普世越安全但也越没人记得住，刀磨多利？",
+      "follow_ups": [
+        "锋利幻想的破圈路径靠什么——主播效应能不能把小众题材抬进大众视野？",
+        "幻想承诺兑现不足（宣传海盗、实际种田）的口碑反噬比平庸更致命吗？"
+      ],
+      "source_ref": "v2:v2.product_vision_decision.he_xin_ti_yan_cheng_nuo.core_feeling_type"
+    },
+    {
+      "id": "pl.pos.scope_knife",
+      "domain": "product_positioning_design",
+      "question_zh": "MVP 的刀砍向哪个系统——每个系统都说自己是不可删的核心，但验证期养不起全家桶；砍错了核心循环立不住，砍少了死于难产，第一刀落谁头上？",
+      "follow_ups": [
+        "『没有它玩家就不明白这游戏是什么』的判据能不能逼出真核心清单？",
+        "被砍系统的回魂机制（上线后追加）要不要在架构上先留门——留门本身也是成本？"
+      ],
+      "source_ref": "v2:v2.project_scope_decision.m_v_p_fan_wei.positioning_scope_boundary"
+    },
+    {
+      "id": "pl.pos.nongoal_discipline",
+      "domain": "product_positioning_design",
+      "question_zh": "非目标清单立多硬——白纸黑字写死『不做开放世界、不做PVP』能挡住范围蔓延，但市场风向一变这张清单就是绑住自己的绳，非目标的效力定成宪法还是备忘录？",
+      "follow_ups": [
+        "推翻非目标需要什么级别的证据和谁的签字——推翻成本太低清单就是废纸？",
+        "对外承诺过的非目标（宣传语说过绝不加抽卡）被推翻的信用代价怎么估？"
+      ],
+      "source_ref": "v2:v2.product_vision_decision.fei_mu_biao_fan_wei.non_goal_type"
+    },
+    {
+      "id": "pl.pos.audience_conflict",
+      "domain": "product_positioning_design",
+      "question_zh": "两类目标玩家打架时保谁——硬核盘要深度和门槛、大众盘要顺滑和轻量，同一个界面同一套数值没法同时伺候，主客关系立项就得定，谁是主？",
+      "follow_ups": [
+        "『先抓核心再扩大众』和『先抓大众再喂核心』的失败案例各查过几个？",
+        "次要人群的底线体验（不为他们设计但不能赶走他们）画在哪？"
+      ],
+      "source_ref": "v2:v2.target_player_decision.wan_jia_dong_ji.motivation_type"
+    },
+    {
+      "id": "pl.pos.session_reality",
+      "domain": "product_positioning_design",
+      "question_zh": "目标玩家的真实时间结构按什么设计——按玩家自报的『每天两小时』设计日程，实际中位数只有 40 分钟，按理想用户还是按真实数据定内容日耗，日程表按谁的作息排？",
+      "follow_ups": [
+        "重度设计轻度玩（内容日耗大于玩家日供）的欠账几周后开始变成流失？",
+        "碎片时间和整块时间的内容配比，立项期的假设拿什么验证？"
+      ],
+      "source_ref": "v2:v2.target_player_decision.wan_jia_shi_jian_jie_gou.daily_play_window"
+    },
+    {
+      "id": "pl.pos.benchmark_trap",
+      "domain": "product_positioning_design",
+      "question_zh": "对标品抄到什么程度——像它（品类认知搭便车、学习成本低）与不像它（差异化的存在理由）的配比怎么调，抄七改三还是抄三改七，改的那部分敢不敢押上宣发头条？",
+      "follow_ups": [
+        "『XX-like』标签是流量还是天花板——被标签绑定后想撕掉要花几个版本？",
+        "差异点在实机试玩多少分钟内必须被玩家感知到，否则等于没有？"
+      ],
+      "source_ref": "v2:v2.market_category_positioning_decision.jing_pin_ti_yan_can_zhao.positioning_migration_dynamic"
+    },
+    {
+      "id": "pl.pos.platform_first",
+      "domain": "product_positioning_design",
+      "question_zh": "首发平台押哪个——手机盘子大但商业化预期被平台惯性绑死，PC/主机溢价能力强但买断制的口碑一锤定音；跨平台全都要则每端体验都打八折，头胎生在哪？",
+      "follow_ups": [
+        "操作方案按哪端原生设计——触屏原生移植手柄和反过来，畸形感差多少？",
+        "后进平台的移植窗口拖多久，首发平台的独占感和二次宣发的热度怎么平衡？"
+      ],
+      "source_ref": "v2:v2.platform_play_context_decision.mu_biao_ping_tai_ti_yan_bian_jie.positioning_promise"
+    },
+    {
+      "id": "pl.pos.lifecycle_promise",
+      "domain": "product_positioning_design",
+      "question_zh": "生命周期承诺押几年——按十年服务型设计则前期全在铺管线、首发内容薄，按三年买断制设计则爆红后想转长线运营发现地基不支持，寿命的赌注下多大？",
+      "follow_ups": [
+        "两头下注（买断+可扩展框架）的架构溢价是多少——为不确定的未来多付几成？",
+        "生命周期目标和团队规模的匹配度——小团队立十年之约是愿景还是妄念？"
+      ],
+      "source_ref": "v2:v2.business_goal_decision.sheng_ming_zhou_qi_mu_biao.positioning_promise"
+    },
+    {
+      "id": "pl.pos.revenue_model_lockin",
+      "domain": "product_positioning_design",
+      "question_zh": "商业模式几时锁死——买断、内购、订阅的选择渗进每个系统的骨头（成长曲线、内容切法、社交结构），晚定则返工，早定则被锁死在错误假设上，锁定点摆在验证前还是验证后？",
+      "follow_ups": [
+        "中途换模式（买断转F2P）的案例里，哪些系统的重做成本最高？",
+        "混合模式（买断+可选内购）两头的玩家期待互相冲突时，舆论的火先烧哪头？"
+      ],
+      "source_ref": "v2:v2.business_goal_decision.shou_ru_mu_biao_jia_she.positioning_promise"
+    },
+    {
+      "id": "pl.pos.brand_asset_bet",
+      "domain": "product_positioning_design",
+      "question_zh": "品牌资产押角色还是押玩法——角色IP化（看板娘/主角天团）情感溢价高、周边和二创有抓手，但角色塌房或审美过时连累全局；玩法当招牌耐久但难以被爱，脸面给谁？",
+      "follow_ups": [
+        "角色资产的长线维护（配音/人设一致性）成本和玩法迭代成本，哪个更失控？",
+        "二创授权的边界画哪——放开养生态还是收紧保调性？"
+      ],
+      "source_ref": "v2:v2.brand_ip_asset_decision.jue_se_huo_fu_hao_zi_chan.positioning_expression_mechanic"
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "entries": [
+    {
+      "id": "pl.combat.hitstop_weight",
+      "domain": "presentation_feel_design",
+      "question_zh": "命中顿帧做多重——重顿帧每一刀都有斩击实感，但高速连段被顿帧切成幻灯片；轻了流畅但打击像挥空气，帧数卡在哪？",
+      "follow_ups": [
+        "顿帧只给重击还是雨露均沾——只给重击等于用手感给出招表排序？",
+        "多人同屏时顿帧会不会互相干扰——为了联机牺牲单机手感值不值？"
+      ],
+      "source_ref": "v2:v2.juice_control_feel_decision.ming_zhong_gan.presentation_sensory_dynamic"
+    },
+    {
+      "id": "pl.combat.windup_length",
+      "domain": "gameplay_system_design",
+      "question_zh": "攻击前摇留多长——长前摇给对手反应窗口、攻防有来回，但操作者觉得角色迟钝不听话；短前摇跟手但对抗退化成拼手速，时长切哪？",
+      "follow_ups": [
+        "前摇能不能被取消——可取消让高手玩出韵律，但虚招骗反应会不会太脏？",
+        "PVE 和 PVP 用同一套前摇数据吗——分开维护的成本和手感一致性怎么换？"
+      ],
+      "source_ref": "v2:v2.input_control_decision.xiang_ying_gui_ze.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.combat.input_buffer",
+      "domain": "gameplay_system_design",
+      "question_zh": "输入缓冲窗口开多宽——宽缓冲手残党连招成功率高、挫败少，但高手的精确节奏被系统抹平、上限被没收；窄缓冲严苛但精通有回报，宽度定哪？",
+      "follow_ups": [
+        "缓冲宽度做成难度选项，会不会让不同设置下练的连招互不通用？",
+        "错误输入的宽容（方向容错）和时机宽容要不要分开调？"
+      ],
+      "source_ref": "v2:v2.input_control_decision.cao_zuo_rong_cuo.gameplay_control_experience"
+    },
+    {
+      "id": "pl.combat.telegraph_clarity",
+      "domain": "ux_interface_design",
+      "question_zh": "敌人危险预警明牌到什么程度——红圈标毒圈式全明牌人人能躲、观察敌人动作的技能没了用武之地；纯靠读招硬核但普通玩家只觉得被偷袭，预警开多透？",
+      "follow_ups": [
+        "高难度撤掉红圈只留动作前摇，算是奖励精通还是变相惩罚视力？",
+        "多层预警（音效先行、特效跟上）里哪一层才是保底的公平线？"
+      ],
+      "source_ref": "v2:v2.hud_feedback_decision.feng_xian_fan_kui.ux_understanding_experience"
+    },
+    {
+      "id": "pl.combat.hidden_objective",
+      "domain": "gameplay_system_design",
+      "question_zh": "隐藏目标提示给多少——零提示的发现瞬间最珍贵但九成玩家一辈子路过宝藏，攻略一查又全变成清单；给暗示普惠但『我发现的』变成『它让我发现的』，露多少？",
+      "follow_ups": [
+        "全服首个发现者给不给具名记录——把发现做成竞速会不会更好？",
+        "隐藏目标的奖励做强力还是纯纪念——强力奖励等于逼非探索型玩家看攻略？"
+      ],
+      "source_ref": "v2:v2.objective_system_decision.yin_cang_mu_biao.gameplay_playability_signal"
+    },
+    {
+      "id": "pl.combat.optional_objective",
+      "domain": "gameplay_system_design",
+      "question_zh": "可选目标的奖励差距拉多大——差距小则可选目标真可选但没人做，差距大则『可选』名存实亡人人被迫全收集，奖励梯度怎么摆？",
+      "follow_ups": [
+        "可选目标绑进度（收集齐才开隐藏关）还是只绑资源——绑进度还算可选吗？",
+        "全收集的完美主义压力算不算设计负债——给不给『放弃且无痕』的出口？"
+      ],
+      "source_ref": "v2:v2.objective_system_decision.ke_xuan_mu_biao.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.combat.zone_shrink",
+      "domain": "core_experience_design",
+      "question_zh": "安全区收缩节奏怎么定——收得快对局紧凑、苟分党无处遁形，但战术多样性被压缩成刚枪一条路；收得慢发育空间足但中期垃圾时间拉长，曲线怎么画？",
+      "follow_ups": [
+        "收缩节奏每局固定还是随机——随机保新鲜但竞技选手要的是可背版？",
+        "毒圈伤害曲线陡到什么程度，边缘博弈（贴圈打法）还能是合法策略？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.kong_jian_ya_li.core_loop_dynamic"
+    },
+    {
+      "id": "pl.combat.enemy_aggression",
+      "domain": "core_experience_design",
+      "question_zh": "敌人主动性调多高——AI 主动压上逼玩家动起来、龟缩战术失效，但压迫过头玩家连喘息和观察的窗口都没有；被动 AI 安全但战斗变成上门收菜，攻性定哪？",
+      "follow_ups": [
+        "AI 轮流进攻（同时只有 N 个上前）的『影武者规则』算不算必要的假？",
+        "压迫感靠攻击频率还是靠包抄走位——哪种更能逼出玩家的移动？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.dui_kang_ya_li.core_behavior_mechanic"
+    },
+    {
+      "id": "pl.combat.ammo_scarcity",
+      "domain": "core_experience_design",
+      "question_zh": "战斗资源（弹药/药品）掐多紧——紧缺让每发子弹都是决策、生存恐怖的张力全靠它，但囤积症玩家会紧张到弃坑；充裕爽快但资源管理层直接蒸发，紧到哪？",
+      "follow_ups": [
+        "动态补给（越缺越掉）保下限，被玩家识破后紧缺感还剩多少？",
+        "『舍不得用最强道具打完全程』的经典病，靠过期机制还是靠补给承诺治？"
+      ],
+      "source_ref": "v2:v2.pressure_source_decision.zi_yuan_ya_li.core_feeling_target"
+    },
+    {
+      "id": "pl.combat.risk_premium",
+      "domain": "gameplay_system_design",
+      "question_zh": "高危动作的收益溢价给多少——处决、背刺、完美格挡这类高危操作收益翻倍才有人练，但溢价过高就从可选风格变成唯一正解，倍率定哪？",
+      "follow_ups": [
+        "溢价给伤害还是给资源回复——给回复会不会让高手永动、低手永衰？",
+        "高危动作失败的惩罚要不要比普通失误更重，配平它的高收益？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_shou_yi.gameplay_action_dynamic"
+    },
+    {
+      "id": "pl.combat.cooldown_or_cost",
+      "domain": "gameplay_system_design",
+      "question_zh": "技能限制用冷却还是资源——冷却好读好平衡、节奏被动划定，但玩家只是在等图标转好；资源制主动规划有深度但爆发倾泻后是漫长贤者时间，骨架选谁？",
+      "follow_ups": [
+        "冷却缩减和资源回速这两个成长维度，哪个更容易在后期失控？",
+        "大招用双门槛（冷却+能量）锁，庄重感和被限制的憋屈怎么平？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_xian_zhi.gameplay_rule_lever"
+    },
+    {
+      "id": "pl.combat.stance_gate",
+      "domain": "gameplay_system_design",
+      "question_zh": "行动前置条件做多复杂——架势切换、连段路线这类条件系统给深度党嚼头，但每加一层条件就多一批打不出完整循环的玩家，门槛叠几层？",
+      "follow_ups": [
+        "条件不满足时是灰掉按钮还是允许打出劣化版——灰按钮诚实但打断行动流？",
+        "简化模式（自动选择最优行动）会不会反过来证明这套复杂度本来就多余？"
+      ],
+      "source_ref": "v2:v2.action_rule_decision.xing_dong_tiao_jian.gameplay_control_experience"
+    },
+    {
+      "id": "pl.combat.midgame_ramp",
+      "domain": "balance_design",
+      "question_zh": "中期难度爬坡和玩家成长谁跑得快——难度略快于成长保持压力但连续碰壁积累弃坑，成长快于难度则中期开始躺平割草，两条曲线的剪刀差怎么控？",
+      "follow_ups": [
+        "玩家侧的方差（会玩的和不会玩的差三倍战力）用什么工具吸收？",
+        "中期引入新机制怪代替数值涨，产能扛得住每两小时一个新花样吗？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.zhong_qi_nan_du.balance_numeric_dynamic"
+    },
+    {
+      "id": "pl.combat.endgame_check",
+      "domain": "balance_design",
+      "question_zh": "后期难度检查数值还是检查操作——数值墙（装等不够免谈）好做好标定但把实力矮化成数字，机制墙（不会躲必死）尊重技术但卡住的人连氪金出路都没有，墙用哪种砌？",
+      "follow_ups": [
+        "双墙并立（数值门槛+机制考验）会不会把两种玩家都拦在外面？",
+        "机制墙的『毕业考』失败次数到多少要给隐性放水？"
+      ],
+      "source_ref": "v2:v2.balance_difficulty_decision.hou_qi_nan_du.balance_goal"
+    },
+    {
+      "id": "pl.combat.snowball_brake",
+      "domain": "balance_design",
+      "question_zh": "局内滚雪球踩多少刹车——领先者更强是对优势的诚实兑现、翻盘无望也是真实的代价，但被碾压方提前退出情绪蔓延；橡皮筋拉回悬念但赢家觉得胜利被稀释，刹车踩多深？",
+      "follow_ups": [
+        "落后补偿藏在暗处（击杀领先者赏金加成）还是摆明面——暗补被发现的信任成本？",
+        "翻盘率控制在什么区间算健康——两成还是三成，数据说了算还是体感说了算？"
+      ],
+      "source_ref": "v2:v2.balance_competition_decision.gun_xue_qiu_kong_zhi.balance_tuning_lever"
+    },
+    {
+      "id": "pl.combat.animation_cancel",
+      "domain": "presentation_feel_design",
+      "question_zh": "后摇取消开放到什么程度——可取消让高手打出丝滑韵律、上限拔高，但动画完整性被切碎、角色像抽搐；锁死后摇动作扎实但操作天花板被钉死，开多大口？",
+      "follow_ups": [
+        "取消资格绑资源（耗气取消）能不能让取消本身成为决策而不是白嫖？",
+        "官方不做取消、玩家用 bug 玩出取消时，追认还是修复？"
+      ],
+      "source_ref": "v2:v2.juice_control_feel_decision.cao_zuo_jie_zou_gan.presentation_mechanic"
+    },
+    {
+      "id": "pl.combat.weighty_or_nimble",
+      "domain": "presentation_feel_design",
+      "question_zh": "手感基调压重还是调轻——重手感（收招慢、位移沉）每次出手有承诺感、适合读招博弈，但普通玩家嫌笨重；轻快灵敏爽但动作失去重量叙事，基调定哪头？",
+      "follow_ups": [
+        "重轻分给不同武器承担，还是全局统一一种手感人格？",
+        "手感基调一旦上线还能改吗——手感补丁引发的老玩家肌肉记忆暴动怎么估价？"
+      ],
+      "source_ref": "v2:v2.juice_control_feel_decision.zhong_liang_gan.presentation_feeling_target"
+    },
+    {
+      "id": "pl.combat.death_recap",
+      "domain": "ux_interface_design",
+      "question_zh": "死亡归因给多细——完整伤害日志把每次死都变成可学习的课、冤枉感清零，但『你是怎么菜死的』被数据钉在屏幕上格外扎心；模糊处理留面子但玩家把锅甩给游戏不公，尸检报告写多细？",
+      "follow_ups": [
+        "归因只给自己看还是全队可见——队友看到你的死因是学习材料还是甩锅弹药？",
+        "高频死因（全服 TOP 死法）要不要反过来喂给关卡设计当改版依据？"
+      ],
+      "source_ref": "v2:v2.hud_feedback_decision.shi_bai_fan_kui.ux_usability_signal"
+    },
+    {
+      "id": "pl.combat.danger_zone_reward",
+      "domain": "content_design",
+      "question_zh": "高危区域的奖励溢价标多高——溢价足够狠玩家才肯把命押进去、地图冷热分层才立得起来，但溢价过头安全区沦为过道、全员挤进毒窝，风险定价怎么标？",
+      "follow_ups": [
+        "高危区的危险要可读（进去前就知道多危险）还是要探过才知道？",
+        "动态定价（人越多奖励越摊薄）能不能自动调节拥挤，还是规则太绕没人懂？"
+      ],
+      "source_ref": "v2:v2.level_space_decision.feng_xian_qu_yu.content_experience"
+    },
+    {
+      "id": "pl.combat.elite_density",
+      "domain": "balance_design",
+      "question_zh": "敌人压强用数量堆还是质量提——杂兵海割草爽、演出热闹但单位智能和辨识度全稀释，精英少而狠每场都是正经对局但节奏紧绷无处放松，压强的配方怎么调？",
+      "follow_ups": [
+        "割草段落和精英对决的比例怎么排——纯节奏问题还是资源问题？",
+        "数量压强对性能预算（同屏上限）的挤占，要不要反过来限制设计？"
+      ],
+      "source_ref": "v2:v2.balance_content_decision.nei_rong_qiang_du.balance_numeric_dynamic"
+    }
+  ]
+}

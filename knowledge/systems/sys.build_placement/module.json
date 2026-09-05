@@ -1,0 +1,754 @@
+{
+  "module_id": "sys.build_placement",
+  "semver": "1.0.0",
+  "label_zh": "建造放置",
+  "summary": "将实体按空间规则放入世界格/槽位并产生持续功能的系统（附录 G1）。全谱系 BP0-BP3：预设槽位放置（塔防塔位）→ 网格自由放置+邻接加成 → 多层结构+支撑规则表+蓝图复制 → 可破坏地形+建造经济闭环（拆除返还/维护费）。",
+  "nouns": [
+    {
+      "id": "world_grid_occupancy",
+      "kind": { "kind": "property", "of": "world_map" },
+      "label_zh": "世界格归属表",
+      "summary": "本系统独占的核心状态：哪格放了什么，含朝向与层级列。所有合法性/邻接/支撑查询都以它为唯一真相。"
+    },
+    {
+      "id": "placement_command",
+      "kind": { "kind": "signal" },
+      "label_zh": "放置指令",
+      "summary": "玩家/AI 侧发起的放置请求信号，载荷为目标格、放置物类型与朝向；本系统消费它做合法性裁定。"
+    },
+    {
+      "id": "placed_structure",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "放置态实体",
+      "summary": "落成后的建筑/塔实例：位置、朝向、层级、耐久、在建/落成/停机状态都是它的列。"
+    },
+    {
+      "id": "adjacency_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "邻接规则挂点",
+      "summary": "邻接加成规则的可修改挂点：允许他系统 ModifyRule 作用（如科技研究放大邻接系数），也是编译器挂邻接修饰器的锚。"
+    },
+    {
+      "id": "structure_function_value",
+      "kind": { "kind": "property", "of": "placed_structure" },
+      "label_zh": "放置物功能值",
+      "summary": "邻接修饰器作用的目标属性：塔的攻速、农田的产量、工厂的吞吐——放置物对外输出功能的量化口径。"
+    },
+    {
+      "id": "placement_done_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "放置落成事件",
+      "summary": "一次放置最终落成的时点信号，载荷为放置态实体与格位；供任务/引导/成就监听。"
+    }
+  ],
+  "interface": {
+    "provides": ["placed_structure", "placement_done_signal", "adjacency_rule_slot"],
+    "consumes": [
+      "placement_command",
+      "sys.loot.material_entity",
+      "sys.economy.currency_main"
+    ],
+    "modifies": ["world_grid_occupancy", "structure_function_value"]
+  },
+  "mda": {
+    "mechanics_summary": "放置合法性裁定/格占用口径/结算时点/网格拓扑/邻接加成/朝向端口/支撑规则表/蓝图复制/拆除返还/维护费/可破坏地形的机制群。",
+    "dynamics_notes": [
+      "玩家在放置预览中反复试探合法边界（信号：预览驳回率、单次放置确认前的位置调整次数）",
+      "BP1 档以上出现布局定式与抄作业传播（信号：同型布局模板在玩家群体中的重复出现率）",
+      "BP3 档拆改频率反映经济阀设置是否合理（信号：拆除/新建比、维护欠费停机率）"
+    ],
+    "aesthetics_primary": ["表达", "挑战"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "bp0_preset_slots",
+        "label_zh": "BP0 预设槽位放置",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.build_placement.slot_legality",
+          "sys.build_placement.occupancy_rule",
+          "sys.build_placement.build_cost_timing"
+        ],
+        "inductions": [],
+        "summary": "塔防塔位口径：世界预留放置位，请求进来只做合法性检查与占位结算。C≥2（consumes 放置指令与货币；modifies 格归属表）。"
+      },
+      {
+        "id": "bp1_grid_adjacency",
+        "label_zh": "BP1 +网格自由放置与邻接加成",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.build_placement.slot_legality",
+          "sys.build_placement.occupancy_rule",
+          "sys.build_placement.build_cost_timing",
+          "sys.build_placement.grid_topology",
+          "sys.build_placement.adjacency_rule",
+          "sys.build_placement.facing_rule"
+        ],
+        "inductions": [],
+        "summary": "模拟经营/农场布局口径：放置空间连续开放，邻接加成让『放在哪』成为会话级重复决策，P 升至 2。"
+      },
+      {
+        "id": "bp2_multilayer_blueprint",
+        "label_zh": "BP2 +多层结构、支撑规则表与蓝图复制",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.build_placement.slot_legality",
+          "sys.build_placement.occupancy_rule",
+          "sys.build_placement.build_cost_timing",
+          "sys.build_placement.grid_topology",
+          "sys.build_placement.adjacency_rule",
+          "sys.build_placement.facing_rule",
+          "sys.build_placement.support_rule",
+          "sys.build_placement.blueprint_copy"
+        ],
+        "inductions": [
+          {
+            "when_tier": "bp2_multilayer_blueprint",
+            "target": { "noun_provided": "material_entity" },
+            "min_tier": "",
+            "reason": "蓝图复制与多层结构把材料吞吐放大一个量级：任一实例必须 provides 材料实体（掉落/采集/商店任一来源即满足——析取语义）"
+          }
+        ],
+        "summary": "Minecraft 级建造：多层占格与支撑合法性由规则表静态裁定，蓝图把成片布局变成可复制资产。射程边界（用户特别检查所划）：物理坍塌动力学出射程，本档只承诺支撑**规则表**——『立不立得住』按表裁定，『怎么塌』不模拟。"
+      },
+      {
+        "id": "bp3_destructible_economy",
+        "label_zh": "BP3 +可破坏地形与建造经济闭环",
+        "rating": { "m": 3, "d": 3, "c": 3, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 7,
+        "activates": [
+          "sys.build_placement.slot_legality",
+          "sys.build_placement.occupancy_rule",
+          "sys.build_placement.build_cost_timing",
+          "sys.build_placement.grid_topology",
+          "sys.build_placement.adjacency_rule",
+          "sys.build_placement.facing_rule",
+          "sys.build_placement.support_rule",
+          "sys.build_placement.blueprint_copy",
+          "sys.build_placement.demolish_refund",
+          "sys.build_placement.upkeep_model",
+          "sys.build_placement.terrain_destruct"
+        ],
+        "inductions": [
+          {
+            "when_tier": "bp3_destructible_economy",
+            "target": { "module": "sys.economy" },
+            "min_tier": "recycle_loop",
+            "reason": "拆除返还与维护费是货币回收回路的两个终端：经济系统必须达到回收回路档，否则建造侧的沉没与返还没有账本承接"
+          }
+        ],
+        "summary": "建造经济成环：地形可破坏进资源经济，拆除返还与维护费给建造装上回收阀。C/O 推满进入极重档。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.build_placement.slot_legality",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "一次放置请求按什么规则裁定合法？",
+      "design_question": "玩家把塔/建筑拖到某处松手的那一刻，系统查什么说『行』或『不行』？合法性口径决定放置是分配题还是空间创造题。",
+      "tier_gate": "bp0_preset_slots",
+      "options": [
+        {
+          "id": "preset_slot_whitelist",
+          "label": "预设槽位白名单",
+          "summary": "世界预先烘焙可放置槽位表，请求落在开放槽位即合法（塔防塔位口径）",
+          "implications": [
+            "关卡设计完全控制放置空间，每图的放置预算=槽位数，平衡可逐图核算",
+            "玩家决策收敛为『哪个槽放哪个塔』的分配问题，无空间创造成分",
+            "槽位表是关卡数据不是机制：加图不改规则，但槽位解锁节奏要与波次难度联动"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "slot_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "slot_tag", "kind": { "kind": "text" }, "required": true },
+            { "key": "enabled_from_wave", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
+          ], "row_key": "slot_id", "cardinality_key": "preset_slot_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "slot_open(target_slot)", "difficulty_expr": "0", "on_success": [
+              { "effect": "spawn_entity", "entity": "placed_structure" },
+              { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim(target_slot, structure_id)" },
+              { "effect": "emit_signal", "signal": "placement_done_signal" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "placement_rejected" }
+            ] }
+          ]
+        },
+        {
+          "id": "predicate_rule_check",
+          "label": "谓词规则现场裁定",
+          "summary": "无预设槽位，按谓词链（地形类型∈允许集/无碰撞/在归属区域内/间距约束）对任意格现场裁定",
+          "implications": [
+            "放置空间连续开放，玩家能发明设计者没预料的布局——表达美学的来源",
+            "谓词链每加一条，全地图合法域整体变化，关卡侧失去逐点控制权",
+            "放置预览必须给实时红/绿反馈并说明驳回原因，否则谓词链越长挫败越深"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "predicate_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "rule_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "failure_hint", "kind": { "kind": "text" }, "required": true, "is_skin": true }
+          ], "row_key": "predicate_id", "cardinality_key": "legality_predicate_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "all_predicates_pass(target_cell, structure_type)", "difficulty_expr": "0", "on_success": [
+              { "effect": "spawn_entity", "entity": "placed_structure" },
+              { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim(target_cell, structure_id)" },
+              { "effect": "emit_signal", "signal": "placement_done_signal" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "placement_rejected" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.occupancy_rule",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "一个世界格能同时容纳多少放置物？",
+      "design_question": "格归属表的每个格子是独木桥还是多层公寓？占用口径决定纵向组合玩法是否存在。",
+      "tier_gate": "bp0_preset_slots",
+      "options": [
+        {
+          "id": "exclusive_cell",
+          "label": "一格一物",
+          "summary": "每格唯一归属，重叠即非法；归属表是一张平面表",
+          "implications": [
+            "冲突裁定 O(1)，归属表两态（空/占），实现与玩家心智都最简",
+            "布局密度上限=格数，优化是纯装箱问题",
+            "地基+建筑+装饰这类纵向组合必须做成实体合成（一个实体多个部件），不能靠叠格表达"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim_exclusive(cell, structure_id) fail_if_occupied" }
+          ]
+        },
+        {
+          "id": "layered_coexist",
+          "label": "分层共存",
+          "summary": "每格按图层表（地基/主体/附件/装饰）分层，同层互斥、异层共存",
+          "implications": [
+            "同一格的纵向组合成为新的表达维度（地板+机器+顶棚灯）",
+            "归属表变三维（格×层），所有邻接/支撑查询都要带层参数，复杂度全面上浮",
+            "图层定义表是全局词汇：加一层=全部放置物要声明归层，要走变更纪律"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "layer_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "z_order", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 15.0 }, "required": true }
+          ], "row_key": "layer_id", "cardinality_key": "cell_layer_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim_layer(cell, layer_of(structure_type), structure_id) fail_if_layer_occupied" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.build_cost_timing",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "放置的资源结算与功能生效发生在什么时刻？",
+      "design_question": "钱在松手瞬间扣掉且建筑立即工作，还是先立脚手架再等施工完成？时点口径决定建造是即时战术还是排程计划。",
+      "tier_gate": "bp0_preset_slots",
+      "options": [
+        {
+          "id": "instant_build",
+          "label": "即时结算即时生效",
+          "summary": "松手扣资源，建筑立即落成生效（塔防/RTS 微操口径）",
+          "implications": [
+            "放置是战术动作：战斗中可以反应式补防，操作深度进会话层",
+            "无在建状态，格归属表只有两态，实现与心智成本最低",
+            "建造速度不存在，无法作为科技/加成/差异化维度使用"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "build_cost(structure_type)" },
+            { "effect": "spawn_entity", "entity": "placed_structure" },
+            { "effect": "emit_signal", "signal": "placement_done_signal" }
+          ]
+        },
+        {
+          "id": "construction_period",
+          "label": "施工期建造",
+          "summary": "松手立即占格进入在建态，经过施工时间（或工人劳动）后落成",
+          "implications": [
+            "建造进入排程规划：提前量与优先级成为核心技能，P 维价值上移",
+            "在建态是第三种格状态，可被打断/加速/摧毁，衍生一整族规则",
+            "时间与资源双轴定价，平衡空间更大，但『等待』的体验成本要用进度反馈支付"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "base_build_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 600.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "build_cost(structure_type)" },
+            { "effect": "change_state", "machine": "placed_structure.build_state", "to_state": "under_construction" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:base_build_seconds}", "unit": "seconds", "inner": [
+              { "effect": "change_state", "machine": "placed_structure.build_state", "to_state": "built" },
+              { "effect": "emit_signal", "signal": "placement_done_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.grid_topology",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "自由放置基于什么空间离散口径？",
+      "design_question": "世界被切成正交方格，还是连续坐标加碰撞盒？切法决定『对齐』的含义与邻接的定义域。",
+      "tier_gate": "bp1_grid_adjacency",
+      "options": [
+        {
+          "id": "square_grid_footprint",
+          "label": "方格+占地脚印",
+          "summary": "世界为正交方格，建筑按 W×H 脚印占格并自动对齐",
+          "implications": [
+            "邻接/支撑/寻路全部落在整数格上，规则表离散可枚举、可审计",
+            "脚印表即建筑的空间词汇：大建筑=多格，旋转=脚印转置",
+            "斜排/曲线布局不可表达，世界呈现格状肌理——美术风格要顺着格走"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "structure_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "footprint_w", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 16.0 }, "required": true },
+            { "key": "footprint_h", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 16.0 }, "required": true }
+          ], "row_key": "structure_type", "cardinality_key": "footprint_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim_rect(anchor_cell, footprint_w(structure_type), footprint_h(structure_type))" }
+          ]
+        },
+        {
+          "id": "continuous_anchor_collision",
+          "label": "连续锚点+碰撞盒",
+          "summary": "无格，建筑按连续坐标放置，碰撞盒互不重叠即可（动物园之星/城市天际线口径）",
+          "implications": [
+            "布局自由度最大，斜排、曲线街道、贴合地形的有机布局成为可能",
+            "邻接不能数格：一切邻接规则改为半径查询，加成表全部带距离参数",
+            "吸附/网格线等对齐辅助从机制降为 UI 服务，不做则杂乱布局惩罚整体美感"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "snap_radius", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 4.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim_region(position_snapped({param:snap_radius}), collision_box(structure_type))" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.adjacency_rule",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "邻接加成按什么规则计算？",
+      "design_question": "『放在一起更好』的数学形态是数邻居个数，还是查特定组合表？前者奖励密度，后者奖励配方。",
+      "tier_gate": "bp1_grid_adjacency",
+      "options": [
+        {
+          "id": "neighbor_count_scaling",
+          "label": "同类计数加成",
+          "summary": "数同类邻居个数，按曲线换算加成（文明区域/农田连片口径）",
+          "implications": [
+            "规则一句话可传达，玩家自发形成聚类布局的直觉",
+            "最优解趋向同类大块聚集，布局多样性受损——曲线做边际递减是常用解毒剂",
+            "曲线形状（线性/递减/封顶）是唯一平衡阀，调参维度小"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "per_neighbor_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "adjacency_radius", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 3.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "area_apply", "area_kind": "grid", "area_params": { "radius": "{param:adjacency_radius}" }, "target_filter": "same_type_structures", "inner": [
+              { "effect": "modify_property", "entity": "placed_structure", "property": "structure_function_value", "formula": "base_value * (1 + neighbor_count * {param:per_neighbor_bonus})" }
+            ] }
+          ]
+        },
+        {
+          "id": "pair_synergy_table",
+          "label": "组合配对表",
+          "summary": "特定类型对（A 邻 B）按配对表给方向性加成（灯塔照渔场/仓库辐射工厂口径）",
+          "implications": [
+            "布局变成配方解谜，发现新组合是核心乐趣与社区话题来源",
+            "配对表按类型数平方增长，每加一种建筑要全表回查一遍",
+            "加成的方向性（谁给谁）必须在 UI 显式可读，否则玩家读不懂布局收益"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "pair_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "source_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "target_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "bonus_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "radius", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ], "row_key": "pair_id", "cardinality_key": "adjacency_pair_rows" },
+          "effects_template": [
+            { "effect": "area_apply", "area_kind": "grid", "area_params": { "radius": "radius(pair_id)" }, "target_filter": "structures_of(target_type)", "inner": [
+              { "effect": "attach", "modifier_id": "adjacency_pair_bonus", "target": "placed_structure", "duration_expr": "while_adjacent(source_type)", "priority": 0 }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.facing_rule",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "建筑朝向是否承载机制、按什么规则参与？",
+      "design_question": "旋转建筑改变的是贴图还是功能？若传送带口/炮塔扇形随朝向走，旋转就是机制词汇的一员。",
+      "tier_gate": "bp1_grid_adjacency",
+      "options": [
+        {
+          "id": "cosmetic_rotation",
+          "label": "纯外观旋转",
+          "summary": "朝向只影响贴图，功能各向同性",
+          "implications": [
+            "放置心智少一个维度，上手门槛低，适合休闲经营",
+            "输送口对接、扇形火力等定向玩法全部不可表达",
+            "旋转落皮层：换皮门径直放行，机制审计不看它"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "placed_structure", "property": "facing", "formula": "rotation (render_only, no_rule_reads)" }
+          ]
+        },
+        {
+          "id": "functional_ports",
+          "label": "功能端口朝向",
+          "summary": "建筑带方向端口（输入/输出/攻击扇形），旋转改变端口指向（异星工厂/戴森球口径）",
+          "implications": [
+            "朝向进入合法性与邻接判定，布局深度大增——错向即断链",
+            "端口错向成为新的失败模式，放置预览必须画出端口指向并支持落地后重转",
+            "端口几何表成为建筑定义的一部分，每种建筑要声明端口边与种类"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "port_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "structure_type", "kind": { "kind": "text" }, "required": true },
+            { "key": "port_side", "kind": { "kind": "text" }, "required": true },
+            { "key": "port_kind", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "port_id", "cardinality_key": "structure_port_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "placed_structure", "property": "port_orientation", "formula": "rotate_ports(port_table(structure_type), rotation)" },
+            { "effect": "modify_property", "entity": "placed_structure", "property": "structure_function_value", "formula": "throughput_if_ports_connected(port_orientation)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.support_rule",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "多层结构的支撑合法性按什么规则表判定？",
+      "design_question": "第二层能悬空多远？支撑规则表回答『什么结构立得住』——这是静态规则表裁定，不是物理模拟（坍塌动力学在射程外）。",
+      "tier_gate": "bp2_multilayer_blueprint",
+      "options": [
+        {
+          "id": "vertical_bearing_column",
+          "label": "垂直承重列",
+          "summary": "每格必须正下方有支撑物或地面，悬挑不允许",
+          "implications": [
+            "规则零参数即可传达，建筑天然呈金字塔式收分",
+            "悬空平台/桥梁不可表达，造型语汇受限，创造美学打折",
+            "拆除下层使整列非法：连锁失稳的处置口径（禁拆/连带变废墟）必须一并定义"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "has_support_directly_below(cell, layer)", "difficulty_expr": "0", "on_success": [
+              { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim(cell, layer, structure_id)" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "placement_rejected" }
+            ] }
+          ]
+        },
+        {
+          "id": "anchor_distance_budget",
+          "label": "锚距预算表",
+          "summary": "从最近锚点（地面/承重柱）起算支撑距离预算，建材决定预算大小（缺氧/围攻建造口径）",
+          "implications": [
+            "悬挑与桥梁在预算内合法，造型自由度与规则可判性兼得",
+            "每格要维护到锚点的距离场，放置/拆除都触发局部重算——性能与实现成本前置",
+            "建材×预算表把材料差异化拉进建造（木短石长），与材料经济直接咬合"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "material_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "support_budget", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 32.0 }, "required": true }
+          ], "row_key": "material_key", "cardinality_key": "support_material_rows" },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "distance_to_nearest_anchor(cell) <= support_budget(material_key)", "difficulty_expr": "0", "on_success": [
+              { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim(cell, layer, structure_id)" }
+            ], "on_failure": [
+              { "effect": "emit_signal", "signal": "placement_rejected" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.blueprint_copy",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "蓝图复制按什么口径下料与落成？",
+      "design_question": "复制一片基地时，材料立即整额划扣整体落成，还是先铺幽灵图纸等补料施工？口径决定蓝图是便捷键还是物流玩法。",
+      "tier_gate": "bp2_multilayer_blueprint",
+      "options": [
+        {
+          "id": "instant_paste_full_cost",
+          "label": "即时粘贴整额下料",
+          "summary": "材料够则整体即时落成，不够则整单拒绝",
+          "implications": [
+            "蓝图=批量放置的快捷键，不引入任何新状态，实现成本最低",
+            "大蓝图对库存的瞬时冲击大，材料囤积成为粘贴前置目标，仓储压力上移",
+            "无半成品状态：复制失败的反馈是全有全无，缺一根梁也贴不下去"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "sum(blueprint_bill_of_materials)" },
+            { "effect": "spawn_entity", "entity": "placed_structure" },
+            { "effect": "emit_signal", "signal": "placement_done_signal" }
+          ]
+        },
+        {
+          "id": "ghost_queue_construction",
+          "label": "幽灵图纸排队施工",
+          "summary": "立即铺设幽灵格占位，材料随供给逐格施工落成（异星工厂建造机器人口径）",
+          "implications": [
+            "蓝图接通物流与施工调度：复制本身成为一项生产任务，规划乐趣延长",
+            "幽灵格是新的格状态——参与占用但无功能，归属表加态、渲染加层",
+            "施工顺序策略（就近优先/关键路径优先）成为可调规则，也是一处新决策"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "build_rate_per_tick", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "change_state", "machine": "world_map.cell_state", "to_state": "ghost_pending" },
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "ticks", "inner": [
+              { "effect": "consume_resource", "resource": "sys.loot.material_entity", "formula": "per_cell_cost * {param:build_rate_per_tick}" },
+              { "effect": "change_state", "machine": "world_map.cell_state", "to_state": "built" },
+              { "effect": "emit_signal", "signal": "placement_done_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.demolish_refund",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "拆除返还按什么比率与口径结算？",
+      "design_question": "拆掉一座建筑拿回多少料？返还率是建造经济的回收阀——太高则重排免费，太低则布局被锁死不敢试错。",
+      "tier_gate": "bp3_destructible_economy",
+      "options": [
+        {
+          "id": "full_refund",
+          "label": "全额返还",
+          "summary": "100% 返还建造投入，重排零成本（创造模式/休闲经营口径）",
+          "implications": [
+            "布局永远可逆，玩家敢于实验，规划失误无惩罚——表达美学优先的选择",
+            "建造消耗失去沉没意义，材料经济只剩产出端，通胀阀要另找位置",
+            "与维护费并存时拆除成为逃税手段，两条规则要联合审计"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "placed_structure" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "build_cost(structure_type) * 1.0" },
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "release(cell)" }
+          ]
+        },
+        {
+          "id": "ratio_refund",
+          "label": "固定比例返还",
+          "summary": "按全局比率返还（常见 50%），差额即沉没成本",
+          "implications": [
+            "重排有价但可承受，规划质量成为长期积累的资产",
+            "返还率是单参数总阀，赛季/难度可整体调整",
+            "高价建筑误拆损失大，需要拆除确认/锁定保护的交互兜底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "refund_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "placed_structure" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "build_cost(structure_type) * {param:refund_ratio}" },
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "release(cell)" }
+          ]
+        },
+        {
+          "id": "decay_refund",
+          "label": "随役龄衰减返还",
+          "summary": "返还率随建筑服役时长衰减至下限——已经回本的老建筑残值低",
+          "implications": [
+            "早拆宽容晚拆吝啬，鼓励玩家尽早纠错而非拖延重构",
+            "每座建筑要记录建成时间戳，结算带时间函数，账面复杂度上升",
+            "隐式衰减曲线玩家读不出来，拆除预览必须明示当前返还金额"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "initial_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "floor_ratio", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "half_life_minutes", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "placed_structure" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "build_cost(structure_type) * max({param:floor_ratio}, {param:initial_ratio} * decay(structure_age, {param:half_life_minutes}))" },
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "release(cell)" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.upkeep_model",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "维护费以什么形态向建筑收取？",
+      "design_question": "养一座建筑的持续成本是定期账单还是缓慢锈蚀？欠费后果的口径（停机/降效/成废墟）决定维护是运营压力还是背景噪音。",
+      "tier_gate": "bp3_destructible_economy",
+      "options": [
+        {
+          "id": "periodic_billing",
+          "label": "周期账单停机",
+          "summary": "按周期从金库扣维护费，欠费建筑停机（功能置零）直至补缴",
+          "implications": [
+            "维护是现金流问题：扩张速度被收入水位钳制，过度扩张自动受罚",
+            "停机态可读性强（建筑打叉即懂），补缴即恢复、无永久损失，挫败温和",
+            "金库枯竭时的批量停机雪崩要有偿付优先级规则（先保军事还是先保生产）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "upkeep_interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 5.0, "max": 3600.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "{param:upkeep_interval_seconds}", "unit": "seconds", "inner": [
+              { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "sum(upkeep_cost(structure_type))" },
+              { "effect": "roll_check", "formula": "treasury_balance >= 0", "difficulty_expr": "0", "on_success": [], "on_failure": [
+                { "effect": "change_state", "machine": "placed_structure.power_state", "to_state": "shutdown" }
+              ] }
+            ] }
+          ]
+        },
+        {
+          "id": "durability_decay",
+          "label": "耐久衰减检修",
+          "summary": "建筑耐久随时间衰减，归零前需消耗材料到场检修，归零变废墟",
+          "implications": [
+            "维护成本落在材料与到场劳动上，接物流/人力而非金库——生存建造的惯用口径",
+            "检修是空间任务：基地规模被维护动线半径实际约束，摊大饼有自然上限",
+            "废墟化是硬惩罚，漏检损失远大于停机口径，需要衰减预警 UI 兜底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "decay_per_hour", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 100.0 }, "required": true },
+            { "key": "repair_material_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "ticks", "inner": [
+              { "effect": "modify_property", "entity": "placed_structure", "property": "durability", "formula": "durability - {param:decay_per_hour} * tick_hours" },
+              { "effect": "roll_check", "formula": "durability <= 0", "difficulty_expr": "0", "on_success": [
+                { "effect": "change_state", "machine": "placed_structure.build_state", "to_state": "ruin" }
+              ], "on_failure": [] }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.build_placement.terrain_destruct",
+      "domain": "build_placement",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "可破坏地形的破坏与产出按什么规则结算？",
+      "design_question": "挖掉一格山体，世界失去什么、玩家得到什么？破坏是采集动词还是纯地形编辑，决定地形本身是否进资源经济。",
+      "tier_gate": "bp3_destructible_economy",
+      "options": [
+        {
+          "id": "harvest_yield_destruct",
+          "label": "破坏即采集",
+          "summary": "破坏地形格按产出表返还材料，地形即矿藏（Minecraft 口径）",
+          "implications": [
+            "地形成为一次性资源库存：世界体积是经济总量的一部分，挖穿即枯竭",
+            "挖掘动线与建造动线合一，拆山填海本身是生产行为，动词表最凝聚",
+            "产出表×地形分布共同决定前期经济节奏，世界生成参数要与经济联合配平"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "terrain_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "yield_material", "kind": { "kind": "text" }, "required": true },
+            { "key": "yield_amount", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
+          ], "row_key": "terrain_key", "cardinality_key": "terrain_yield_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "clear_terrain(cell)" },
+            { "effect": "grant_resource", "resource": "sys.loot.material_entity", "formula": "yield_amount(terrain_key)" },
+            { "effect": "emit_signal", "signal": "terrain_destroyed" }
+          ]
+        },
+        {
+          "id": "edit_no_yield",
+          "label": "纯地形编辑无产出",
+          "summary": "破坏只改变通行性与可建性，无材料产出，成本落在工时/费用上",
+          "implications": [
+            "地形编辑是空间投资不是收入来源，经济与地质彻底解耦",
+            "没有挖矿动机，破坏只服务于布局需要，发生频率低、世界形变可控",
+            "『刷图挖矿』类经济漏洞天然免疫，平衡审计少一整章"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "excavation_base_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "{param:excavation_base_cost} * terrain_hardness(terrain_key)" },
+            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "clear_terrain(cell)" },
+            { "effect": "emit_signal", "signal": "terrain_destroyed" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "preset_slot_rows": { "min": 4, "max": 200 },
+    "legality_predicate_rows": { "min": 2, "max": 12 },
+    "cell_layer_rows": { "min": 2, "max": 6 },
+    "footprint_rows": { "min": 3, "max": 200 },
+    "adjacency_pair_rows": { "min": 4, "max": 120 },
+    "structure_port_rows": { "min": 2, "max": 80 },
+    "support_material_rows": { "min": 2, "max": 12 },
+    "terrain_yield_rows": { "min": 3, "max": 40 }
+  },
+  "consistency_rules": [
+    {
+      "id": "refund_and_upkeep_answered_together",
+      "kind": "answered_together",
+      "first": "sys.build_placement.demolish_refund",
+      "second": "sys.build_placement.upkeep_model"
+    }
+  ],
+  "skin_fields": ["structure_appearance", "construction_vfx"]
+}

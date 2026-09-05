@@ -1,0 +1,486 @@
+{
+  "module_id": "sys.scoring_combo",
+  "semver": "1.0.0",
+  "label_zh": "计分连击",
+  "summary": "把行为事件按计分规则累积为分数、连击与评级的系统（缺口扫描 G11）。谱系四档：行为计分表（街机分数）→ 连击计数+倍率/衰减窗口（音游 combo、三消连锁）→ 多维评级结算（DMC 风格分 S-D）→ 对抗性计分（得分即胜负输入，向对局赛制类系统供名词）。横切束型系统：#29 谱面判定/#38 三消棋盘/#1 战斗只产事件不产分数，本系统消费不同事件源统一转换为分数名词。",
+  "nouns": [
+    {
+      "id": "score_pool",
+      "kind": { "kind": "resource" },
+      "label_zh": "分数累计",
+      "summary": "本局/本段累积的分数，有余额语义（只增或受惩罚扣减，局末结算清零）。分数独占状态的载体。"
+    },
+    {
+      "id": "combo_state",
+      "kind": { "kind": "property", "of": "scoring_session" },
+      "label_zh": "连击状态",
+      "summary": "当前连击计数与生效倍率，挂在计分会话上；断连即归零，是本系统最敏感的实时读数。"
+    },
+    {
+      "id": "rating_grade",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "评级结果",
+      "summary": "一次结算产出的评级实例：各维得分、合成档位（S-D）、达成时间。供结算展示、解锁门控与赛制消费。"
+    },
+    {
+      "id": "score_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "计分事件",
+      "summary": "一笔分数入账或连击状态变化的时点信号，载荷为来源行为与数额；供 UI 跳字、任务计数、赛制胜负判定监听。"
+    },
+    {
+      "id": "scoring_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "计分规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的计分规则位（如道具双倍得分卡对基础分公式的缩放、赛季活动加成）。"
+    }
+  ],
+  "interface": {
+    "provides": ["score_pool", "combo_state", "rating_grade", "score_signal", "scoring_rule_slot"],
+    "consumes": [
+      "sys.rhythm_judgement.judgement_signal",
+      "sys.combat.hit_signal",
+      "sys.match3_board.match_clear_signal"
+    ],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "行为计分表/连击窗口/倍率成长/衰减规则/评级维度合成/评级门槛/胜负绑定的机制群。",
+    "dynamics_notes": [
+      "分数可见后玩家行为从『过关』转向『刷分路线优化』（信号：重开率、同关卡重复游玩次数）",
+      "连击档起断连成为情绪事件，玩家在高连击段趋向保守操作（信号：高连击时的操作密度下降、失误后的退出率）",
+      "评级档起 S 评价成为自我表达目标，玩家研究评级公式的构成（信号：结算界面停留时长、全 S 收集完成度）"
+    ],
+    "aesthetics_primary": ["挑战", "表达"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "k0_score_table",
+        "label_zh": "K0 行为计分表",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.scoring_combo.score_rule"
+        ],
+        "inductions": [],
+        "summary": "一张行为→分值表：吃豆 10 分、击杀 100 分。街机计分的全部。C≥2（consumes 行为事件源；provides 分数）。"
+      },
+      {
+        "id": "k1_combo_window",
+        "label_zh": "K1 +连击与倍率",
+        "rating": { "m": 2, "d": 1, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.scoring_combo.score_rule",
+          "sys.scoring_combo.combo_window",
+          "sys.scoring_combo.multiplier_growth",
+          "sys.scoring_combo.decay_rule"
+        ],
+        "inductions": [],
+        "summary": "连击计数 + 倍率成长 + 衰减窗口：音游 combo 与三消连锁分落此档。分数从流水账变成有张力的实时状态，玩家开始为保连击改变操作。"
+      },
+      {
+        "id": "k2_graded_result",
+        "label_zh": "K2 +多维评级结算",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 2, "o": 2 },
+        "p_floor": 2,
+        "interface_floor": 4,
+        "activates": [
+          "sys.scoring_combo.score_rule",
+          "sys.scoring_combo.combo_window",
+          "sys.scoring_combo.multiplier_growth",
+          "sys.scoring_combo.decay_rule",
+          "sys.scoring_combo.rating_dimensions",
+          "sys.scoring_combo.grade_thresholds"
+        ],
+        "inductions": [],
+        "summary": "多维评级结算：DMC 风格分口径——多样性/受击/时间多维采样合成 S-D 档。评级实体成为对外供给的名词，解锁与收集可挂接。"
+      },
+      {
+        "id": "k3_competitive_scoring",
+        "label_zh": "K3 +对抗性计分",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.scoring_combo.score_rule",
+          "sys.scoring_combo.combo_window",
+          "sys.scoring_combo.multiplier_growth",
+          "sys.scoring_combo.decay_rule",
+          "sys.scoring_combo.rating_dimensions",
+          "sys.scoring_combo.grade_thresholds",
+          "sys.scoring_combo.outcome_binding"
+        ],
+        "inductions": [],
+        "summary": "得分即胜负输入（体育得分/竞技刷分赛）：分数名词（score_pool/rating_grade/score_signal）以裸名词形态对外供给，由对局赛制类系统 consumes 组织成局分与名次——本模块不点名具体赛制模块，析取语义留给组合期。得分策略成为构筑级承诺，P 推满。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.scoring_combo.score_rule",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "行为分值按什么口径计价？",
+      "design_question": "杀一个兵值多少分是写死的，还是看它有多难杀？固定表卖可背性，动态计价卖临场判断。",
+      "tier_gate": "k0_score_table",
+      "options": [
+        {
+          "id": "fixed_value_table",
+          "label": "固定分值表",
+          "summary": "每类行为一行固定分值，同一行为在任何情境下得分相同",
+          "implications": [
+            "分值可背诵，刷分路线可以离线规划，速通/竞分社区的攻略基础",
+            "情境价值差异（残局击杀 vs 顺风补刀）被抹平，临场判断不产生分数回报",
+            "新行为入表即生效，投放粒度细、维护成本线性"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "action_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "base_score", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000000.0 }, "required": true }
+          ], "row_key": "action_id", "cardinality_key": "score_table_rows" },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "score_pool", "formula": "base_score(action_id)" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        },
+        {
+          "id": "context_scaled_value",
+          "label": "情境系数计价",
+          "summary": "基础分值乘以情境系数（目标强度/风险状态/剩余时间），同一行为分数随局面浮动",
+          "implications": [
+            "高风险高回报被计分层直接兑现，玩家的临场判断有分数回报",
+            "系数公式是隐藏复杂度：玩家感知『分数不稳』时需要 UI 拆解展示计价构成",
+            "系数上限必须封顶，否则极端局面刷分策略会碾压正常游玩路线"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "context_multiplier_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "score_pool", "formula": "base_score(action_id) * min(context_factor, {param:context_multiplier_cap})" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.combo_window",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "连击的续连窗口按什么口径判定？",
+      "design_question": "连击是拿时间续的还是拿行为续的？时窗奖励节奏压迫，行为链奖励不失误——两种连击养出不同的紧张感。",
+      "tier_gate": "k1_combo_window",
+      "options": [
+        {
+          "id": "timed_window",
+          "label": "时间窗续连",
+          "summary": "每次得分行为后开一个倒计时窗，窗内再得分则连击+1 并刷新窗口，超时断连",
+          "implications": [
+            "连击压迫玩家保持输出节奏，空窗期（跑图/换弹）成为连击敌人——关卡布怪密度要配合窗长设计",
+            "窗长是唯一手感旋钮：短窗硬核，长窗休闲，可按难度档分表",
+            "倒计时可视化（连击条流逝）本身是核心紧张感来源，UI 是机制的一半"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "window_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 30.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "combo + 1 if within({param:window_seconds})" },
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:window_seconds}", "unit": "seconds", "inner": [
+              { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "0 if no_scoring_action_since" },
+              { "effect": "emit_signal", "signal": "score_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "unbroken_chain",
+          "label": "无失误链续连",
+          "summary": "连击只被失误行为（Miss/受击/漏消）打断，不受时间约束——音游全连口径",
+          "implications": [
+            "连击的敌人是失误而非节奏空窗，玩家可以停下喘息不掉连——紧张感来自不容错",
+            "全连（Full Combo）成为清晰的完美目标，收集/成就体系的天然挂点",
+            "什么算失误必须逐事件源定义（漏判定/被击中/无效消除），跨品类复用时这张失误表是主要适配成本"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "combo + 1 on scoring_action" },
+            { "effect": "roll_check", "formula": "is_miss_event", "difficulty_expr": "0", "on_success": [
+              { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "0" },
+              { "effect": "emit_signal", "signal": "score_signal" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.multiplier_growth",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "连击倍率随计数怎么成长？",
+      "design_question": "10 连和 100 连的得分差距拉多大？阶梯断点制造里程碑，连续成长制造平滑贪婪。",
+      "tier_gate": "k1_combo_window",
+      "options": [
+        {
+          "id": "stepped_tiers",
+          "label": "阶梯倍率档",
+          "summary": "连击数跨过阈值时倍率跳档（10 连×2、30 连×4），档内倍率恒定",
+          "implications": [
+            "跳档瞬间是明确的爽点与播报位（×4! 特效），情绪节奏可设计",
+            "档位阈值前的失误损失感最重——差 2 连跳档时断连是最强挫败，也是最强记忆点",
+            "档表行数少而可读，玩家能背住关键阈值并围绕它规划"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tier_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "combo_threshold", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+            { "key": "multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100.0 }, "required": true }
+          ], "row_key": "tier_key", "cardinality_key": "multiplier_tier_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "multiplier(tier_of(combo_count))" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        },
+        {
+          "id": "continuous_scaling",
+          "label": "连续倍率成长",
+          "summary": "倍率=1+连击数×成长系数（可封顶），每一连都直接抬升下一笔得分",
+          "implications": [
+            "每一连都有边际收益，没有『差几连才跳档』的空窗期，成长感平滑",
+            "无里程碑断点意味着无播报节点，爽点密度靠数字滚动而非事件——表现层负担转移",
+            "封顶值决定长连的收益上限：不封顶时超长连滚雪球，竞分榜会被耐力局统治"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "growth_per_combo", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.001, "max": 1.0 }, "required": true },
+            { "key": "multiplier_cap", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "min(1 + combo_count * {param:growth_per_combo}, {param:multiplier_cap})" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.decay_rule",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "连击/倍率的衰减走什么曲线？",
+      "design_question": "断连是悬崖归零还是坡道滑落？归零狠而清晰，衰减curve温和但要多养一条曲线。",
+      "tier_gate": "k1_combo_window",
+      "options": [
+        {
+          "id": "hard_reset",
+          "label": "断连即归零",
+          "summary": "断连条件满足的瞬间连击与倍率同时归零，无中间态",
+          "implications": [
+            "损失一目了然，断连的挫败与高连的珍贵是同一枚硬币——DMC/音游主流口径",
+            "长连后期玩家风险厌恶急剧上升，可能回避高风险高分行为，与计分层想奖励的行为背道而驰",
+            "机制零参数零维护，全部设计压力转移到续连窗口与倍率成长两点"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "0 on break_condition" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        },
+        {
+          "id": "curve_decay",
+          "label": "曲线衰减",
+          "summary": "无得分行为期间倍率沿衰减曲线滑落（DMC 风格槽掉档口径），重新得分即止跌回升",
+          "implications": [
+            "衰减期是可挽救的警告态而非既成损失，玩家有『抢救连击』的操作窗口",
+            "衰减曲线形状（先缓后陡/线性/指数）直接是手感参数——Curve 参数位的典型场景",
+            "槽的涨落本身成为持续可读的仪表，风格评价系统（潮/帅气度）以它为表现载体"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "curve", "cardinality_key": "decay_curve_samples" },
+          "effects_template": [
+            { "effect": "schedule", "timing": "over_time", "amount_expr": "decay_duration", "unit": "seconds", "inner": [
+              { "effect": "modify_property", "entity": "scoring_session", "property": "combo_state", "formula": "multiplier * curve_sample(elapsed_ratio)" }
+            ] },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.rating_dimensions",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "评级从哪些维度采样合成？",
+      "design_question": "S 评价考的是一门总分还是三门小分？单轴简单直给，多轴逼玩家全面——评级维度即你想强化的玩法姿态清单。",
+      "tier_gate": "k2_graded_result",
+      "options": [
+        {
+          "id": "single_axis_total",
+          "label": "总分单轴评级",
+          "summary": "只按最终分数一根轴查档定级，连击/时间等因素已在得分过程折入总分",
+          "implications": [
+            "结算规则一句话讲完，玩家对『怎么拿 S』没有理解成本",
+            "所有玩法姿态被折进一个数，刷分最优解会单一化（哪招分高用哪招）",
+            "评级档就是分数区间表，跨关卡复用只需调区间，内容成本最低"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "rating_grade" },
+            { "effect": "modify_property", "entity": "rating_grade", "property": "grade_value", "formula": "grade_of(score_pool_total)" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        },
+        {
+          "id": "multi_axis_composite",
+          "label": "多维加权合成",
+          "summary": "多条维度（多样性/受击/用时/连击峰值）各自打分后按权重合成总评（DMC 口径）",
+          "implications": [
+            "单靠一招刷分拿不到 S——多样性轴直接惩罚重复，评级系统主动塑造操作风格",
+            "每条维度是一条独立的采样与归一化规则，维度表本身是持续调平对象",
+            "结算界面必须拆轴展示，否则玩家无法归因『为什么只有 A』，评级失去教学作用"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "dimension_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "sample_expr", "kind": { "kind": "text" }, "required": true },
+            { "key": "weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "dimension_id", "cardinality_key": "rating_dimension_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "rating_grade" },
+            { "effect": "modify_property", "entity": "rating_grade", "property": "grade_value", "formula": "grade_of(sum(dimension_score * weight))" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.grade_thresholds",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "评级门槛按什么基准定标？",
+      "design_question": "S 的分数线是设计师写死的，还是全体玩家考出来的？绝对线卖确定目标，相对线卖竞争位置。",
+      "tier_gate": "k2_graded_result",
+      "options": [
+        {
+          "id": "absolute_threshold_table",
+          "label": "绝对门槛表",
+          "summary": "每个评级档一行固定分数线，逐关卡/难度定标，达线即得",
+          "implications": [
+            "目标确定可追：差多少分到 S 一目了然，重开刷级的动机清晰",
+            "每张关卡都要人工定标一组线，定错（太松/太紧）直接毁掉该关的评级体验",
+            "版本更新改了得分规则后全部门槛表要回查重标，是长线维护的隐性债务"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "grade_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "min_score", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 100000000.0 }, "required": true }
+          ], "row_key": "grade_key", "cardinality_key": "grade_threshold_rows" },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "rating_grade", "property": "grade_value", "formula": "highest_grade where score >= min_score(grade_key)" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        },
+        {
+          "id": "percentile_calibrated",
+          "label": "分位数定标",
+          "summary": "评级线按玩家群体得分分布的分位数动态校准（S=前 5%），随版本自动漂移",
+          "implications": [
+            "评级即相对位置，S 永远稀缺——竞争型玩家的持续动机，休闲玩家的持续挫败",
+            "免人工定标，新关卡上线后由真实数据自动收敛，维护成本近零",
+            "需要在线数据管道与冷启动兜底（首周样本不足时用临时绝对线），单机不可用"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "top_grade_percentile", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.001, "max": 0.5 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "rating_grade", "property": "grade_value", "formula": "grade_by_percentile(score, population_distribution, top={param:top_grade_percentile})" },
+            { "effect": "emit_signal", "signal": "score_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.scoring_combo.outcome_binding",
+      "domain": "scoring_combo",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "对抗场景下分数如何绑定胜负？",
+      "design_question": "比总分还是比先到？累计制让每一分都算数，目标分制让终点前的每一刻都可能翻盘。",
+      "tier_gate": "k3_competitive_scoring",
+      "options": [
+        {
+          "id": "highest_total_wins",
+          "label": "限时累计制",
+          "summary": "固定时长/回合内累计得分，结束时总分高者胜（体育比分/竞分赛口径）",
+          "implications": [
+            "领先方与落后方的策略自然分化（守分 vs 抢分），末段张力由分差决定",
+            "大比分碾压局的垃圾时间是该口径的固有缺陷，需要让分/加速机制兜底",
+            "得分事件全程等价，转播/观战叙事围绕比分曲线展开，可读性极好"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "session_duration_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 30.0, "max": 7200.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:session_duration_seconds}", "unit": "seconds", "inner": [
+              { "effect": "spawn_entity", "entity": "rating_grade" },
+              { "effect": "emit_signal", "signal": "score_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "race_to_target",
+          "label": "目标分抢先制",
+          "summary": "先达到目标分者立即获胜终局，无固定时长（抢七/先得 N 分口径）",
+          "implications": [
+            "临近目标分的每一次得分机会都是赛点级张力，无垃圾时间",
+            "局长不可控（可能速胜可能鏖战），赛程编排与观赛时长预估变难",
+            "目标分数值直接决定平均局长与翻盘窗口，是该口径唯一但极敏感的旋钮"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.scoring_combo" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_score", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 1000000.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "roll_check", "formula": "score_pool", "difficulty_expr": "{param:target_score}", "on_success": [
+              { "effect": "change_state", "machine": "scoring_session", "to_state": "session_won" },
+              { "effect": "spawn_entity", "entity": "rating_grade" },
+              { "effect": "emit_signal", "signal": "score_signal" }
+            ], "on_failure": [] }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "score_table_rows": { "min": 3, "max": 100 },
+    "multiplier_tier_rows": { "min": 2, "max": 12 },
+    "decay_curve_samples": { "min": 3, "max": 20 },
+    "rating_dimension_rows": { "min": 2, "max": 8 },
+    "grade_threshold_rows": { "min": 3, "max": 8 }
+  },
+  "consistency_rules": [
+    {
+      "id": "rating_dimensions_and_thresholds_answered_together",
+      "kind": "answered_together",
+      "first": "sys.scoring_combo.rating_dimensions",
+      "second": "sys.scoring_combo.grade_thresholds"
+    }
+  ],
+  "skin_fields": ["grade_label_theme", "combo_callout_style"]
+}

@@ -298,6 +298,13 @@ pub struct Template {
     /// S3 核验通过后留下的两会话机器证据。旧档为 None。
     #[serde(default)]
     pub crosscheck_proof: Option<CrossCheckProof>,
+    /// 冒烟测试模板标记（T-W7-4b）：标 true 的模板只服务于工具链冒烟/回归，
+    /// 答卷数据未经产线校准，预填路径默认拒绝（`--allow-smoke` 显式放行）。
+    ///
+    /// 旧档缺键 = false（正常模板），行为与扩展前逐字节一致；`answers_digest`
+    /// 只覆盖答卷结构，不含本字段——25 份 BulkMigration 模板加标记不破坏迁移登记指纹。
+    #[serde(default)]
+    pub smoke_test: bool,
 }
 
 impl Template {
@@ -559,6 +566,7 @@ mod tests {
             origin: TemplateOrigin::Reverse,
             mapping_hash: String::new(),
             crosscheck_proof: None,
+            smoke_test: false,
         }
     }
 
