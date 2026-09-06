@@ -169,15 +169,15 @@
             "槽位表是关卡数据不是机制：加图不改规则，但槽位解锁节奏要与波次难度联动"
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
-          "parameter_schema": { "schema": "table", "columns": [
-            { "key": "slot_id", "kind": { "kind": "text" }, "required": true },
-            { "key": "slot_tag", "kind": { "kind": "text" }, "required": true },
-            { "key": "enabled_from_wave", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
-          ], "row_key": "slot_id", "cardinality_key": "preset_slot_rows" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "slot_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "structure_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "occupancy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
           "effects_template": [
-            { "effect": "roll_check", "formula": "slot_open(target_slot)", "difficulty_expr": "0", "on_success": [
-              { "effect": "spawn_entity", "entity": "placed_structure" },
-              { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim(target_slot, structure_id)" },
+            { "effect": "roll_check", "formula": "slot_open({param:slot_table_id}, target_slot)", "difficulty_expr": "0", "on_success": [
+              { "effect": "spawn_entity", "entity": "{param:structure_table_id}" },
+              { "effect": "modify_property", "entity": "{param:occupancy_table_id}", "property": "world_grid_occupancy", "formula": "claim(target_slot, structure_id)" },
               { "effect": "emit_signal", "signal": "placement_done_signal" }
             ], "on_failure": [
               { "effect": "emit_signal", "signal": "placement_rejected" }
@@ -737,7 +737,6 @@
     }
   ],
   "cardinality_expectations": {
-    "preset_slot_rows": { "min": 4, "max": 200 },
     "legality_predicate_rows": { "min": 2, "max": 12 },
     "cell_layer_rows": { "min": 2, "max": 6 },
     "footprint_rows": { "min": 3, "max": 200 },

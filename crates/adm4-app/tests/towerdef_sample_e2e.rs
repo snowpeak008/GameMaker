@@ -17,9 +17,10 @@
 //!   GameSpec + C6 含放置程序任务 + C3 user_prompt 带属性值（5d C3 复核修复的
 //!   调用现场证据，出处 `docs/memory/w7_wave5/5d_C3复核结论.md`）。
 //!
-//! 1c 纪律：全链只用旧 7 变体 + Schedule；BP0 正名点 slot_legality 两选项 effects
-//! 均为 RollCheck（波 1 未交付臂）——署名 N/A 豁免如实申报，放置合法性语义由
-//! occupancy_rule（占用约束）+ 槽位表 enabled_from_wave 列承载（见 5d 验收单）。
+//! 1c 翻正（T-W7-1c）：RollCheck 真渲染交付后，5d 上报的 BP0 正名点 slot_legality
+//! 已改真作答（preset_slot_whitelist，schema 经 1c 归档为 scalar 表引用——Rows 参数
+//! 不走占位符替换的基建缺口以数据形态绕开，见 1c 断点申报）；GWT 断言判定条件 +
+//! 成功落成三拍 + 失败拒绝分支。
 
 use adm4_ai::ScriptedProvider;
 use adm4_app::{AppConfig, AppServices, save_config};
@@ -441,8 +442,10 @@ fn towerdef_full_chain_reaches_phase1_with_bp0_placement_at_c4() {
         .with_project(&archive_id, |engine| {
             let manual = Provenance::UserManual;
             for (decision, option) in [
-                // G1 BP0：一格一物占用约束（放置合法性语义的干净承载点）+ 即时扣费落成
-                //（塔防/RTS 微操口径）。slot_legality 两选项均 RollCheck，走署名豁免（④）。
+                // G1 BP0：预设槽位白名单（正名点，1c 翻正真作答：RollCheck 判定
+                // slot_open，成功落成三拍/失败拒绝）+ 一格一物占用约束 + 即时扣费落成
+                //（塔防/RTS 微操口径）。
+                ("placement_main.slot_legality", "preset_slot_whitelist"),
                 ("placement_main.occupancy_rule", "exclusive_cell"),
                 ("placement_main.build_cost_timing", "instant_build"),
                 // 经济 T0：行为赏金表 + 线性产出曲线。
@@ -464,6 +467,15 @@ fn towerdef_full_chain_reaches_phase1_with_bp0_placement_at_c4() {
 
             // 占位符参数（C1 拦裸名纪律：entity 引用一律 {param:xxx_table_id} + 作者填写）。
             for (decision, parameters) in [
+                // 1c 翻正：判定读槽位表、落成生成塔实体、占位记回槽位表。
+                (
+                    "placement_main.slot_legality",
+                    scalars(&[
+                        ("slot_table_id", text("towerdef.slot_roster")),
+                        ("structure_table_id", text("towerdef.tower_roster")),
+                        ("occupancy_table_id", text("towerdef.slot_roster")),
+                    ]),
+                ),
                 (
                     "placement_main.occupancy_rule",
                     scalars(&[("occupancy_table_id", text("towerdef.slot_roster"))]),
@@ -577,6 +589,7 @@ fn towerdef_full_chain_reaches_phase1_with_bp0_placement_at_c4() {
             assert!(problems.is_empty(), "波次表应过校验：{problems:?}");
 
             for decision in [
+                "placement_main.slot_legality",
                 "placement_main.occupancy_rule",
                 "placement_main.build_cost_timing",
                 "economy_main.income_model",
@@ -592,18 +605,6 @@ fn towerdef_full_chain_reaches_phase1_with_bp0_placement_at_c4() {
             ] {
                 engine.confirm_selection(decision)?;
             }
-
-            // ---- ④ 未交付臂的署名 N/A 豁免（1c 纪律：不改 c4_capabilities，
-            // 撞臂点诚实豁免并上报验收单）----
-            engine.set_not_applicable(
-                "placement_main.slot_legality",
-                "undelivered_effect_arm",
-                "BP0 正名点两选项（预设槽位白名单/谓词现场裁定）effects 均为 RollCheck\
-                 （波 1 未交付臂）；放置合法性语义由 occupancy_rule 的\
-                 claim_exclusive…fail_if_occupied 占用约束 + 槽位表 enabled_from_wave\
-                 解锁列承载——上报 1c",
-                "样板设计师",
-            )?;
 
             let completeness = engine.completeness();
             assert!(
@@ -734,6 +735,24 @@ fn towerdef_full_chain_reaches_phase1_with_bp0_placement_at_c4() {
         assert!(!then.is_empty(), "{cap_id} 的 GWT Then 不得为空");
         then.join("；")
     };
+
+    // 1c 翻正证据③：G1 BP0 正名点 slot_legality（preset_slot_whitelist）——
+    // RollCheck 真渲染：判定条件（槽位开放）+ 成功落成三拍 + 失败拒绝分支。
+    let legality_then = scenario_then("cap_placement_main.slot_legality");
+    assert!(
+        legality_then.contains("按 slot_open(towerdef.slot_roster, target_slot) 对难度 0 判定"),
+        "BP0 槽位判定条件：{legality_then}"
+    );
+    assert!(
+        legality_then.contains(
+            "成功→生成实体 towerdef.tower_roster；实体 towerdef.slot_roster 的 world_grid_occupancy 按公式 claim(target_slot, structure_id) 变化；发出信号 placement_done_signal"
+        ),
+        "BP0 槽位判定成功分支（落成三拍）：{legality_then}"
+    );
+    assert!(
+        legality_then.contains("失败→发出信号 placement_rejected"),
+        "BP0 槽位判定拒绝分支：{legality_then}"
+    );
 
     // G1 BP0 放置合法性到达 C4：一格一物占用约束（fail_if_occupied 即槽位约束语义）
     // 落在槽位表实体上。

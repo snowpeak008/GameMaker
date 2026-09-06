@@ -3,6 +3,7 @@
   "pack_version": "0.2.0",
   "display_name": "通道塔防（示例包：正式内容待逆向产线校准）",
   "reference_games": ["Plants vs Zombies", "Kingdom Rush", "Bloons TD 6"],
+  "core_nouns": ["player_command_intent"],
   "profile_points": [
     "u.genre",
     "u.platform",

@@ -318,11 +318,12 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "per_tag_scaling", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+            { "key": "per_tag_scaling", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "roster_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "attach", "modifier_id": "tag_synergy_bonus", "target": "squad", "duration_expr": "while(tag_count >= tag_threshold)", "priority": 0 },
-            { "effect": "modify_property", "entity": "sys.combat.combat_unit", "property": "combat_stat", "formula": "stat * (1 + roster_tag_count * {param:per_tag_scaling})" }
+            { "effect": "attach", "modifier_id": "tag_synergy_bonus", "target": "{param:roster_table_id}", "duration_expr": "while(tag_count >= tag_threshold)", "priority": 0 },
+            { "effect": "modify_property", "entity": "{param:roster_table_id}", "property": "combat_stat", "formula": "stat * (1 + roster_tag_count * {param:per_tag_scaling})" }
           ]
         }
       ]

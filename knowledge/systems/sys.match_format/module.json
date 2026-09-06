@@ -456,10 +456,11 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "group_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 16.0 }, "required": true },
-            { "key": "advance_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+            { "key": "advance_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true },
+            { "key": "participant_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "group_points += points(win_or_draw)" },
+            { "effect": "modify_property", "entity": "{param:participant_table_id}", "property": "advancement_state", "formula": "group_points += points(win_or_draw)" },
             { "effect": "roll_check", "formula": "group_rank <= {param:advance_count} at group_end", "difficulty_expr": "0", "on_success": [
               { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "advanced" }
             ], "on_failure": [

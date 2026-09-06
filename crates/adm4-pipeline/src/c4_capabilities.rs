@@ -6,9 +6,11 @@ use adm4_contracts::{
 };
 use adm4_foundation::{Adm4Error, Adm4Result};
 use adm4_spec::{
-    AcceptanceScenario, EffectSpec, GameSpec, MechanicSpec, RulePatch, ScheduleTiming, ScheduleUnit,
+    AcceptanceScenario, AreaKind, EffectSpec, GameSpec, MechanicSpec, RulePatch, ScheduleTiming,
+    ScheduleUnit,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 /// 嵌套效果（AreaApply.inner / Schedule.inner / RollCheck.on_success/on_failure）
 /// 的递归深度上限；超限即结构化 Err 点名机制 id（W7 波 1 T-W7-1b）。
@@ -40,6 +42,9 @@ pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
     if spec.mechanics.is_empty() {
         return Err(Adm4Error::validation("GameSpec 无任何机制，C4 无从派生"));
     }
+    // 悬空引用复检（W7 1c，沿 C1 的 ModifyRule 悬空先例）：Attach/Detach 的 target
+    // 与 Detach 的 modifier_id 在投影前整体核对，悬空即结构化 Err 点名机制。
+    check_effect_references(&spec)?;
 
     // 确定性投影：每条机制 → 能力契约 + GWT 场景（枚举投影，无 AI 发明）。
     let mut capabilities = Vec::new();
@@ -152,13 +157,11 @@ pub fn execute(ctx: &RunnerContext<'_>) -> Adm4Result<StageStatus> {
 
 /// 确定性 GWT 投影：preconditions → Given；rule_text → When；effects（封闭枚举）→ Then。
 ///
-/// 已交付渲染臂（T-W7-1b）：旧 7 变体全语义投影 + Displace/Schedule/ModifyRule/
-/// DrawFromPool 模式投影（字段全来自作者填写）+ Custom 转录投影（只誊写设计者
-/// 自己写的 GWT 三段）。嵌套效果（Schedule.inner 等）递归渲染，深度上限
-/// [`MAX_EFFECT_DEPTH`]，超限结构化 Err 点名机制 id。
-///
-/// 未交付臂（AreaApply/Attach/Detach/RollCheck，1c 机动卡）遇到即返回结构化
-/// Err（§0 C4 未交付臂纪律：无 `_` 臂、禁 todo!()）。
+/// 16 变体全交付（T-W7-1b 交付 12 臂 + T-W7-1c 交付 AreaApply/Attach/Detach/
+/// RollCheck 四臂）：旧 7 变体全语义投影 + 第 2 层 8 变体模式投影（每变体一个
+/// 固定渲染函数，字段全来自作者填写）+ Custom 转录投影（只誊写设计者自己写的
+/// GWT 三段）。嵌套效果（AreaApply.inner / Schedule.inner / RollCheck 两分支）
+/// 递归渲染，深度上限 [`MAX_EFFECT_DEPTH`]，超限结构化 Err 点名机制 id。
 fn project_scenario(mechanic: &MechanicSpec) -> Adm4Result<AcceptanceScenario> {
     let given = if mechanic.preconditions.is_empty() {
         vec![format!("系统 {} 处于就绪状态", mechanic.system_id)]
@@ -194,11 +197,6 @@ fn render_effect(mechanic_id: &str, effect: &EffectSpec, depth: usize) -> Adm4Re
             "机制 {mechanic_id} 的效果嵌套深度超过上限 {MAX_EFFECT_DEPTH}（AreaApply/Schedule/RollCheck 的内层效果请拍平或拆分机制）"
         )));
     }
-    let undelivered = |variant: &str| {
-        Err(Adm4Error::blocked(format!(
-            "效果变体 {variant} 的需求渲染未交付（W7 波 1 实现）"
-        )))
-    };
     match effect {
         EffectSpec::ModifyProperty {
             entity,
@@ -288,10 +286,99 @@ fn render_effect(mechanic_id: &str, effect: &EffectSpec, depth: usize) -> Adm4Re
         } => Ok(format!(
             "（Custom {verb} 转录）Given {given}；When {when_}；Then {then}"
         )),
-        EffectSpec::AreaApply { .. } => undelivered("AreaApply"),
-        EffectSpec::Attach { .. } => undelivered("Attach"),
-        EffectSpec::Detach { .. } => undelivered("Detach"),
-        EffectSpec::RollCheck { .. } => undelivered("RollCheck"),
+        EffectSpec::AreaApply {
+            area_kind,
+            area_params,
+            inner,
+            target_filter,
+        } => {
+            let inner_rendered = render_nested(mechanic_id, inner, depth)?;
+            let kind_text = area_kind_text(*area_kind);
+            // 空间参数如实逐键渲染（BTreeMap 键序确定，I1）；空表如实写明。
+            let params_text = if area_params.is_empty() {
+                "（无空间参数）".to_string()
+            } else {
+                area_params
+                    .iter()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("，")
+            };
+            let filter_text = if target_filter.trim().is_empty() {
+                "全部目标".to_string()
+            } else {
+                format!("满足 {target_filter} 的目标")
+            };
+            Ok(format!(
+                "对 {kind_text} 范围（{params_text}）内{filter_text}逐个应用：{inner_rendered}"
+            ))
+        }
+        EffectSpec::Attach {
+            modifier_id,
+            target,
+            duration_expr,
+            priority,
+        } => {
+            if modifier_id.trim().is_empty() {
+                return Err(Adm4Error::validation(format!(
+                    "机制 {mechanic_id} 的 Attach 效果缺少 modifier_id（挂载什么修饰器必须由作者声明，投影不发明）"
+                )));
+            }
+            // 生效期字段有什么渲染什么：空 = 作者未声明，如实写明不发明默认值。
+            let duration_text = if duration_expr.trim().is_empty() {
+                "（生效期未声明）".to_string()
+            } else {
+                format!("生效期 {duration_expr}")
+            };
+            // 叠加序渲染进 GWT（W7 定稿 §5.3 指令 7：同目标多修饰器按 priority 结算，
+            // 同序冲突按机制 id 字典序确定性 tie-break——与 ModifyRule 同款文案）。
+            Ok(format!(
+                "把修饰器 {modifier_id} 挂载到 {target}（{duration_text}；按 priority={priority} 结算，同序按机制 id 字典序）"
+            ))
+        }
+        EffectSpec::Detach {
+            modifier_id,
+            target,
+        } => {
+            if modifier_id.trim().is_empty() {
+                return Err(Adm4Error::validation(format!(
+                    "机制 {mechanic_id} 的 Detach 效果缺少 modifier_id（卸下什么修饰器必须由作者声明，投影不发明）"
+                )));
+            }
+            Ok(format!("从 {target} 卸下修饰器 {modifier_id}"))
+        }
+        EffectSpec::RollCheck {
+            formula,
+            difficulty_expr,
+            on_success,
+            on_failure,
+        } => {
+            if formula.trim().is_empty() {
+                return Err(Adm4Error::validation(format!(
+                    "机制 {mechanic_id} 的 RollCheck 效果缺少判定公式 formula（判什么必须由作者声明，投影不发明）"
+                )));
+            }
+            // 两分支都可能为空列表，render_nested 如实渲染「（无内层效果）」。
+            let success_rendered = render_nested(mechanic_id, on_success, depth)?;
+            let failure_rendered = render_nested(mechanic_id, on_failure, depth)?;
+            let difficulty_text = if difficulty_expr.trim().is_empty() {
+                "（难度未声明）".to_string()
+            } else {
+                difficulty_expr.clone()
+            };
+            Ok(format!(
+                "按 {formula} 对难度 {difficulty_text} 判定：成功→{success_rendered}；失败→{failure_rendered}"
+            ))
+        }
+    }
+}
+
+fn area_kind_text(kind: AreaKind) -> &'static str {
+    match kind {
+        AreaKind::Circle => "圆形",
+        AreaKind::Cone => "锥形",
+        AreaKind::Line => "直线",
+        AreaKind::Grid => "网格",
     }
 }
 
@@ -413,6 +500,181 @@ fn collect_effect_structures(
     Ok(())
 }
 
+/// 四臂悬空引用复检（T-W7-1c，沿 ModifyRule 悬空先例 c1_modify_rule_dangling 的
+/// 纪律；判据与 spec 级 effect_dangling_entity 同款：实体 id 或实体类前缀）：
+/// - Attach/Detach 的 target 必须解析到 spec 内真实实体（或实体表行实体的类前缀）；
+/// - Detach 的 modifier_id 必须被 spec 内某机制的 Attach 声明过（卸一个从未挂载的
+///   修饰器 = 悬空引用，转录不发明）；
+/// - 嵌套效果（AreaApply.inner / Schedule.inner / RollCheck 两分支）递归下探，
+///   深度上限与渲染同款。
+///
+/// 为什么落 C4 而非 C1：C1 的扩展复检清单属波 1 交付面（本卡禁改），且该检查
+/// 是渲染的前置条件（悬空 target 渲染出来的 GWT 指向不存在的对象 = 语义丢失），
+/// 与投影同处一站保证「能渲染必可追溯」。
+fn check_effect_references(spec: &GameSpec) -> Adm4Result<()> {
+    let entity_ids: BTreeSet<&str> = spec.entities.iter().map(|item| item.id.as_str()).collect();
+    let entity_known = |id: &str| -> bool {
+        let class_prefix = format!("{id}.");
+        entity_ids.contains(id)
+            || entity_ids
+                .iter()
+                .any(|candidate| candidate.starts_with(&class_prefix))
+    };
+    // 先收全 spec 的已挂载修饰器名（含嵌套），再核对 Detach 引用。
+    let mut attached_modifiers = BTreeSet::new();
+    for mechanic in &spec.mechanics {
+        for effect in &mechanic.effects {
+            collect_attached_modifiers(&mechanic.id, effect, 1, &mut attached_modifiers)?;
+        }
+    }
+    let mut violations = Vec::new();
+    for mechanic in &spec.mechanics {
+        for effect in &mechanic.effects {
+            check_reference_recursively(
+                &mechanic.id,
+                effect,
+                1,
+                &entity_known,
+                &attached_modifiers,
+                &mut violations,
+            )?;
+        }
+    }
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(Adm4Error::validation(format!(
+            "C4 效果悬空引用 {} 项：{}",
+            violations.len(),
+            violations.join("; ")
+        )))
+    }
+}
+
+fn collect_attached_modifiers(
+    mechanic_id: &str,
+    effect: &EffectSpec,
+    depth: usize,
+    attached: &mut BTreeSet<String>,
+) -> Adm4Result<()> {
+    if depth > MAX_EFFECT_DEPTH {
+        return Err(Adm4Error::validation(format!(
+            "机制 {mechanic_id} 的效果嵌套深度超过上限 {MAX_EFFECT_DEPTH}（修饰器收集中止）"
+        )));
+    }
+    match effect {
+        EffectSpec::Attach { modifier_id, .. } => {
+            attached.insert(modifier_id.clone());
+        }
+        EffectSpec::AreaApply { inner, .. } | EffectSpec::Schedule { inner, .. } => {
+            for nested in inner {
+                collect_attached_modifiers(mechanic_id, nested, depth + 1, attached)?;
+            }
+        }
+        EffectSpec::RollCheck {
+            on_success,
+            on_failure,
+            ..
+        } => {
+            for nested in on_success.iter().chain(on_failure.iter()) {
+                collect_attached_modifiers(mechanic_id, nested, depth + 1, attached)?;
+            }
+        }
+        EffectSpec::ModifyProperty { .. }
+        | EffectSpec::SpawnEntity { .. }
+        | EffectSpec::DespawnEntity { .. }
+        | EffectSpec::ChangeState { .. }
+        | EffectSpec::GrantResource { .. }
+        | EffectSpec::ConsumeResource { .. }
+        | EffectSpec::EmitSignal { .. }
+        | EffectSpec::Displace { .. }
+        | EffectSpec::Detach { .. }
+        | EffectSpec::ModifyRule { .. }
+        | EffectSpec::DrawFromPool { .. }
+        | EffectSpec::Custom { .. } => {}
+    }
+    Ok(())
+}
+
+fn check_reference_recursively(
+    mechanic_id: &str,
+    effect: &EffectSpec,
+    depth: usize,
+    entity_known: &dyn Fn(&str) -> bool,
+    attached_modifiers: &BTreeSet<String>,
+    violations: &mut Vec<String>,
+) -> Adm4Result<()> {
+    if depth > MAX_EFFECT_DEPTH {
+        return Err(Adm4Error::validation(format!(
+            "机制 {mechanic_id} 的效果嵌套深度超过上限 {MAX_EFFECT_DEPTH}（悬空引用复检中止）"
+        )));
+    }
+    match effect {
+        EffectSpec::Attach { target, .. } => {
+            if !entity_known(target) {
+                violations.push(format!(
+                    "机制 {mechanic_id} 的 Attach 目标 {target} 不存在（须为 spec 内真实实体 id 或实体类前缀）"
+                ));
+            }
+        }
+        EffectSpec::Detach {
+            modifier_id,
+            target,
+        } => {
+            if !entity_known(target) {
+                violations.push(format!(
+                    "机制 {mechanic_id} 的 Detach 目标 {target} 不存在（须为 spec 内真实实体 id 或实体类前缀）"
+                ));
+            }
+            if !modifier_id.trim().is_empty() && !attached_modifiers.contains(modifier_id) {
+                violations.push(format!(
+                    "机制 {mechanic_id} 的 Detach 修饰器 {modifier_id} 未被 spec 内任何机制挂载（卸载引用悬空）"
+                ));
+            }
+        }
+        EffectSpec::AreaApply { inner, .. } | EffectSpec::Schedule { inner, .. } => {
+            for nested in inner {
+                check_reference_recursively(
+                    mechanic_id,
+                    nested,
+                    depth + 1,
+                    entity_known,
+                    attached_modifiers,
+                    violations,
+                )?;
+            }
+        }
+        EffectSpec::RollCheck {
+            on_success,
+            on_failure,
+            ..
+        } => {
+            for nested in on_success.iter().chain(on_failure.iter()) {
+                check_reference_recursively(
+                    mechanic_id,
+                    nested,
+                    depth + 1,
+                    entity_known,
+                    attached_modifiers,
+                    violations,
+                )?;
+            }
+        }
+        EffectSpec::ModifyProperty { .. }
+        | EffectSpec::SpawnEntity { .. }
+        | EffectSpec::DespawnEntity { .. }
+        | EffectSpec::ChangeState { .. }
+        | EffectSpec::GrantResource { .. }
+        | EffectSpec::ConsumeResource { .. }
+        | EffectSpec::EmitSignal { .. }
+        | EffectSpec::Displace { .. }
+        | EffectSpec::ModifyRule { .. }
+        | EffectSpec::DrawFromPool { .. }
+        | EffectSpec::Custom { .. } => {}
+    }
+    Ok(())
+}
+
 /// AI 只负责接口命名（锚定机制；不可用 = Err，R7）。
 fn name_interface(ctx: &RunnerContext<'_>, mechanic: &MechanicSpec) -> Adm4Result<String> {
     let request = AiRequest {
@@ -506,6 +768,13 @@ mod tests {
             acceptance: Vec::new(),
             source_map: Vec::new(),
         }
+    }
+
+    /// 把机制装进最小 spec（悬空引用复检测试用：复检以整份 spec 为单位）。
+    fn spec_with_mechanic(base: &GameSpec, mechanic: MechanicSpec) -> GameSpec {
+        let mut spec = base.clone();
+        spec.mechanics = vec![mechanic];
+        spec
     }
 
     // ===== 4+1 臂真渲染正例（T-W7-1b 交付）=====
@@ -635,64 +904,140 @@ mod tests {
         );
     }
 
-    // ===== 未交付臂锁定（1c 机动卡范围，§0 纪律保留）=====
+    // ===== 四臂真渲染（T-W7-1c 翻转：原"未交付必 Err"锁定测试按机动卡使命
+    // 翻转为正路径断言；非法字段/悬空引用的负测试保留在后段）=====
 
-    /// 锁定：AreaApply/Attach/Detach/RollCheck 在 1c 交付真渲染前必须走
-    /// 结构化"未交付"Err，不许悄悄糊假渲染（§0 C4 未交付臂纪律）。
+    /// AreaApply 真渲染：形状/空间参数/过滤器全部来自作者填写，inner 递归展开；
+    /// 空参数/空过滤器/空内层如实渲染，不发明内容。
     #[test]
-    fn remaining_arms_are_honest_undelivered_err() {
-        let cases: [(EffectSpec, &str); 4] = [
-            (
-                EffectSpec::AreaApply {
-                    area_kind: Default::default(),
-                    area_params: BTreeMap::new(),
-                    inner: Vec::new(),
-                    target_filter: String::new(),
-                },
-                "AreaApply",
-            ),
-            (
-                EffectSpec::Attach {
-                    modifier_id: "buff".into(),
-                    target: "enemy".into(),
-                    duration_expr: "3".into(),
-                    priority: 1,
-                },
-                "Attach",
-            ),
-            (
-                EffectSpec::Detach {
-                    modifier_id: "buff".into(),
-                    target: "enemy".into(),
-                },
-                "Detach",
-            ),
-            (
-                EffectSpec::RollCheck {
-                    formula: "d20".into(),
-                    difficulty_expr: "12".into(),
-                    on_success: Vec::new(),
-                    on_failure: Vec::new(),
-                },
-                "RollCheck",
-            ),
-        ];
-        for (effect, variant) in cases {
-            let mechanic = mechanic_with(vec![effect]);
-            let error =
-                project_scenario(&mechanic).expect_err(&format!("{variant} 渲染未交付应 Err"));
-            assert_eq!(error.kind, Adm4ErrorKind::Blocked);
-            assert!(
-                error.message.contains(variant) && error.message.contains("未交付"),
-                "{}",
-                error.message
-            );
-        }
+    fn area_apply_projection_renders_shape_params_and_inner() {
+        let mechanic = mechanic_with(vec![EffectSpec::AreaApply {
+            area_kind: AreaKind::Cone,
+            area_params: BTreeMap::from([
+                ("angle".to_string(), "60".to_string()),
+                ("radius".to_string(), "5".to_string()),
+            ]),
+            inner: vec![EffectSpec::ModifyProperty {
+                entity: "enemy".into(),
+                property: "hp".into(),
+                formula: "hp - burst".into(),
+            }],
+            target_filter: "faction != caster.faction".into(),
+        }]);
+        let scenario = project_scenario(&mechanic).expect("AreaApply 真渲染已交付");
+        assert_eq!(
+            scenario.then,
+            vec![
+                "对 锥形 范围（angle=60，radius=5）内满足 faction != caster.faction 的目标逐个应用：实体 enemy 的 hp 按公式 hp - burst 变化"
+                    .to_string()
+            ]
+        );
+
+        // 裸 AreaApply（缺参数/过滤器/内层）如实渲染空语义，不 Err 不发明。
+        let bare = mechanic_with(vec![EffectSpec::AreaApply {
+            area_kind: Default::default(),
+            area_params: BTreeMap::new(),
+            inner: Vec::new(),
+            target_filter: String::new(),
+        }]);
+        let scenario = project_scenario(&bare).expect("裸 AreaApply 应如实渲染");
+        assert_eq!(
+            scenario.then,
+            vec!["对 圆形 范围（（无空间参数））内全部目标逐个应用：（无内层效果）".to_string()]
+        );
     }
 
-    /// 混入一个未交付变体就整体 Err：已交付变体不因同机制的未交付变体被静默丢弃。
+    /// Attach 真渲染：修饰器/目标/生效期全来自作者填写，叠加序文字与 ModifyRule
+    /// 同款（W7 定稿 §5.3 指令 7）。
     #[test]
-    fn mixed_effects_fail_whole_projection() {
+    fn attach_projection_renders_modifier_duration_and_priority_order() {
+        let mechanic = mechanic_with(vec![EffectSpec::Attach {
+            modifier_id: "tag_synergy_bonus".into(),
+            target: "squad".into(),
+            duration_expr: "while(tag_count >= tag_threshold)".into(),
+            priority: 10,
+        }]);
+        let scenario = project_scenario(&mechanic).expect("Attach 真渲染已交付");
+        assert_eq!(
+            scenario.then,
+            vec![
+                "把修饰器 tag_synergy_bonus 挂载到 squad（生效期 while(tag_count >= tag_threshold)；按 priority=10 结算，同序按机制 id 字典序）"
+                    .to_string()
+            ]
+        );
+
+        // 生效期未声明时如实写明，不发明默认值。
+        let no_duration = mechanic_with(vec![EffectSpec::Attach {
+            modifier_id: "buff".into(),
+            target: "enemy".into(),
+            duration_expr: String::new(),
+            priority: 0,
+        }]);
+        let scenario = project_scenario(&no_duration).expect("缺生效期仍应渲染");
+        assert!(
+            scenario.then[0].contains("（生效期未声明）"),
+            "{}",
+            scenario.then[0]
+        );
+    }
+
+    /// Detach 真渲染：目标与修饰器全来自作者填写。
+    #[test]
+    fn detach_projection_renders_target_and_modifier() {
+        let mechanic = mechanic_with(vec![EffectSpec::Detach {
+            modifier_id: "gem_effect".into(),
+            target: "equipment_entity".into(),
+        }]);
+        let scenario = project_scenario(&mechanic).expect("Detach 真渲染已交付");
+        assert_eq!(
+            scenario.then,
+            vec!["从 equipment_entity 卸下修饰器 gem_effect".to_string()]
+        );
+    }
+
+    /// RollCheck 真渲染：公式/难度全来自作者填写，成功/失败两分支递归展开；
+    /// 空分支如实渲染「（无内层效果）」。
+    #[test]
+    fn roll_check_projection_renders_formula_and_both_branches() {
+        let mechanic = mechanic_with(vec![EffectSpec::RollCheck {
+            formula: "slot_open(target_slot)".into(),
+            difficulty_expr: "0".into(),
+            on_success: vec![EffectSpec::SpawnEntity {
+                entity: "placed_structure".into(),
+            }],
+            on_failure: vec![EffectSpec::EmitSignal {
+                signal: "placement_rejected".into(),
+            }],
+        }]);
+        let scenario = project_scenario(&mechanic).expect("RollCheck 真渲染已交付");
+        assert_eq!(
+            scenario.then,
+            vec![
+                "按 slot_open(target_slot) 对难度 0 判定：成功→生成实体 placed_structure；失败→发出信号 placement_rejected"
+                    .to_string()
+            ]
+        );
+
+        // 两分支均空：如实渲染空语义。
+        let empty_branches = mechanic_with(vec![EffectSpec::RollCheck {
+            formula: "d20 + perception".into(),
+            difficulty_expr: "12".into(),
+            on_success: Vec::new(),
+            on_failure: Vec::new(),
+        }]);
+        let scenario = project_scenario(&empty_branches).expect("空分支应如实渲染");
+        assert_eq!(
+            scenario.then,
+            vec![
+                "按 d20 + perception 对难度 12 判定：成功→（无内层效果）；失败→（无内层效果）"
+                    .to_string()
+            ]
+        );
+    }
+
+    /// 混合机制整体投影：旧变体与新臂同机制共存，逐效果各产一条 Then。
+    #[test]
+    fn mixed_effects_project_each_effect() {
         let mechanic = mechanic_with(vec![
             EffectSpec::SpawnEntity {
                 entity: "guard".into(),
@@ -704,8 +1049,193 @@ mod tests {
                 on_failure: Vec::new(),
             },
         ]);
-        let error = project_scenario(&mechanic).expect_err("含 RollCheck 的机制应整体 Err");
-        assert!(error.message.contains("RollCheck"), "{}", error.message);
+        let scenario = project_scenario(&mechanic).expect("混合机制应整体投影");
+        assert_eq!(scenario.then.len(), 2);
+        assert!(scenario.then[0].contains("guard"));
+        assert!(scenario.then[1].contains("d20"), "{}", scenario.then[1]);
+    }
+
+    // ===== 四臂负测试：非法字段（缺必填语义字段即结构化 Err，点名机制）=====
+
+    /// Attach/Detach 缺 modifier_id、RollCheck 缺 formula：投影拒绝，不糊空文案。
+    #[test]
+    fn arms_with_missing_semantic_fields_are_rejected() {
+        let cases: [(EffectSpec, &str); 3] = [
+            (
+                EffectSpec::Attach {
+                    modifier_id: "  ".into(),
+                    target: "enemy".into(),
+                    duration_expr: "3".into(),
+                    priority: 1,
+                },
+                "Attach",
+            ),
+            (
+                EffectSpec::Detach {
+                    modifier_id: String::new(),
+                    target: "enemy".into(),
+                },
+                "Detach",
+            ),
+            (
+                EffectSpec::RollCheck {
+                    formula: String::new(),
+                    difficulty_expr: "12".into(),
+                    on_success: Vec::new(),
+                    on_failure: Vec::new(),
+                },
+                "RollCheck",
+            ),
+        ];
+        for (effect, variant) in cases {
+            let mechanic = mechanic_with(vec![effect]);
+            let error =
+                project_scenario(&mechanic).expect_err(&format!("{variant} 缺必填字段应 Err"));
+            assert_eq!(error.kind, Adm4ErrorKind::Validation);
+            assert!(
+                error.message.contains("m1") && error.message.contains(variant),
+                "{}",
+                error.message
+            );
+        }
+    }
+
+    // ===== 四臂负测试：悬空引用（沿 ModifyRule 悬空先例）=====
+
+    /// Attach/Detach 的 target 悬空（spec 无该实体也无该类前缀）→ 结构化 Err 点名；
+    /// 指向真实实体或实体类前缀则放行。
+    #[test]
+    fn dangling_attach_detach_target_is_rejected() {
+        let spec = spec_with_entities_and_tables();
+
+        let dangling_attach = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![EffectSpec::Attach {
+                modifier_id: "buff".into(),
+                target: "ghost_target".into(),
+                duration_expr: "3".into(),
+                priority: 0,
+            }]),
+        );
+        let error = check_effect_references(&dangling_attach).expect_err("悬空 Attach 目标应 Err");
+        assert_eq!(error.kind, Adm4ErrorKind::Validation);
+        assert!(
+            error.message.contains("m1")
+                && error.message.contains("Attach")
+                && error.message.contains("ghost_target"),
+            "{}",
+            error.message
+        );
+
+        let dangling_detach = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![
+                EffectSpec::Attach {
+                    modifier_id: "buff".into(),
+                    target: "enemy".into(),
+                    duration_expr: "3".into(),
+                    priority: 0,
+                },
+                EffectSpec::Detach {
+                    modifier_id: "buff".into(),
+                    target: "ghost_target".into(),
+                },
+            ]),
+        );
+        let error = check_effect_references(&dangling_detach).expect_err("悬空 Detach 目标应 Err");
+        assert!(
+            error.message.contains("Detach") && error.message.contains("ghost_target"),
+            "{}",
+            error.message
+        );
+
+        // 正例：实体 id 与实体类前缀（enemy.xxx 行实体）都放行；嵌套内同查。
+        let ok = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![EffectSpec::Schedule {
+                timing: ScheduleTiming::Delayed,
+                amount_expr: "1".into(),
+                unit: ScheduleUnit::Seconds,
+                inner: vec![
+                    EffectSpec::Attach {
+                        modifier_id: "buff".into(),
+                        target: "enemy".into(),
+                        duration_expr: "3".into(),
+                        priority: 0,
+                    },
+                    EffectSpec::Detach {
+                        modifier_id: "buff".into(),
+                        target: "enemy".into(),
+                    },
+                ],
+            }]),
+        );
+        assert!(check_effect_references(&ok).is_ok());
+    }
+
+    /// Detach 引用从未被任何 Attach 挂载过的修饰器 → 悬空 Err；跨机制挂载可解。
+    #[test]
+    fn detach_of_never_attached_modifier_is_rejected() {
+        let spec = spec_with_entities_and_tables();
+        let dangling = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![EffectSpec::Detach {
+                modifier_id: "phantom_modifier".into(),
+                target: "enemy".into(),
+            }]),
+        );
+        let error = check_effect_references(&dangling).expect_err("卸载未挂载的修饰器应 Err");
+        assert_eq!(error.kind, Adm4ErrorKind::Validation);
+        assert!(
+            error.message.contains("phantom_modifier"),
+            "{}",
+            error.message
+        );
+
+        // 另一机制挂载了同名修饰器 → 引用闭合放行（嵌套内的 Attach 声明也算）。
+        let mut resolved = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![EffectSpec::Detach {
+                modifier_id: "phantom_modifier".into(),
+                target: "enemy".into(),
+            }]),
+        );
+        let mut attacher = mechanic_with(vec![EffectSpec::Schedule {
+            timing: ScheduleTiming::Delayed,
+            amount_expr: "1".into(),
+            unit: ScheduleUnit::Seconds,
+            inner: vec![EffectSpec::Attach {
+                modifier_id: "phantom_modifier".into(),
+                target: "enemy".into(),
+                duration_expr: "3".into(),
+                priority: 0,
+            }],
+        }]);
+        attacher.id = "m2".into();
+        resolved.mechanics.push(attacher);
+        assert!(check_effect_references(&resolved).is_ok());
+    }
+
+    /// AreaApply 内层的悬空引用同样被递归复检拦下（嵌套不豁免）。
+    #[test]
+    fn nested_dangling_reference_inside_area_apply_is_rejected() {
+        let spec = spec_with_entities_and_tables();
+        let nested_dangling = spec_with_mechanic(
+            &spec,
+            mechanic_with(vec![EffectSpec::AreaApply {
+                area_kind: AreaKind::Grid,
+                area_params: BTreeMap::new(),
+                inner: vec![EffectSpec::Attach {
+                    modifier_id: "buff".into(),
+                    target: "ghost_target".into(),
+                    duration_expr: "3".into(),
+                    priority: 0,
+                }],
+                target_filter: String::new(),
+            }]),
+        );
+        let error = check_effect_references(&nested_dangling).expect_err("嵌套内悬空引用应被拦下");
+        assert!(error.message.contains("ghost_target"), "{}", error.message);
     }
 
     /// 旧 7 变体投影不受本卡影响（基线守恒）。

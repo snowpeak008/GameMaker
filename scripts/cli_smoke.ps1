@@ -1582,8 +1582,9 @@ Assert-Contains $out 'task_cap_combat_main.damage_formula' '5a 遗物程序任�
 # 副本内，任何悬空绑定/门控矛盾都会 [BLOCKED]）。与尖塔 8k 段的对照：尖塔 |H|=3
 # 超中核参考线 → [ADVICE]+[CONFIRM-REQUIRED]；自走棋薄组合 |H|=1（唯一重核=赛制
 # mf2 W11）→ 零提示零确认——R-C1' 两条判定路径都有冒烟实证。
-# 全链 C0-C6 由 autochess_sample_e2e.rs 覆盖（模块内含波 1 未交付臂的激活点需
-# set_not_applicable 人工豁免，CLI 仅有 baseline `na` 通道——缺口记 5b 验收单）。
+# 全链 C0-C6 由 autochess_sample_e2e.rs 覆盖（1c 翻正后 synergy_bonus/bracket_shape
+# 已真作答；genre 不适用点仍需 set_not_applicable 人工豁免，CLI 仅有 baseline
+# `na` 通道——缺口记 5b 验收单）。
 # ---------------------------------------------------------------------------
 
 $out = Invoke-Adm4 '5b：新建自走棋薄样板项目（真实 autochess_thin pack）' @('project', 'new', '八人棋会', '--pack', 'autochess_thin', '--depth', 'L6')
@@ -1635,8 +1636,8 @@ Assert-NotContains $out '[BLOCK]' '5b 回落恢复'
 # 悬空绑定/门控矛盾都会 [BLOCKED]）。与 8l 自走棋段（|H|=1 唯一重核）再成对照：
 # 塔防薄组合 BP0 W4 轻 / 经济 T0 W5 中 / 计分 K0 W4 轻——无人 W≥9，|H|=0（空集
 # 平凡连通），零 block 零提示零确认，B(G)=9.75（4×1.0 + 5×0.75 + 4×0.5）。
-# 全链 C0-C6 由 towerdef_sample_e2e.rs 覆盖（BP0 正名点 slot_legality 两选项均
-# RollCheck 未交付臂，需 set_not_applicable 人工豁免，CLI 无该通道——与 5b 同缺口）。
+# 全链 C0-C6 由 towerdef_sample_e2e.rs 覆盖（1c 翻正后 BP0 正名点 slot_legality
+# 已真作答 preset_slot_whitelist，RollCheck 真渲染 GWT 断言在 e2e）。
 # ---------------------------------------------------------------------------
 
 $out = Invoke-Adm4 '5d：新建塔防薄样板项目（真实 towerdef_thin pack）' @('project', 'new', '薄暮要塞防线', '--pack', 'towerdef_thin', '--depth', 'L6')

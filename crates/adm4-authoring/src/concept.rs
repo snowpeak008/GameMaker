@@ -313,6 +313,19 @@ pub fn proposal_to_refs(proposal: &ConceptProposal) -> Vec<SystemRef> {
 // 请求构造与解析（内部）
 // ---------------------------------------------------------------------------
 
+/// 已占用实例 id（字典序）：pack 既有引用 + 项目私有引用（装配时已并入 pack）。
+/// 提示词注入与拒收文案共用同一数据源，保证 AI 看到的与校验拦的完全一致。
+fn occupied_instance_ids(space: &DesignSpace) -> Vec<String> {
+    space
+        .pack
+        .system_refs
+        .iter()
+        .map(|reference| reference.instance_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 fn require_module<'a>(
     modules: &'a BTreeMap<String, SystemModule>,
     module_id: &str,
@@ -351,6 +364,11 @@ fn build_concept_request(
         })
         .collect::<Vec<_>>()
         .join("\n");
+    // 已占用实例 id 清单（pack 既有 + 概念确认落盘的项目私有引用——loader 装配时
+    // 已把私有引用 extend 进 pack.system_refs，此处取 pack 即全覆盖）。
+    // 波 6 前置缺口 A：AI 自主命名实例时看不到这份清单必然撞 id（撞了校验必拒），
+    // 注入清单 + 硬约束让 AI 一次给出可落盘的命名（校验防线原样保留）。
+    let occupied = occupied_instance_ids(space);
     let existing = space
         .pack
         .system_refs
@@ -364,6 +382,14 @@ fn build_concept_request(
              系统清单 + 每系统建议重度档 + core_loop 动词序列草案。\
              系统只能从给出的模块库选（module_id/档位 id 不得发明）；库内没有的系统\
              如实写进 library_external（名称+说明），不要硬套。\
+             硬约束：systems 只列**新增**实例——「既有系统实例」已在项目里，不要把\
+             它们重新列进 systems（想法里已被既有实例覆盖的部分直接省略）；新实例的\
+             instance_id 不得与「已占用实例 id 清单」里的任何 id 重复（重复会被系统\
+             直接拒收）——撞名时换一个语义等价的名字（如加用途后缀）。\
+             core_loop 动词可以绑定既有实例的 id（引用既有实例是允许的，重新定义才不允许）。\
+             名词绑定：模块 consumes 的名词若提案内没有实例 provides（尤其玩家输入类，\
+             如 sys.player_input.command_intent），必须在 noun_bindings 里显式绑定到\
+             「pack 核心名词」清单中的名词（如 player_command_intent），否则会被拒收。\
              识别到「X+Y」融合型口述时，给出双核并集分解（fusion 字段：两核系统清单\
              并集 + 跨核转换说明），core_loop 按嵌套循环排列动词。\
              输出 JSON：{\"systems\":[{\"instance_id\":小写下划线,\"module_id\":...,\
@@ -377,12 +403,32 @@ fn build_concept_request(
             .into(),
         user_prompt: format!(
             "用户口述的游戏想法：\n{pitch}\n\n可选模块库：\n{catalog}\n\n\
-             pack 核心名词（绑定可指向）：{}\n既有系统实例：{}",
+             pack 核心名词（绑定可指向）：{}\n{}既有系统实例：{}\n\
+             已占用实例 id 清单（新实例 id 不得与其中任何一个重复）：{}",
             space.pack.core_nouns.join("、"),
+            // 输入类名词的绑定示例用 pack 实际核心名词生成（提示词层修复，缺口 B 语料侧）。
+            space
+                .pack
+                .core_nouns
+                .first()
+                .map(|noun| {
+                    format!(
+                        "绑定示例：所选模块 consumes 的名词若提案内无实例 provides\
+                         （如 sys.player_input.command_intent 这类玩家输入），必须在该实例的\
+                         noun_bindings 里显式绑到核心名词，例如 \
+                         {{\"sys.player_input.command_intent\":\"{noun}\"}}。\n"
+                    )
+                })
+                .unwrap_or_default(),
             if existing.is_empty() {
                 "（无）".to_string()
             } else {
                 existing
+            },
+            if occupied.is_empty() {
+                "（无）".to_string()
+            } else {
+                occupied.join("、")
             }
         ),
         expect_json: true,
@@ -422,9 +468,17 @@ fn parse_concept_proposal(
             )));
         }
         if !seen.insert(system.instance_id.as_str()) {
+            // 拒收判定不变（防线不拆）；文案增补已占用清单方便人读改名（波 6 前置缺口 A）。
+            let occupied = occupied_instance_ids(space);
             return Err(Adm4Error::validation(format!(
-                "概念提案的实例 id {} 重复（或与既有实例冲突）——实例 id 是命名空间锚，必须唯一",
-                system.instance_id
+                "概念提案的实例 id {} 重复（或与既有实例冲突）——实例 id 是命名空间锚，必须唯一。\
+                 已占用清单：{}",
+                system.instance_id,
+                if occupied.is_empty() {
+                    "（无既有实例，重复发生在提案内部）".to_string()
+                } else {
+                    occupied.join("、")
+                }
             )));
         }
         // 模块与档位存在性（发明即 Err——验收 5 的负测试锚点）。
@@ -773,6 +827,20 @@ mod tests {
         }
     }
 
+    /// 带既有实例的空间（缺口 A 测试用）：occupied_id 已占用 sys.mod0 的实例位。
+    fn space_with_existing(occupied_id: &str) -> DesignSpace {
+        let mut space = empty_space();
+        space.pack.system_refs.push(SystemRef {
+            instance_id: occupied_id.into(),
+            module_id: "sys.mod0".into(),
+            version_req: String::new(),
+            allowed_tiers: Vec::new(),
+            noun_bindings: BTreeMap::new(),
+            core_link: CoreLink::Core,
+        });
+        space
+    }
+
     fn system_json(index: usize, tier: &str, link: &str) -> String {
         format!(
             r#"{{"instance_id":"inst{index}","module_id":"sys.mod{index}","suggested_tier":"{tier}","core_link":"{link}","rationale":"理由{index}"}}"#
@@ -809,6 +877,84 @@ mod tests {
         assert!(
             calls[0].user_prompt.contains("sys.mod0"),
             "模块目录应进提示词"
+        );
+    }
+
+    /// 缺口 A 注入：提示词携带已占用实例 id 清单与「不得重复」硬约束
+    /// （AI 提案、用户确认纪律不变——注入只是让 AI 看得见接缝）。
+    #[test]
+    fn prompt_carries_occupied_instance_ids_and_constraint() {
+        let modules = module_table(1);
+        let response = format!(r#"{{"systems":[{}]}}"#, system_json(0, "light", "core"));
+        let provider = scripted(PURPOSE_CONCEPT, &response);
+        let space = space_with_existing("combat_main");
+        propose_concept(&space, &modules, &provider, "口述").unwrap();
+        let calls = provider.calls();
+        assert_eq!(calls.len(), 1);
+        assert!(
+            calls[0].user_prompt.contains("已占用实例 id 清单"),
+            "user prompt 应携带已占用清单标题：{}",
+            calls[0].user_prompt
+        );
+        assert!(
+            calls[0].user_prompt.contains("combat_main"),
+            "已占用实例 id 应进提示词：{}",
+            calls[0].user_prompt
+        );
+        assert!(
+            calls[0]
+                .system_prompt
+                .contains("不得与「已占用实例 id 清单」"),
+            "system prompt 应携带硬约束：{}",
+            calls[0].system_prompt
+        );
+    }
+
+    /// 缺口 A 反测试：脚本模拟 AI 无视约束返回撞名实例 → 仍被拒（防线不拆），
+    /// 且拒收文案携带已占用清单（人读改名指引）。
+    #[test]
+    fn colliding_instance_id_still_rejected_with_occupied_list() {
+        let modules = module_table(1);
+        let response = r#"{"systems":[{"instance_id":"combat_main","module_id":"sys.mod0","suggested_tier":"light","core_link":"core","rationale":"撞名"}]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let space = space_with_existing("combat_main");
+        let error = propose_concept(&space, &modules, &provider, "口述").unwrap_err();
+        assert!(error.message.contains("combat_main"), "{}", error.message);
+        assert!(error.message.contains("必须唯一"), "{}", error.message);
+        assert!(
+            error.message.contains("已占用清单"),
+            "拒收文案应携带已占用清单：{}",
+            error.message
+        );
+    }
+
+    /// 缺口 A 正测试：脚本返回避开清单的提案 → 通过（新名不与既有实例冲突）。
+    #[test]
+    fn non_colliding_instance_id_passes_with_existing_refs() {
+        let modules = module_table(1);
+        let response = r#"{"systems":[{"instance_id":"combat_secondary","module_id":"sys.mod0","suggested_tier":"light","core_link":"core","rationale":"避开清单"}]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let space = space_with_existing("combat_main");
+        let proposal = propose_concept(&space, &modules, &provider, "口述").unwrap();
+        assert_eq!(proposal.systems.len(), 1);
+        assert_eq!(proposal.systems[0].instance_id, "combat_secondary");
+    }
+
+    /// 提案内部重复（无既有实例）：拒收文案如实说明重复发生在提案内部。
+    #[test]
+    fn internal_duplicate_gets_honest_message_without_pack_refs() {
+        let modules = module_table(1);
+        let response = r#"{"systems":[
+            {"instance_id":"twin","module_id":"sys.mod0","suggested_tier":"light","core_link":"core","rationale":"a"},
+            {"instance_id":"twin","module_id":"sys.mod0","suggested_tier":"light","core_link":"weak","rationale":"b"}
+        ]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let error = propose_concept(&empty_space(), &modules, &provider, "口述").unwrap_err();
+        assert!(error.message.contains("twin"), "{}", error.message);
+        assert!(
+            error.message.contains("提案内部"),
+            "空清单时文案应说明重复来自提案内部：{}",
+            error.message
         );
     }
 

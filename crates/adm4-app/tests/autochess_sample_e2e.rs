@@ -12,9 +12,10 @@
 //!   → C0-C6 全绿 → 三新模块机制到达 C4（各 ≥1 条能力契约 GWT 非空）+
 //!   羁绊 ModifyRule 叠加序文字 + DrawFromPool 抽取语义 + C6 跨机制依赖边与任务零重复。
 //!
-//! 1c 纪律：全链只使用旧 7 变体 + Schedule/ModifyRule/DrawFromPool；模块内含
-//! AreaApply/Attach/Detach/RollCheck（波 1 四个诚实 Err 臂）的激活点一律走署名 N/A
-//! 豁免（每条有真实设计理由，见豁免清单），C0-C6 全绿即证明未触四臂。
+//! 1c 翻正（T-W7-1c）：Attach/RollCheck 真渲染交付后，5b 上报的两个撞臂正名点
+//! 已改真作答——G8 阵型协同 = squad_main.synergy_bonus/tag_count_synergy（Attach
+//! 叠加序 GWT）、G2 循环积分 = format_main.bracket_shape/round_robin_points
+//! （RollCheck 成功/失败两分支 GWT）。其余 N/A 豁免均为纯 genre 理由保留。
 
 use adm4_ai::ScriptedProvider;
 use adm4_app::{AppConfig, AppServices, save_config};
@@ -436,19 +437,23 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
             let manual = Provenance::UserManual;
             for (decision, option) in [
                 // G2 赛制：淘汰顺序倒排（自走棋名次口径）+ 平滑曲线全名次发放 +
-                // 全开放抽签（每轮随机对阵，DrawFromPool）。
+                // 全开放抽签（每轮随机对阵，DrawFromPool）+ 循环积分晋级
+                //（1c 翻正：round_robin_points 正名选项，RollCheck 真渲染）。
                 ("format_main.placement_rule", "elimination_order_rank"),
                 ("format_main.reward_mapping", "smooth_curve_payout"),
                 ("format_main.seeding_rule", "open_random_draw"),
+                ("format_main.bracket_shape", "round_robin_points"),
                 // G5 棋盘：方格 + 格阵站位 + 网格几何 + 恒定步长。
                 ("board_main.battlefield_system", "square_grid"),
                 ("board_main.formation_slots", "cell_matrix_formation"),
                 ("board_main.grid_shape", "square_grid"),
                 ("board_main.move_budget", "uniform_step_cost"),
-                // G8 编队：人口预算（自走棋人口上限）+ 回合间热换 + 自由格位布置。
+                // G8 编队：人口预算（自走棋人口上限）+ 回合间热换 + 自由格位布置 +
+                // 标签计数协同（1c 翻正：tag_count_synergy 正名选项，Attach 真渲染）。
                 ("squad_main.roster_capacity", "population_budget"),
                 ("squad_main.swap_policy", "in_session_swap"),
                 ("squad_main.formation_structure", "free_slot_grid"),
+                ("squad_main.synergy_bonus", "tag_count_synergy"),
                 // 构筑：商店定数候选 draft（DrawFromPool）。
                 ("shop_main.draft_pick_rule", "fixed_choice_count"),
                 // 经济：行为赏金（回合工资表）+ 线性产出曲线。
@@ -465,10 +470,19 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                 engine.select_option(decision, option, manual.clone())?;
             }
 
-            let scalar_params: [(&str, ParameterValues); 15] = [
+            let scalar_params: [(&str, ParameterValues); 17] = [
                 (
                     "format_main.placement_rule",
                     scalars(&[("participant_table_id", text("autochess.player_roster"))]),
+                ),
+                // 1c 翻正：循环积分晋级（8 人小组前 4 晋级，积分落参战玩家表）。
+                (
+                    "format_main.bracket_shape",
+                    scalars(&[
+                        ("group_size", TypedValue::Int(8)),
+                        ("advance_count", TypedValue::Int(4)),
+                        ("participant_table_id", text("autochess.player_roster")),
+                    ]),
                 ),
                 (
                     "format_main.reward_mapping",
@@ -522,6 +536,14 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                         ("grid_width", TypedValue::Int(7)),
                         ("grid_height", TypedValue::Int(4)),
                         ("assignment_table_id", text("autochess.unit_pool")),
+                    ]),
+                ),
+                // 1c 翻正：标签计数协同（Attach 挂到棋子单位池，叠加序进 GWT）。
+                (
+                    "squad_main.synergy_bonus",
+                    scalars(&[
+                        ("per_tag_scaling", TypedValue::Float(0.15)),
+                        ("roster_table_id", text("autochess.unit_pool")),
                     ]),
                 ),
                 (
@@ -626,6 +648,7 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                 "format_main.placement_rule",
                 "format_main.reward_mapping",
                 "format_main.seeding_rule",
+                "format_main.bracket_shape",
                 "board_main.battlefield_system",
                 "board_main.formation_slots",
                 "board_main.grid_shape",
@@ -633,6 +656,7 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                 "squad_main.roster_capacity",
                 "squad_main.swap_policy",
                 "squad_main.formation_structure",
+                "squad_main.synergy_bonus",
                 "shop_main.draft_pick_rule",
                 "economy_main.income_model",
                 "economy_main.income_curve",
@@ -646,13 +670,13 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                 engine.confirm_selection(decision)?;
             }
 
-            // ---- ④ 未交付臂/不适用点的署名 N/A 豁免（1c 纪律：不改 c4_capabilities，
-            // 撞臂点诚实豁免；每条有真实设计理由，逐条上报验收单）----
+            // ---- ④ 不适用点的署名 N/A 豁免（1c 翻正后余下豁免全为真实 genre/
+            // 迁移理由；原 bracket_shape/synergy_bonus 两条撞臂豁免已解除改真作答）----
             for (decision, reason_code, note) in [
                 (
                     "format_main.series_length",
                     "genre_not_applicable",
-                    "自走棋淘汰制单局无 BO 局分（两选项亦含 RollCheck 未交付臂）",
+                    "自走棋淘汰制单局无 BO 局分",
                 ),
                 (
                     "format_main.tiebreak_rule",
@@ -663,11 +687,6 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                     "format_main.side_swap",
                     "genre_not_applicable",
                     "自走棋无阵营换边语义（对局双方对称）",
-                ),
-                (
-                    "format_main.bracket_shape",
-                    "undelivered_effect_arm",
-                    "正名选项 round_robin_points（自走棋 8 人循环）含 RollCheck 未交付臂，单/双败树不符血量淘汰语义——如实豁免并上报 1c 遗留",
                 ),
                 (
                     "board_main.move_rule",
@@ -686,18 +705,13 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
                 ),
                 (
                     "board_main.row_effect",
-                    "undelivered_effect_arm",
-                    "两选项均含 Attach/RollCheck 未交付臂；站位效果由 pack 羁绊薄点承载——上报",
+                    "genre_not_applicable",
+                    "站位效果由 pack 羁绊薄点承载（自由格位摆位语义在 formation_structure 已答）",
                 ),
                 (
                     "board_main.range_los",
-                    "undelivered_effect_arm",
-                    "两选项均含 RollCheck 未交付臂；攻击射程属自动战斗涌现层（射程外）——上报",
-                ),
-                (
-                    "squad_main.synergy_bonus",
-                    "undelivered_effect_arm",
-                    "两选项均含 Attach 未交付臂；羁绊由 pack 薄点 autochess.trait_synergy_rule 以 ModifyRule 替位表达——上报",
+                    "genre_not_applicable",
+                    "攻击射程属自动战斗涌现层（射程外声明）",
                 ),
             ] {
                 engine.set_not_applicable(decision, reason_code, note, "样板设计师")?;
@@ -851,6 +865,40 @@ fn autochess_full_chain_reaches_phase1_with_three_new_modules_at_c4() {
             "实体 autochess.unit_pool 的 active_roster 按公式 chosen_units where sum(unit_population) <= 10 变化"
         ),
         "G8 人口预算能力契约：{roster_then}"
+    );
+
+    // 1c 翻正证据①：G8 阵型协同正名点（tag_count_synergy）——Attach 真渲染，
+    // 叠加序文字与 ModifyRule 同款（W7 定稿 §5.3 指令 7）。
+    let synergy_bonus_then = scenario_then("cap_squad_main.synergy_bonus");
+    assert!(
+        synergy_bonus_then.contains(
+            "把修饰器 tag_synergy_bonus 挂载到 autochess.unit_pool（生效期 while(tag_count >= tag_threshold)"
+        ),
+        "G8 阵型协同 Attach 渲染：{synergy_bonus_then}"
+    );
+    assert!(
+        synergy_bonus_then.contains("按 priority=0 结算，同序按机制 id 字典序"),
+        "G8 阵型协同叠加序文字（与 ModifyRule 同款）：{synergy_bonus_then}"
+    );
+    assert!(
+        synergy_bonus_then.contains("combat_stat 按公式 stat * (1 + roster_tag_count * 0.15) 变化"),
+        "G8 阵型协同加成公式（作者填写系数）：{synergy_bonus_then}"
+    );
+
+    // 1c 翻正证据②：G2 循环积分正名点（round_robin_points）——RollCheck 真渲染，
+    // 成功/失败两分支齐备（晋级/淘汰）。
+    let bracket_then = scenario_then("cap_format_main.bracket_shape");
+    assert!(
+        bracket_then.contains(
+            "实体 autochess.player_roster 的 advancement_state 按公式 group_points += points(win_or_draw) 变化"
+        ),
+        "G2 循环积分累计：{bracket_then}"
+    );
+    assert!(
+        bracket_then.contains(
+            "按 group_rank <= 4 at group_end 对难度 0 判定：成功→状态机 match_participant.bracket_state 进入 advanced；失败→状态机 match_participant.bracket_state 进入 eliminated"
+        ),
+        "G2 循环积分 RollCheck 两分支：{bracket_then}"
     );
 
     // 拿牌 = DrawFromPool（任务卡预判兑现：商店 5 选 1）。

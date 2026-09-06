@@ -16,8 +16,9 @@
 //! 变速 SV 段是区间语义（start/end/factor），单值曲线装不下，模块内申报退化四列
 //! Table——本链选 BT1 档不触 BT2 点，退化申报见模块 JSON 与 5c 验收单。
 //!
-//! 计分侧选型纪律：combo_window 选 timed_window（unbroken_chain 含 RollCheck，
-//! 属 C4 未交付渲染臂，选之即全链 Err——1c 纪律下如实绕行并在验收单申报）。
+//! 计分侧选型（1c 翻正）：combo_window 选 unbroken_chain（音游全连口径的正名
+//! 选项，原被 RollCheck 未交付臂挡住走 timed_window 绕行；T-W7-1c 交付 RollCheck
+//! 真渲染后翻正，GWT 断言失误判定与断连归零分支）。
 
 use adm4_ai::ScriptedProvider;
 use adm4_app::{AppConfig, AppServices, save_config};
@@ -378,9 +379,9 @@ fn rhythm_full_chain_scores_judgement_events_through_phase1() {
                 ("chart_main.long_note_rule", "head_tail_double_judgement"),
                 ("chart_main.lane_layout", "fixed_lane_count"),
                 ("chart_main.accuracy_curve", "offset_accuracy_curve"),
-                // 计分 K1 四点（timed_window 选型申报见文件头）。
+                // 计分 K1 四点（unbroken_chain 选型翻正申报见文件头）。
                 ("scoring_main.score_rule", "fixed_value_table"),
-                ("scoring_main.combo_window", "timed_window"),
+                ("scoring_main.combo_window", "unbroken_chain"),
                 ("scoring_main.multiplier_growth", "continuous_scaling"),
                 ("scoring_main.decay_rule", "hard_reset"),
                 // pack 两点。
@@ -425,7 +426,8 @@ fn rhythm_full_chain_scores_judgement_events_through_phase1() {
             )?;
             assert!(problems.is_empty(), "曲线值应过校验：{problems:?}");
 
-            let scalar_params: [(&str, ParameterValues); 5] = [
+            // combo_window/unbroken_chain 是 schema none（零参数），不进参数清单。
+            let scalar_params: [(&str, ParameterValues); 4] = [
                 (
                     "chart_main.hit_matching_rule",
                     scalars(&[
@@ -446,10 +448,6 @@ fn rhythm_full_chain_scores_judgement_events_through_phase1() {
                         ("chart_table_id", text("chart_main.note_chart_table")),
                         ("lane_count", TypedValue::Int(4)),
                     ]),
-                ),
-                (
-                    "scoring_main.combo_window",
-                    scalars(&[("window_seconds", TypedValue::Float(5.0))]),
                 ),
                 (
                     "scoring_main.multiplier_growth",
@@ -667,14 +665,18 @@ fn rhythm_full_chain_scores_judgement_events_through_phase1() {
         "判定机制应发出判定事件（供需链供给端）：{matching_then}"
     );
     // 消费端：计分三机制的 GWT 非空且含作者公式（K1 连击+倍率+衰减齐备）。
+    // 1c 翻正证据④（裁量翻正）：全连口径 unbroken_chain——RollCheck 真渲染，
+    // 失误判定 + 断连归零分支 + 无失误如实空分支。
     let combo_then = scenario_then("cap_scoring_main.combo_window");
     assert!(
-        combo_then.contains("combo + 1 if within(5)"),
-        "连击窗公式应含作者窗长：{combo_then}"
+        combo_then.contains("combo + 1 on scoring_action"),
+        "续连公式（行为续连口径）应在场：{combo_then}"
     );
     assert!(
-        combo_then.contains("延迟 5 秒"),
-        "断连倒计时的 Schedule 渲染应在场：{combo_then}"
+        combo_then.contains(
+            "按 is_miss_event 对难度 0 判定：成功→实体 scoring_session 的 combo_state 按公式 0 变化；发出信号 score_signal；失败→（无内层效果）"
+        ),
+        "全连口径 RollCheck 两分支（断连归零/无失误空分支如实渲染）：{combo_then}"
     );
     let multiplier_then = scenario_then("cap_scoring_main.multiplier_growth");
     assert!(
