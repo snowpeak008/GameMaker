@@ -114,3 +114,38 @@ AI 拿不到「已占用实例 id 清单」，撞车是必然而非偶然。
    修复后依旧成立；AI 输出结构合规率 6/6（零 JSON 解析失败、零发明模块/档位 id）。
 
 > 密钥安全声明（追加节）：本次 6 次调用全程未把密钥值写入任何文档、日志或提交。
+
+---
+
+## 7. 追加：T-W7-6b 修复后真 AI 复验（2026-09-06）
+
+> 执行卡 T-W7-6b。①「systems 只列新增实例」约束（6pre 已注入，spire 侧当时因费用
+> 上限未实测）与 ② derive_binding 尾段后缀兜底（本卡 ① 落地：`command_intent` →
+> 唯一命中 `player_command_intent`；多候选歧义 Err 不静默绑错）修复后复验。
+> **费用意识声明：本次真实调用总数 4 次（spire_like 1 次 + lane_defense 3 次，
+> 卡内上限 ≤4 次，未超）**；复验临时项目 archive_1788672517980_91192_1（spire_like）
+> / archive_1788672630205_101700_1（lane_defense）跑完即删，数据根零残留（已 grep 核实）。
+
+### 7.1 逐次调用实录（每次一行）
+
+| # | 场景 | 口述 | 结果 |
+|---|---|---|---|
+| 1 | spire_like「爬塔卡牌肉鸽（回合卡牌/选路/遗物/奖励三选一）」 | **通过校验**（提案 JSON 落回）：systems 只列 2 个新增实例（map_progress/reward_choice），**零撞名零重列**——既有 combat_main/deck_main/relic_main 只出现在 core_loop 引用里（约束语义完全命中）；AI 还自发给了 `sys.player_input.command_intent → player_command_intent` 显式绑定 |
+| 2 | lane_defense（同口述） | 拒收：deck_capacity 的 `sys.equipment.equipment_entity` 悬空（AI 把「遗物构筑」映射成装备系统名词却没把 sys.equipment 列进 systems）——合法拒收点名修复方向；**与 command_intent 无关** |
+| 3 | lane_defense（口述去掉装备语义） | 拒收：map_path_roguetrail 的 `board_occupancy` 无提供方（AI 为「爬塔选路」造了棋盘占位需求）——合法拒收；**与 command_intent 无关** |
+| 4 | lane_defense（口述收窄为极简回合卡牌战斗） | **通过校验**（提案 JSON 落回）：turn_combat + run_deckbuild 双实例，`sys.player_input.command_intent` 绑到 `player_command_intent`（本次 AI 显式给了 noun_bindings），零撞名零悬空 |
+
+### 7.2 复验结论
+
+1. **6pre 遗留 1（spire 撞名重列）复验通过**：1 次即过，「systems 只列新增实例」
+   约束在 spire_like 侧实证生效（6pre 时 #2/#3 连续重列 combat_main）。
+2. **6pre 遗留 2（lane_defense command_intent 3/3 全挂）已消除**：本次 3 次调用
+   **零次**挂在 command_intent 绑定上——#4 通过（AI 显式绑定，且即便 AI 不给，
+   scripted 测试 namespaced_noun_falls_back_to_core_noun_suffix_variant 已锁定
+   兜底推导路径同样能通）；#2/#3 拒收均为**语料问题**（「爬塔肉鸽」口述超出
+   lane_defense 表达域，AI 造了 pack 没有的装备/棋盘名词），属合法拒收非新缺口，
+   fail-closed 点名修复方向文案正常。
+3. **零静默放行、零 JSON 解析失败**：4 次输出全部结构合规，两次通过均为合法提案，
+   两次拒收均点名实例/名词/修复方向。6pre 登记的两条遗留至此**全部闭环**。
+
+> 密钥安全声明（追加节）：本次 4 次调用全程未把密钥值写入任何文档、日志或提交。

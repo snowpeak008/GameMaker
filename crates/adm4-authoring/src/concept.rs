@@ -596,7 +596,9 @@ fn parse_concept_proposal(
 ///   模块确实 provides 该名词；
 /// - 带命名空间名词 `sys.X.n`：提案内恰有一个模块 `sys.X` 的实例 → 绑
 ///   `<该实例>.n`；多于一个 → 歧义 Err（AI/用户须显式指定）；没有但 `n` 在
-///   pack 核心名词内 → 绑核心名词；
+///   pack 核心名词内 → 绑核心名词；`n` 不精确命中时按尾段后缀找核心名词的
+///   全名变体（`command_intent` → `player_command_intent`），唯一才绑、
+///   多候选歧义 Err（不许静默绑错）；
 /// - 裸名词 `n`：本模块自身 provides → 自绑 `<self>.n`；否则 pack 核心名词；
 ///   否则提案内恰有一个别的实例 provides → 绑它。
 fn resolve_bindings(
@@ -676,12 +678,35 @@ fn derive_binding(
                 if core_nouns.contains(bare) {
                     return Ok(bare.to_string());
                 }
-                return Err(Adm4Error::validation(format!(
-                    "实例 {} 的名词 {noun} 无法绑定：提案内没有模块 {module_id} 的实例，\
-                     {bare} 也不是 pack 核心名词。修复方向：把 {module_id} 加进系统清单，\
-                     或在提案里显式给 noun_bindings",
-                    system.instance_id
-                )));
+                // 命名口径兜底：六包核心名词统一带语义前缀（如 player_command_intent），
+                // 模块 consumes 声明用裸尾段（sys.player_input.command_intent）——
+                // 按尾段后缀匹配找全名变体。唯一候选才绑；多候选歧义 Err 不静默绑错
+                // （宁可不兜底，留给 AI/用户显式 noun_bindings）。
+                let suffix = format!("_{bare}");
+                let variants: Vec<&str> = core_nouns
+                    .iter()
+                    .filter(|candidate| candidate.ends_with(suffix.as_str()))
+                    .copied()
+                    .collect();
+                match variants.as_slice() {
+                    [only] => return Ok((*only).to_string()),
+                    [] => {
+                        return Err(Adm4Error::validation(format!(
+                            "实例 {} 的名词 {noun} 无法绑定：提案内没有模块 {module_id} 的实例，\
+                             {bare} 也不是 pack 核心名词（含尾段变体）。修复方向：把 {module_id} \
+                             加进系统清单，或在提案里显式给 noun_bindings",
+                            system.instance_id
+                        )));
+                    }
+                    multiple => {
+                        return Err(Adm4Error::validation(format!(
+                            "实例 {} 的名词 {noun} 绑定歧义：pack 核心名词里有多个 {bare} 的\
+                             全名变体（{}），须在提案 noun_bindings 里显式指定",
+                            system.instance_id,
+                            multiple.join("、")
+                        )));
+                    }
+                }
             }
             multiple => {
                 return Err(Adm4Error::validation(format!(
@@ -1145,6 +1170,74 @@ mod tests {
             error.message.contains("sys.mod0.noun0"),
             "{}",
             error.message
+        );
+    }
+
+    /// 命名口径兜底正测试：`sys.player_input.command_intent` 在提案无该模块实例、
+    /// 裸段不精确命中时，按尾段后缀唯一命中核心名词全名变体 `player_command_intent`。
+    #[test]
+    fn namespaced_noun_falls_back_to_core_noun_suffix_variant() {
+        let mut consumer = module("sys.consumer", "own_thing");
+        consumer.interface.consumes = vec!["sys.player_input.command_intent".into()];
+        let mut modules = BTreeMap::new();
+        modules.insert("sys.consumer".into(), consumer);
+        let mut space = empty_space();
+        space.pack.core_nouns = vec!["player_command_intent".into()];
+        let response = r#"{"systems":[{"instance_id":"eater","module_id":"sys.consumer","suggested_tier":"light","core_link":"core","rationale":"x"}]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let proposal = propose_concept(&space, &modules, &provider, "口述").unwrap();
+        assert_eq!(
+            proposal.systems[0].noun_bindings["sys.player_input.command_intent"],
+            "player_command_intent",
+            "尾段后缀唯一命中应兜底到核心名词全名变体"
+        );
+    }
+
+    /// 命名口径兜底反测试：多个全名变体（player_/enemy_command_intent）→ 歧义 Err
+    /// 点名候选（红线：不许静默绑错，留给 AI/用户显式 noun_bindings）。
+    #[test]
+    fn ambiguous_core_noun_suffix_variants_are_rejected_not_silently_bound() {
+        let mut consumer = module("sys.consumer", "own_thing");
+        consumer.interface.consumes = vec!["sys.player_input.command_intent".into()];
+        let mut modules = BTreeMap::new();
+        modules.insert("sys.consumer".into(), consumer);
+        let mut space = empty_space();
+        space.pack.core_nouns = vec![
+            "player_command_intent".into(),
+            "enemy_command_intent".into(),
+        ];
+        let response = r#"{"systems":[{"instance_id":"eater","module_id":"sys.consumer","suggested_tier":"light","core_link":"core","rationale":"x"}]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let error = propose_concept(&space, &modules, &provider, "口述").unwrap_err();
+        assert!(error.message.contains("歧义"), "{}", error.message);
+        assert!(
+            error.message.contains("player_command_intent")
+                && error.message.contains("enemy_command_intent"),
+            "歧义文案应点名全部候选：{}",
+            error.message
+        );
+        assert!(
+            error.message.contains("noun_bindings"),
+            "歧义文案应指路显式绑定：{}",
+            error.message
+        );
+    }
+
+    /// 精确命中优先于后缀变体：裸段本身就是核心名词时直接绑，不受变体干扰。
+    #[test]
+    fn exact_core_noun_match_wins_over_suffix_variant() {
+        let mut consumer = module("sys.consumer", "own_thing");
+        consumer.interface.consumes = vec!["sys.player_input.command_intent".into()];
+        let mut modules = BTreeMap::new();
+        modules.insert("sys.consumer".into(), consumer);
+        let mut space = empty_space();
+        space.pack.core_nouns = vec!["command_intent".into(), "player_command_intent".into()];
+        let response = r#"{"systems":[{"instance_id":"eater","module_id":"sys.consumer","suggested_tier":"light","core_link":"core","rationale":"x"}]}"#;
+        let provider = scripted(PURPOSE_CONCEPT, response);
+        let proposal = propose_concept(&space, &modules, &provider, "口述").unwrap();
+        assert_eq!(
+            proposal.systems[0].noun_bindings["sys.player_input.command_intent"], "command_intent",
+            "精确命中必须优先，不进后缀变体分支"
         );
     }
 
