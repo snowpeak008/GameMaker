@@ -230,9 +230,11 @@
             "地基+建筑+装饰这类纵向组合必须做成实体合成（一个实体多个部件），不能靠叠格表达"
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
-          "parameter_schema": { "schema": "none" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "occupancy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "world_map", "property": "world_grid_occupancy", "formula": "claim_exclusive(cell, structure_id) fail_if_occupied" }
+            { "effect": "modify_property", "entity": "{param:occupancy_table_id}", "property": "world_grid_occupancy", "formula": "claim_exclusive(cell, structure_id) fail_if_occupied" }
           ]
         },
         {
@@ -275,10 +277,12 @@
             "建造速度不存在，无法作为科技/加成/差异化维度使用"
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.build_placement" },
-          "parameter_schema": { "schema": "none" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "tower_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
           "effects_template": [
             { "effect": "consume_resource", "resource": "sys.economy.currency_main", "formula": "build_cost(structure_type)" },
-            { "effect": "spawn_entity", "entity": "placed_structure" },
+            { "effect": "spawn_entity", "entity": "{param:tower_table_id}" },
             { "effect": "emit_signal", "signal": "placement_done_signal" }
           ]
         },

@@ -34,6 +34,7 @@ use adm4_build::{
     pending_stage, phase2_artifacts, phase2_execution_order, save_budget,
 };
 use adm4_contracts::{SkinScanner, normalize_skin_word};
+use adm4_decision::composition::CompositionBudget;
 use adm4_decision::system_module::{PromptEntry, PromptLibrary, SystemModule};
 use adm4_decision::{
     DecisionPoint, DepthProfile, DesignLevel, DomainProgress, NodeProgress, OrganizationProgress,
@@ -530,7 +531,25 @@ impl AppServices {
             modules.insert(record.module.module_id.clone(), record.module);
         }
         engine.set_system_modules(modules);
+        engine.set_composition_budget(self.load_composition_budget()?);
         Ok(())
+    }
+
+    /// R-C2 预算表加载（W7 5-0 标定接线）：模块库根的兄弟目录
+    /// `calibration/budget.json`（默认 `knowledge/systems` → `knowledge/calibration/budget.json`）。
+    ///
+    /// 文件缺失 → 空表（占位期语义：查无本档预算值时预算检查静默跳过，提示制不阻塞）；
+    /// 文件存在但解析失败 → Err（坏数据不静默吞，R2）。数值状态 = 占位试用，
+    /// 待用户对 5-0 标定报告签字后转正（docs/memory/w7_wave5/5-0_标定报告.md）。
+    fn load_composition_budget(&self) -> Adm4Result<CompositionBudget> {
+        let path = Path::new(&self.system_modules_root)
+            .parent()
+            .map(|parent| parent.join("calibration").join("budget.json"))
+            .unwrap_or_else(|| PathBuf::from("calibration").join("budget.json"));
+        if !path.is_file() {
+            return Ok(CompositionBudget::default());
+        }
+        read_json_file(&path)
     }
 
     /// 修改并事务性保存项目（持锁 → 草稿 → 变更 → 原子提交）。

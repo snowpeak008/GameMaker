@@ -1,0 +1,9 @@
+{
+  "grade_budgets": {
+    "hyper_casual": 12.0,
+    "casual": 28.0,
+    "mid_core": 42.0,
+    "hard_core": 55.0,
+    "mmo": 68.0
+  }
+}

@@ -1,0 +1,433 @@
+{
+  "module_id": "sys.run_deckbuild",
+  "semver": "1.0.0",
+  "label_zh": "局内构筑",
+  "summary": "单局内滚动构筑牌库/技能池的系统（清单 #13）。谱系三档：简单 draft（波间三选一）→ 运行循环（抽/弃/洗 + 能量消耗，DrawFromPool 表达位）→ 全构筑循环（移除/升级，尖塔档：M3D3C2P3O3=14 极重）。边界三测试自检：T1 独占状态=牌库表 + 抽弃洗分区状态（哪张卡在抽牌堆/手牌/弃牌堆只有本系统能写）；T2 可摘除=摘除后战斗规则仍自洽（战斗失去卡牌行动源，但行动源可替换为固定技能表，战斗内部规则零改写）；T3 名词转换=消费行动点与回合事件（sys.turn_combat），产出卡牌实体/卡牌修饰器/构筑事件/构筑规则挂点。与 #14 规则修饰器收集边界：本系统的卡牌是回合内消耗性行动，#14 的修饰器是常驻规则改写——状态所有权不同（牌库表 vs 修饰器收藏表），不合并。定稿 §6.2 对应：抽/弃/洗=DrawFromPool（draw_rule 声明）、能量=ConsumeResource。",
+  "nouns": [
+    {
+      "id": "card_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "卡牌实体",
+      "summary": "有行标识与属性列的卡牌实例（费用/稀有度/类型）。牌库表是本系统独占状态的载体（T1 锚点）。"
+    },
+    {
+      "id": "deck_state",
+      "kind": { "kind": "property", "of": "run_deck" },
+      "label_zh": "牌库分区状态",
+      "summary": "抽牌堆/手牌/弃牌堆/消耗堆的分区归属——抽弃洗循环的唯一写入口，DrawFromPool 的目的地语义锚。"
+    },
+    {
+      "id": "card_modifier",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "卡牌修饰器",
+      "summary": "打出卡牌对战斗产生的修饰载荷（伤害指令/格挡指令/状态施加）。构筑 provides 给战斗消费——定稿 §6.2 构筑↔战斗双边的 provides 侧。"
+    },
+    {
+      "id": "draft_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "构筑事件",
+      "summary": "一次 draft 选取/移除/升级完成的时点信号，载荷为卡牌与操作类型。遗物触发条件与统计系统监听它。"
+    },
+    {
+      "id": "deck_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "构筑规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的构筑规则位（抽牌数/draft 出现权重/手牌上限）。遗物 modifies 构筑的作用靶（定稿 §6.2）。"
+    }
+  ],
+  "interface": {
+    "provides": ["card_entity", "deck_state", "card_modifier", "draft_signal", "deck_rule_slot"],
+    "consumes": [
+      "sys.turn_combat.action_point",
+      "sys.turn_combat.turn_signal"
+    ],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "draft 选取规则/牌库分区循环（抽弃洗）/能量计价/卡牌移除/卡牌升级的机制群。",
+    "dynamics_notes": [
+      "draft 三选一让每次奖励都成为构筑方向的微型承诺，玩家从『拿最强』转向『拿成型』（信号：同流派卡的连续选取率、跳过奖励的使用率）",
+      "抽弃洗循环使『薄牌库』成为可发现策略——移除卡牌提升关键卡循环频率（信号：终局牌库尺寸分布、移除服务使用率）",
+      "能量约束下费用曲线成为构筑约束，玩家自发统计手牌期望费用（信号：高费卡占比与胜率的相关性）"
+    ],
+    "aesthetics_primary": ["挑战", "表达"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "db0_simple_draft",
+        "label_zh": "DB0 简单 draft",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.run_deckbuild.draft_pick_rule"
+        ],
+        "inductions": [],
+        "summary": "波间三选一的最小构筑：从池中抽出候选、玩家选一入库。幸存者类升级选择落此档。C≥2（consumes 触发事件；provides 选取结果）。"
+      },
+      {
+        "id": "db1_run_loop",
+        "label_zh": "DB1 +运行循环（抽弃洗+能量）",
+        "rating": { "m": 2, "d": 1, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 3,
+        "activates": [
+          "sys.run_deckbuild.draft_pick_rule",
+          "sys.run_deckbuild.card_pool",
+          "sys.run_deckbuild.draw_discard_cycle",
+          "sys.run_deckbuild.energy_cost_rule"
+        ],
+        "inductions": [
+          {
+            "when_tier": "db1_run_loop",
+            "target": { "noun_provided": "turn_signal" },
+            "min_tier": "",
+            "reason": "抽弃洗循环锚定回合边界（回合开始抽牌/回合结束弃牌），组合中必须有实例 provides 回合事件——无回合结构的实时游戏应停留在 DB0 档"
+          }
+        ],
+        "summary": "牌库进入运行循环：回合开始按 draw_rule 抽牌（DrawFromPool）、打出消耗能量（ConsumeResource）、回合末弃牌、抽牌堆空则洗弃牌堆。构筑从一次性选择变成每回合的手牌资源题。"
+      },
+      {
+        "id": "db2_full_deckbuild",
+        "label_zh": "DB2 +全构筑循环（移除/升级）",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 3, "o": 3 },
+        "p_floor": 3,
+        "interface_floor": 5,
+        "activates": [
+          "sys.run_deckbuild.draft_pick_rule",
+          "sys.run_deckbuild.card_pool",
+          "sys.run_deckbuild.draw_discard_cycle",
+          "sys.run_deckbuild.energy_cost_rule",
+          "sys.run_deckbuild.card_removal",
+          "sys.run_deckbuild.upgrade_rule"
+        ],
+        "inductions": [
+          {
+            "when_tier": "db2_full_deckbuild",
+            "target": { "noun_provided": "turn_signal" },
+            "min_tier": "",
+            "reason": "同 DB1：运行循环锚定回合边界"
+          }
+        ],
+        "summary": "全构筑循环：加牌之外可移除（薄库策略成立）、可升级（单卡纵向成长）。定稿 §6.2 杀戮尖塔构筑档：M3D3C2P3O3=14 全局档带=极重·P=3 承诺写死（每张卡的去留都是构筑级决策）。O=3：卡池内容供给是本档长线成本主项。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.run_deckbuild.draft_pick_rule",
+      "domain": "run_deckbuild",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "draft 候选按什么规则抽出？",
+      "design_question": "奖励是固定三选一还是开池自选？三选一制造『没得选的取舍』（尖塔口径），开池自选把构筑主导权完全交给玩家但抹平了随机应变的乐趣。",
+      "tier_gate": "db0_simple_draft",
+      "options": [
+        {
+          "id": "fixed_choice_count",
+          "label": "定数候选 draft",
+          "summary": "每次奖励从卡池按稀有度权重抽固定张数候选，玩家选一（或跳过）——尖塔三选一口径",
+          "implications": [
+            "候选受随机约束使『随机应变成型』成为核心技巧，每局构筑路径不可复制",
+            "稀有度权重表决定成型概率，是卡池投放后的主调平旋钮",
+            "跳过选项必须有微补偿（如金币），否则后期奖励沦为负担"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "choice_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 6.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "{param:choice_count}", "draw_rule": "weighted_by_rarity_no_duplicate", "destination": "draft_offer" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        },
+        {
+          "id": "open_pool_pick",
+          "label": "开池自选",
+          "summary": "奖励时打开全卡池（按已解锁范围），玩家任选一张入库",
+          "implications": [
+            "构筑主导权完全在玩家手上，成型路线可以离线规划——攻略化倾向最强",
+            "失去『抽不到』的随机张力，重复游玩的构筑多样性靠玩家自律而非系统供给",
+            "全池浏览的 UI 成本随卡池规模线性上升，检索与筛选成为必需品"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "all_unlocked", "draw_rule": "open_browse_player_pick", "destination": "draft_offer" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.run_deckbuild.card_pool",
+      "domain": "run_deckbuild",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "卡池表包含哪些卡牌？",
+      "design_question": "卡池是构筑系统的内容供给面——每张卡一行：标识、费用、稀有度、类型。行数决定构筑多样性上限，费用分布决定能量经济的松紧。",
+      "tier_gate": "db1_run_loop",
+      "options": [
+        {
+          "id": "card_pool_table",
+          "label": "卡池表",
+          "summary": "每张卡一行：标识、费用、稀有度、卡牌类型",
+          "implications": [
+            "费用列直接耦合能量经济：费用分布的重心决定平均每回合出牌张数",
+            "稀有度列驱动 draft 权重：稀有度分层是成型节奏的主控参数",
+            "类型列（攻击/技能/能力）是抽弃洗规则与遗物触发条件的过滤锚点"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "card_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 9.0 }, "required": true },
+            { "key": "rarity", "kind": { "kind": "enum", "variants": ["common", "uncommon", "rare"] }, "required": true },
+            { "key": "card_type", "kind": { "kind": "enum", "variants": ["attack", "skill", "power"] }, "required": true }
+          ], "row_key": "card_id", "cardinality_key": "card_pool_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "card_entity" }
+          ]
+        },
+        {
+          "id": "card_pool_table_with_class",
+          "label": "分职业卡池表",
+          "summary": "在基础列之上增加职业归属列，draft 时按当前职业过滤",
+          "implications": [
+            "职业列把卡池切成互斥子池，单职业构筑深度与总内容成本同时上升",
+            "跨职业卡（无归属行）是稀缺设计资源，投放过多会稀释职业辨识度",
+            "职业过滤规则必须与 draft 抽取规则显式咬合，否则出现『抽到不能用的卡』"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "card_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 9.0 }, "required": true },
+            { "key": "rarity", "kind": { "kind": "enum", "variants": ["common", "uncommon", "rare"] }, "required": true },
+            { "key": "card_type", "kind": { "kind": "enum", "variants": ["attack", "skill", "power"] }, "required": true },
+            { "key": "class_ref", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "card_id", "cardinality_key": "card_pool_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "card_entity" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.run_deckbuild.draw_discard_cycle",
+      "domain": "run_deckbuild",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "抽弃洗循环按什么口径运转？",
+      "design_question": "回合末手牌是整手弃掉（尖塔口径，每回合全新一手）还是保留（手牌成为跨回合资源）？整弃逼玩家用完当下，保留奖励囤积规划。",
+      "tier_gate": "db1_run_loop",
+      "options": [
+        {
+          "id": "full_refresh_cycle",
+          "label": "整手刷新循环",
+          "summary": "回合开始从抽牌堆抽满手牌数，回合结束整手弃入弃牌堆，抽牌堆空时洗弃牌堆——尖塔口径",
+          "implications": [
+            "每回合都是全新一手，『这回合怎么用完』的即时资源题密度最高",
+            "整弃使保留类效果（下回合保留 X）成为稀缺构筑价值，投放要克制",
+            "洗牌时点可预测（堆空即洗）让数牌成为高手技巧——牌库尺寸与循环频率强相关"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "hand_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 3.0, "max": 12.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "{param:hand_size}", "draw_rule": "shuffle_uniform_reshuffle_discard_on_empty", "destination": "hand_zone" },
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:pool_table_id}", "property": "deck_state", "formula": "move_all(hand_zone -> discard_pile) on turn_end" }
+            ] },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        },
+        {
+          "id": "persistent_hand",
+          "label": "保留手牌循环",
+          "summary": "回合结束手牌保留，仅补抽到手牌上限，弃牌只由卡牌效果与手牌溢出触发",
+          "implications": [
+            "手牌成为跨回合囤积资源，『憋组合技』成为主动策略",
+            "补抽制下抽牌堆消耗变慢，洗牌节点稀疏，数牌价值下降",
+            "手牌上限成为硬约束旋钮：上限溢出的弃牌规则（自选/随机）必须显式声明"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "hand_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 15.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "max(0, {param:hand_cap} - hand_count)", "draw_rule": "shuffle_uniform_reshuffle_discard_on_empty", "destination": "hand_zone" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.run_deckbuild.energy_cost_rule",
+      "domain": "run_deckbuild",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "打出卡牌的能量计价按什么口径？",
+      "design_question": "卡牌费用是表定常数还是随局面浮动？表定费用让手牌价值可心算（尖塔口径），浮动费用（连打递增/条件减费）把计价本身变成机制空间。",
+      "tier_gate": "db1_run_loop",
+      "options": [
+        {
+          "id": "fixed_cost_per_card",
+          "label": "表定费用",
+          "summary": "每张卡的能量费用由卡池表 cost 列固定声明，打出即按表扣减行动点",
+          "implications": [
+            "手牌组合的能量预算可心算，出牌规划的认知负担全部落在组合而非计价上",
+            "费用是卡牌平衡的第一旋钮：同效果改费用比改数值的体感影响更大",
+            "0 费卡是特殊设计资源（无限连的原料），投放必须与连锁上限协同"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_point", "formula": "card_cost(card_ref)" },
+            { "effect": "spawn_entity", "entity": "{param:card_table_id}" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        },
+        {
+          "id": "contextual_cost",
+          "label": "情境浮动费用",
+          "summary": "基础费用之上按局面条件浮动（本回合已出牌数递增/满足条件减费）",
+          "implications": [
+            "计价本身成为构筑空间：减费条件是新的成型轴",
+            "浮动计价必须在手牌 UI 上实时显示当前费，否则玩家无法规划",
+            "递增/减费规则与连锁机制叠加时的计价顺序必须显式声明，否则出现计价歧义"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "escalation_per_play", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 3.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_point", "formula": "card_cost(card_ref) + cards_played_this_turn * {param:escalation_per_play}" },
+            { "effect": "spawn_entity", "entity": "{param:card_table_id}" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.run_deckbuild.card_removal",
+      "domain": "run_deckbuild",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "卡牌移除走什么渠道？",
+      "design_question": "薄牌库是花钱买（商店移除，尖塔口径）还是事件赠送？付费移除让金币与构筑质量直接兑换，事件移除把节奏控制权交给地图排布。",
+      "tier_gate": "db2_full_deckbuild",
+      "options": [
+        {
+          "id": "paid_removal_service",
+          "label": "付费移除服务",
+          "summary": "商店提供付费移除，价格随已移除次数递增——尖塔口径",
+          "implications": [
+            "金币获得『买构筑质量』的刚性去处，经济循环与构筑循环闭合",
+            "递增定价天然限制单局移除总量，薄库策略有成本上界",
+            "移除 vs 买卡的商店内取舍是该渠道的核心张力，商品栏排布要让二者同屏"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "base_removal_cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 10.0, "max": 500.0 }, "required": true },
+            { "key": "cost_escalation", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 200.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "run_currency", "formula": "{param:base_removal_cost} + removals_done * {param:cost_escalation}" },
+            { "effect": "modify_property", "entity": "{param:card_table_id}", "property": "deck_state", "formula": "remove_card(card_ref) from all_zones" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        },
+        {
+          "id": "event_granted_removal",
+          "label": "事件赠予移除",
+          "summary": "移除机会只由地图事件/营地行动提供，不可用货币购买",
+          "implications": [
+            "移除节奏由地图内容排布控制，设计师对薄库速度有直接管控权",
+            "『走事件路线换构筑质量』成为路线规划的价值项，与地图系统强咬合",
+            "移除机会的稀缺感放大单次选择重量，但欧非差异（遇不到事件）需要保底"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:card_table_id}", "property": "deck_state", "formula": "remove_card(card_ref) on event_grant" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.run_deckbuild.upgrade_rule",
+      "domain": "run_deckbuild",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "卡牌升级按什么口径？",
+      "design_question": "升级是单卡一次到位（尖塔+口径）还是同卡合成叠级？一次到位简单可读，合成叠级让重复抽到同卡有持续价值。",
+      "tier_gate": "db2_full_deckbuild",
+      "options": [
+        {
+          "id": "single_step_upgrade",
+          "label": "单次升级制",
+          "summary": "每张卡只有基础/升级两态，升级机会由营地/事件提供——尖塔口径",
+          "implications": [
+            "两态设计使升级价值一眼可读（数值+1 档），无需成长曲线",
+            "『先升哪张』是营地行动的核心取舍，与休息（回血）互斥时张力最大",
+            "全卡双态意味着内容成本翻倍（每张卡两份数值），投放前要算清"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:card_table_id}", "property": "deck_state", "formula": "set_upgraded(card_ref) once" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        },
+        {
+          "id": "merge_stack_upgrade",
+          "label": "同卡合成叠级",
+          "summary": "抽到重复卡可合成叠级，等级线性放大卡牌数值",
+          "implications": [
+            "重复抽取从坏事变成养成资源，draft 的『废抽』挫败被合成价值兜底",
+            "叠级上限与放大系数决定单卡天花板，超模单卡会把构筑压成单卡崇拜",
+            "合成需要 UI 呈现『差几张到下级』，收集进度感是该口径的隐性卖点"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.run_deckbuild" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "card_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "max_merge_level", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:card_table_id}", "property": "deck_state", "formula": "merge_level + 1 while merge_level < {param:max_merge_level}" },
+            { "effect": "emit_signal", "signal": "draft_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "card_pool_rows": { "min": 5, "max": 200 }
+  },
+  "consistency_rules": [
+    {
+      "id": "card_pool_and_draw_cycle_answered_together",
+      "kind": "answered_together",
+      "first": "sys.run_deckbuild.card_pool",
+      "second": "sys.run_deckbuild.draw_discard_cycle"
+    }
+  ],
+  "skin_fields": ["card_frame_theme", "card_art_style"]
+}

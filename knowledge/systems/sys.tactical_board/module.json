@@ -333,11 +333,13 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "front_row_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true }
+            { "key": "front_row_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 6.0 }, "required": true },
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "occupancy_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "row = chosen_row if row_count(front) <= {param:front_row_cap}" },
-            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "assign(unit, row_slot)" }
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "unit_position_state", "formula": "row = chosen_row if row_count(front) <= {param:front_row_cap}" },
+            { "effect": "modify_property", "entity": "{param:occupancy_table_id}", "property": "board_occupancy", "formula": "assign(unit, row_slot)" }
           ]
         },
         {
@@ -352,11 +354,13 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "formation_rows", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 5.0 }, "required": true },
-            { "key": "formation_cols", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 5.0 }, "required": true }
+            { "key": "formation_cols", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 5.0 }, "required": true },
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "occupancy_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "cell = chosen(row < {param:formation_rows}, col < {param:formation_cols})" },
-            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "assign_exclusive(unit, cell)" }
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "unit_position_state", "formula": "cell = chosen(row < {param:formation_rows}, col < {param:formation_cols})" },
+            { "effect": "modify_property", "entity": "{param:occupancy_table_id}", "property": "board_occupancy", "formula": "assign_exclusive(unit, cell)" }
           ]
         }
       ]
@@ -436,10 +440,11 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "board_width", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true },
-            { "key": "board_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true }
+            { "key": "board_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 6.0, "max": 40.0 }, "required": true },
+            { "key": "occupancy_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "tactical_board", "property": "board_occupancy", "formula": "init_grid(square, {param:board_width}, {param:board_height}, neighbors=4)" }
+            { "effect": "modify_property", "entity": "{param:occupancy_table_id}", "property": "board_occupancy", "formula": "init_grid(square, {param:board_width}, {param:board_height}, neighbors=4)" }
           ]
         },
         {
@@ -481,10 +486,11 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.tactical_board" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "base_move_points", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+            { "key": "base_move_points", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "board_unit", "property": "unit_position_state", "formula": "reachable = cells_within({param:base_move_points} steps)" },
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "unit_position_state", "formula": "reachable = cells_within({param:base_move_points} steps)" },
             { "effect": "emit_signal", "signal": "move_resolved_signal" }
           ]
         },

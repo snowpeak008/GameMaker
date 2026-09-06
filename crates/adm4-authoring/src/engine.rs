@@ -5,6 +5,7 @@ use crate::custom::{
     validate_draft,
 };
 use crate::state::{AuthoringState, CompositionFormConfirmation, FindingDisposition, TemplateMode};
+use adm4_decision::composition::CompositionBudget;
 use adm4_decision::system_module::SystemModule;
 use adm4_decision::{
     ApplicabilityMap, CompletenessReport, DecisionId, DecisionPoint, NaJustification, OptionId,
@@ -124,6 +125,9 @@ pub struct AuthoringEngine {
     /// 项目根本不需要；有 refs 却没注入时组合评估按数据缺口 fail-closed 报错，
     /// 不静默当"零违例"）。`Arc` 与设计空间同一纪律：运行期只读，多引擎共享。
     system_modules: Option<Arc<BTreeMap<String, SystemModule>>>,
+    /// R-C2 预算表（W7 5-0：门面从 knowledge/calibration/budget.json 装载注入；
+    /// 默认空表 = 占位期语义——查无本档预算值时预算检查静默跳过，提示制不阻塞）。
+    composition_budget: CompositionBudget,
     state: AuthoringState,
 }
 
@@ -148,6 +152,7 @@ impl AuthoringEngine {
             base_space,
             space,
             system_modules: None,
+            composition_budget: CompositionBudget::default(),
             state,
         })
     }
@@ -155,6 +160,11 @@ impl AuthoringEngine {
     /// 注入组合校验用的系统模块表（门面层在装配后调用；测试可自建模块表）。
     pub fn set_system_modules(&mut self, modules: impl Into<Arc<BTreeMap<String, SystemModule>>>) {
         self.system_modules = Some(modules.into());
+    }
+
+    /// 注入 R-C2 预算表（W7 5-0 标定接线；未注入 = 空表 = 占位期静默跳过语义）。
+    pub fn set_composition_budget(&mut self, budget: CompositionBudget) {
+        self.composition_budget = budget;
     }
 
     /// custom 登记簿变化后重建生效空间（base 不变，不叠加增广）。
@@ -661,6 +671,7 @@ impl AuthoringEngine {
             modules,
             self.state.composition_form_confirmation.as_ref(),
             &self.state.core_loop,
+            &self.composition_budget,
         )
     }
 

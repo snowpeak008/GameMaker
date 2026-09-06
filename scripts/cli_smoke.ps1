@@ -1397,9 +1397,278 @@ if ($draft.host_system_id -ne 'loot_main.rate_model') { Fail '3d：草案 host �
 if (-not $draft.effects[0].then) { Fail '3d：草案 GWT 三段应齐全' }
 
 # ---------------------------------------------------------------------------
+# 8k. T-W7-5a 杀戮尖塔全量样板：真实 spire_like pack 走 scripted 全链最小路径
+#     （建项 -> tier 三档声明 -> R-C1' 判定与署名确认 -> 激活点补齐 -> 冻结 ->
+#      C0-C6 -> 四伤疤产物断言：DrawFromPool / 叠加序 / acyclic 图 / ModifyRule 依赖边）
+#
+# 与 e2e 的互补覆盖：spire_sample_e2e.rs 的全链走概念变体包（访谈落盘三实例），
+# 本段走真实 knowledge/design_space/spire_like/pack.json（system_refs 装配路径），
+# 三处（M2 装配测试 / M3 e2e / 本段）都到定稿 §6.2 判定。
+# 注：通用层 u.genre 品类选项暂无爬塔条目（通用层不在 5a 可写范围），本段选最近似的
+# puzzle_casual（同为回合制无实时压力）——选项覆盖缺口如实记录在 5a 验收单。
+# ---------------------------------------------------------------------------
+
+# Windows PowerShell 5.1 向原生 exe 传参不会转义内嵌双引号（CommandLineToArgvW 会把
+# 裸引号当定界符吞掉），JSON 实参必须按规则转义：引号前的反斜杠翻倍 + 引号加 \。
+function ConvertTo-NativeJsonArg([string]$Json) {
+    return ($Json -replace '(\\*)"', '$1$1\"')
+}
+
+# 尖塔段脚本 AI：冻结红队/C1 红队互异（R3 反橡皮图章）+ C2/C3/C4 应答。
+$SpireAiPath = Join-Path $AiDir 'spire_ai.json'
+Write-Utf8NoBom $SpireAiPath @'
+{
+  "freeze_red_team": [{"findings":[],"per_category":[{"category":"consistency","checked":"尖塔样板全部决策交叉复核","conclusion":"未发现矛盾"}]}],
+  "c1_redteam": [{"findings":[{"id":"w1","severity":"warning","target":"mechanics/relic_main.multiplicative_modifier_rule","text":"乘算件叠乘上界需在投放前算清"}],"per_category":[{"category":"feasibility","checked":"机制逐条","conclusion":"均可实现"}]}],
+  "c2_narrative": [{"text":"基于规格的玩法叙述：玩家按能量打出卡牌驱动回合战斗，敌人意图明牌预告，遗物按叠加序常驻改写伤害规则，沿有向无环分支塔爬向 Boss。"}],
+  "c3_asset_description": [{"description":"暗色调哥特卡通风格的敌人立绘，正面站姿，边缘描边，适配 2D 序列帧。"}],
+  "c4_interface_naming": [{"interface_name":"MechanicExecutionService"}]
+}
+'@
+
+$out = Invoke-Adm4 '5a：新建尖塔样板项目（真实 spire_like pack）' @('project', 'new', '晨曦回廊爬塔', '--pack', 'spire_like', '--depth', 'L6')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析尖塔样板项目的存档 id' }
+$SpireArchive = $match.Groups[1].Value
+
+# 通用层必做根点 + L0 画像档（中核 -> R-C1' 参考线 2）。
+foreach ($pair in @(
+        @('u.business_model', 'premium'),
+        @('u.platform', 'pc_single'),
+        @('u.experience', 'power_trip'),
+        @('u.genre', 'puzzle_casual'),
+        @('u.target_scale', 'midcore'))) {
+    Invoke-Adm4 "5a：选择 $($pair[0])" @('authoring', 'select', $SpireArchive, $pair[0], $pair[1]) | Out-Null
+}
+Invoke-Adm4 '5a：u.experience 体验陈述参数' @('authoring', 'set-param', $SpireArchive, 'u.experience', (ConvertTo-NativeJsonArg '{"values":"scalars","entries":{"statement":"以一副小牌库对抗层层强敌，从残局边缘长成规则的主人"}}')) | Out-Null
+
+# 二版十六领域入口点豁免（与 §5b 同一做法：本段只验证品类最小链路）。
+foreach ($entry in $V2DomainEntryPoints) {
+    Invoke-Adm4 "5a：豁免二版领域入口点 $entry" @('authoring', 'na', $SpireArchive, $entry, 'smoke_scope_toolchain_only') | Out-Null
+}
+
+# tier 三档声明（定稿 §6.2 尖塔档：战斗 tc2 W10 重 / 构筑 db2 W14 极重 / 遗物 rm1 W10 重）。
+foreach ($pair in @(
+        @('combat_main.tier', 'tc2_status_stack'),
+        @('deck_main.tier', 'db2_full_deckbuild'),
+        @('relic_main.tier', 'rm1_rule_patch'))) {
+    Invoke-Adm4 "5a：档位声明 $($pair[0]) = $($pair[1])" @('authoring', 'select', $SpireArchive, $pair[0], $pair[1]) | Out-Null
+    Invoke-Adm4 "5a：确认 $($pair[0])" @('authoring', 'confirm', $SpireArchive, $pair[0]) | Out-Null
+}
+
+# R-C1' 判定（定稿 §6.2）：零 [BLOCK]、|H|=3 超中核参考线 2 -> [ADVICE]+[CONFIRM-REQUIRED]；
+# B(G)=31.50 <= mid_core 42 -> 不得出现预算提示（5-0 预算表联动）。
+$out = Invoke-Adm4 '5a：组合报告（|H|=3 超线提示，无硬违例）' @('compose', 'report', $SpireArchive)
+Assert-NotContains $out '[BLOCK]' '5a 组合零硬违例'
+Assert-Contains $out '重核集合 H：combat_main、deck_main、relic_main（|H|=3，连通）' '5a H 集与连通'
+Assert-Contains $out '重度预算 B(G)：31.50' '5a B(G) 数字'
+Assert-Contains $out 'v3c_count_advice' '5a |H| 数量提示'
+Assert-Contains $out '[CONFIRM-REQUIRED]' '5a 要求署名形态确认'
+Assert-NotContains $out 'v5_budget_advice' '5a B(G)=31.5 不得触发预算提示'
+
+$out = Invoke-Adm4 '5a：署名形态确认（用户手势）' @('compose', 'confirm-form', $SpireArchive, '--signer', '冒烟设计师', '--note', '接受尖塔三重核形态（定稿 6.2）')
+Assert-Contains $out '冒烟设计师' '5a 确认署名在案（R3）'
+$out = Invoke-Adm4 '5a：确认后组合报告不再要求确认' @('compose', 'report', $SpireArchive)
+Assert-NotContains $out '[CONFIRM-REQUIRED]' '5a 已确认不再要求'
+Assert-Contains $out '[CONFIRMED]' '5a 生效确认留痕可见'
+
+# 激活点补齐（尖塔口径选项 + 作者填写的占位符参数，I1）。
+foreach ($pair in @(
+        @('combat_main.turn_structure', 'player_enemy_alternate'),
+        @('combat_main.action_economy', 'per_turn_refill'),
+        @('combat_main.damage_formula', 'flat_minus_block'),
+        @('combat_main.status_effect_rule', 'stack_intensity'),
+        @('combat_main.status_timing', 'turn_start_settle'),
+        @('deck_main.draft_pick_rule', 'fixed_choice_count'),
+        @('deck_main.card_pool', 'card_pool_table'),
+        @('deck_main.draw_discard_cycle', 'full_refresh_cycle'),
+        @('deck_main.energy_cost_rule', 'fixed_cost_per_card'),
+        @('deck_main.card_removal', 'paid_removal_service'),
+        @('deck_main.upgrade_rule', 'single_step_upgrade'),
+        @('relic_main.acquisition_channel', 'milestone_drop'),
+        @('relic_main.relic_pool', 'relic_pool_table'),
+        @('relic_main.additive_modifier_rule', 'flat_additive_patch'),
+        @('relic_main.multiplicative_modifier_rule', 'global_multiplier_patch'),
+        @('spire.map_graph', 'acyclic_branching'),
+        @('spire.intent_telegraph', 'full_disclosure'),
+        @('spire.enemy_roster', 'enemy_table'))) {
+    Invoke-Adm4 "5a：选择 $($pair[0])" @('authoring', 'select', $SpireArchive, $pair[0], $pair[1]) | Out-Null
+}
+
+# 标量/表/图参数（叠加序验收对：加法件 priority=10 与乘算件 priority=100 同靶伤害公式）。
+$SpireParams = @(
+    @('combat_main.action_economy', '{"values":"scalars","entries":{"points_per_turn":3}}'),
+    @('combat_main.damage_formula', '{"values":"scalars","entries":{"unit_table_id":"spire.enemy_roster"}}'),
+    @('combat_main.status_effect_rule', '{"values":"scalars","entries":{"unit_table_id":"spire.enemy_roster","decay_per_turn":1}}'),
+    @('combat_main.status_timing', '{"values":"scalars","entries":{"unit_table_id":"spire.enemy_roster"}}'),
+    @('deck_main.draft_pick_rule', '{"values":"scalars","entries":{"pool_table_id":"deck_main.card_pool","choice_count":3}}'),
+    @('deck_main.draw_discard_cycle', '{"values":"scalars","entries":{"pool_table_id":"deck_main.card_pool","hand_size":5}}'),
+    @('deck_main.energy_cost_rule', '{"values":"scalars","entries":{"card_table_id":"deck_main.card_pool"}}'),
+    @('deck_main.card_removal', '{"values":"scalars","entries":{"card_table_id":"deck_main.card_pool","base_removal_cost":75,"cost_escalation":25}}'),
+    @('deck_main.upgrade_rule', '{"values":"scalars","entries":{"card_table_id":"deck_main.card_pool"}}'),
+    @('relic_main.acquisition_channel', '{"values":"scalars","entries":{"pool_table_id":"relic_main.relic_pool"}}'),
+    @('relic_main.additive_modifier_rule', '{"values":"scalars","entries":{"target_rule_id":"combat_main.damage_formula","flat_bonus":6.0}}'),
+    @('relic_main.multiplicative_modifier_rule', '{"values":"scalars","entries":{"target_rule_id":"combat_main.damage_formula","multiplier":1.5}}'),
+    @('spire.intent_telegraph', '{"values":"scalars","entries":{"enemy_table_id":"spire.enemy_roster"}}'),
+    @('deck_main.card_pool', '{"values":"rows","rows":[{"card_id":"strike","label":"打击","cost":1,"rarity":"common","card_type":"attack"},{"card_id":"defend","label":"防御","cost":1,"rarity":"common","card_type":"skill"},{"card_id":"heavy_blade","label":"重刃","cost":2,"rarity":"common","card_type":"attack"},{"card_id":"inflame","label":"燃心","cost":1,"rarity":"uncommon","card_type":"power"},{"card_id":"bludgeon","label":"钝击","cost":3,"rarity":"rare","card_type":"attack"}]}'),
+    @('relic_main.relic_pool', '{"values":"rows","rows":[{"relic_id":"iron_talisman","label":"铁符","rarity":"common","effect_class":"additive"},{"relic_id":"prism_lens","label":"棱镜","rarity":"boss","effect_class":"multiplicative"},{"relic_id":"echo_bell","label":"回响铃","rarity":"rare","effect_class":"trigger"}]}'),
+    @('spire.enemy_roster', '{"values":"rows","rows":[{"id":"acolyte","hp":48,"tier":"normal","action_pattern":"ritual_then_attack"},{"id":"pit_bruiser","hp":82,"tier":"elite","action_pattern":"enrage_on_skill"},{"id":"tower_warden","hp":240,"tier":"boss","action_pattern":"mode_shift_cycle"}]}'),
+    @('spire.map_graph', '{"values":"scalars","entries":{"graph":"{\"nodes\":[{\"id\":\"floor_start\",\"payload\":{\"node_kind\":\"combat\"}},{\"id\":\"floor_elite\",\"payload\":{\"node_kind\":\"elite\"}},{\"id\":\"floor_boss\",\"payload\":{\"node_kind\":\"boss\"}}],\"edges\":[{\"from\":\"floor_start\",\"to\":\"floor_elite\"},{\"from\":\"floor_elite\",\"to\":\"floor_boss\"}]}"}}')
+)
+foreach ($pair in $SpireParams) {
+    $out = Invoke-Adm4 "5a：参数 $($pair[0])" @('authoring', 'set-param', $SpireArchive, $pair[0], (ConvertTo-NativeJsonArg $pair[1]))
+    Assert-Contains $out '参数已保存并通过校验' "5a 参数校验 $($pair[0])"
+}
+
+foreach ($decision in @(
+        'u.business_model', 'u.platform', 'u.experience', 'u.genre', 'u.target_scale',
+        'combat_main.turn_structure', 'combat_main.action_economy', 'combat_main.damage_formula',
+        'combat_main.status_effect_rule', 'combat_main.status_timing',
+        'deck_main.draft_pick_rule', 'deck_main.card_pool', 'deck_main.draw_discard_cycle',
+        'deck_main.energy_cost_rule', 'deck_main.card_removal', 'deck_main.upgrade_rule',
+        'relic_main.acquisition_channel', 'relic_main.relic_pool',
+        'relic_main.additive_modifier_rule', 'relic_main.multiplicative_modifier_rule',
+        'spire.map_graph', 'spire.intent_telegraph', 'spire.enemy_roster')) {
+    Invoke-Adm4 "5a：确认 $decision" @('authoring', 'confirm', $SpireArchive, $decision) | Out-Null
+}
+
+# 冻结：红队 -> 五门全绿（gate2 组合段绿 + 署名确认留痕）-> 冻结成功。
+$out = Invoke-Adm4 '5a：红队评审（脚本应答）' @('freeze', 'red-team', $SpireArchive, '--scripted-file', $SpireAiPath)
+Assert-Contains $out '红队评审完成' '5a 红队'
+$out = Invoke-Adm4 '5a：冻结检查五门全绿' @('freeze', 'check', $SpireArchive)
+Assert-NotContains $out '[BLOCK]' '5a 冻结门'
+Assert-Contains $out 'composition_form_confirmed' '5a gate2 署名确认留痕可见（R3）'
+$out = Invoke-Adm4 '5a：执行冻结' @('freeze', 'run', $SpireArchive)
+Assert-Contains $out '冻结成功：v1' '5a 冻结版本'
+
+# C0-C6（C5/C6 人工门）。
+$out = Invoke-Adm4 '5a：流水线第一轮应停在 C5 人工门' @('pipeline', 'run', $SpireArchive, '--scripted-file', $SpireAiPath)
+Assert-Contains $out 'C5: 等待人工确认' '5a C5 人工门'
+Invoke-Adm4 '5a：确认 C5' @('pipeline', 'confirm', $SpireArchive, 'C5', '冒烟评审员', '风格方向确认') | Out-Null
+$out = Invoke-Adm4 '5a：流水线第二轮应停在 C6 签收' @('pipeline', 'run', $SpireArchive, '--scripted-file', $SpireAiPath)
+Assert-Contains $out 'C6: 等待人工确认' '5a C6 人工门'
+$out = Invoke-Adm4 '5a：签收 C6' @('pipeline', 'confirm', $SpireArchive, 'C6', '冒烟评审员', 'Phase 1 文档集签收')
+Assert-Contains $out 'C6: 成功' '5a C6 签收后状态'
+
+# 四伤疤产物断言（关键产物）：
+# 伤疤 1（DrawFromPool）+ 伤疤 2（叠加序，定稿指令 7）在 C4 文档。
+$out = Invoke-Adm4 '5a：C4 文档四伤疤断言（DrawFromPool + 叠加序）' @('pipeline', 'artifacts', $SpireArchive, '--stage', 'C4', '--show-document')
+Assert-Contains $out '从池表 deck_main.card_pool 按规则 weighted_by_rarity_no_duplicate 抽取 3 个到 draft_offer' '5a DrawFromPool 能力契约'
+Assert-Contains $out '规则 combat_main.damage_formula 的系数按 base + 6 缩放（按 priority=10 结算，同序按机制 id 字典序）' '5a 加法遗物叠加序文字'
+Assert-Contains $out '规则 combat_main.damage_formula 的系数按 result * 1.5 缩放（按 priority=100 结算，同序按机制 id 字典序）' '5a 乘算遗物叠加序文字'
+# 伤疤 3（acyclic 地图图）在 C0 机器契约（document.md 是统计简报，图结构在 contract.json）。
+$SpireC0Contract = Get-ChildItem -Path (Join-Path $DataRoot 'archives') -Recurse -Filter 'contract.json' |
+    Where-Object { $_.FullName -match [regex]::Escape($SpireArchive) -and $_.FullName -match '\\pipeline\\v1\\C0\\' } |
+    Select-Object -First 1
+if (-not $SpireC0Contract) { Fail '5a：C0 契约未落盘' }
+$spireSpec = Get-Content -LiteralPath $SpireC0Contract.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($spireSpec.graphs.Count -ne 1) { Fail "5a：GameSpec.graphs 应恰有地图一图，实际 $($spireSpec.graphs.Count)" }
+$spireGraph = $spireSpec.graphs[0]
+if ($spireGraph.id -ne 'spire.map_graph') { Fail "5a：图 id 应为 spire.map_graph，实际 $($spireGraph.id)" }
+if (-not $spireGraph.directed) { Fail '5a：地图图应为有向' }
+if (-not $spireGraph.acyclic) { Fail '5a：地图图应显式声明 acyclic:true（定稿 6.2 尖塔口径）' }
+if ($spireGraph.entry -ne 'single') { Fail "5a：地图图应单入口，实际 $($spireGraph.entry)" }
+if ($spireGraph.nodes.Count -ne 3) { Fail "5a：地图图应 3 节点，实际 $($spireGraph.nodes.Count)" }
+# 伤疤 4（ModifyRule 跨机制依赖边）在 C6 文档任务表。
+$out = Invoke-Adm4 '5a：C6 任务图含 ModifyRule 跨机制依赖边' @('pipeline', 'artifacts', $SpireArchive, '--stage', 'C6', '--show-document')
+Assert-Contains $out 'task_cap_combat_main.damage_formula' '5a 遗物程序任务依赖伤害公式任务'
+
+# ---------------------------------------------------------------------------
+# 8l. T-W7-5b 自走棋薄样板：真实 autochess_thin pack 的装配与 R-C1' 薄判定最小路径
+#     （建项 -> L0 画像 -> tier 五档声明 -> compose report 薄判定断言 ->
+#      V1 传导负例（db1 无回合信号源）与回落恢复）
+#
+# 装配面已由本脚本开头的 space validate 全包遍历覆盖（autochess_thin 在设计空间
+# 副本内，任何悬空绑定/门控矛盾都会 [BLOCKED]）。与尖塔 8k 段的对照：尖塔 |H|=3
+# 超中核参考线 → [ADVICE]+[CONFIRM-REQUIRED]；自走棋薄组合 |H|=1（唯一重核=赛制
+# mf2 W11）→ 零提示零确认——R-C1' 两条判定路径都有冒烟实证。
+# 全链 C0-C6 由 autochess_sample_e2e.rs 覆盖（模块内含波 1 未交付臂的激活点需
+# set_not_applicable 人工豁免，CLI 仅有 baseline `na` 通道——缺口记 5b 验收单）。
+# ---------------------------------------------------------------------------
+
+$out = Invoke-Adm4 '5b：新建自走棋薄样板项目（真实 autochess_thin pack）' @('project', 'new', '八人棋会', '--pack', 'autochess_thin', '--depth', 'L6')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析自走棋样板项目的存档 id' }
+$AutochessArchive = $match.Groups[1].Value
+
+# L0 画像档（中核 -> R-C1' 参考线 2）。
+Invoke-Adm4 '5b：选择 u.target_scale' @('authoring', 'select', $AutochessArchive, 'u.target_scale', 'midcore') | Out-Null
+
+# tier 五档声明（任务卡档位：赛制重 mf2 / 棋盘中 tb1 / 编队中 s1 / 构筑 db0 / 经济 T0；
+# 档位裁量见 T-W7-5b 断点申报）。
+foreach ($pair in @(
+        @('format_main.tier', 'mf2_elimination_bracket'),
+        @('board_main.tier', 'tb1_grid_movement'),
+        @('squad_main.tier', 's1_formation'),
+        @('shop_main.tier', 'db0_simple_draft'),
+        @('economy_main.tier', 'basic_income'))) {
+    Invoke-Adm4 "5b：档位声明 $($pair[0]) = $($pair[1])" @('authoring', 'select', $AutochessArchive, $pair[0], $pair[1]) | Out-Null
+    Invoke-Adm4 "5b：确认 $($pair[0])" @('authoring', 'confirm', $AutochessArchive, $pair[0]) | Out-Null
+}
+
+# R-C1' 薄判定：零 [BLOCK]、H={format_main} |H|=1 ≤ 参考线 2 -> 零提示零确认；
+# B(G)=34.75（11 + 8 + 8 + 4 + 5*0.75）≤ mid_core 42。
+$out = Invoke-Adm4 '5b：组合报告（|H|=1 薄判定，零违例零提示）' @('compose', 'report', $AutochessArchive)
+Assert-NotContains $out '[BLOCK]' '5b 薄组合零硬违例'
+Assert-Contains $out '重核集合 H：format_main（|H|=1，连通）' '5b H 集与连通'
+Assert-Contains $out '重度预算 B(G)：34.75' '5b B(G) 数字'
+Assert-NotContains $out '[ADVICE]' '5b |H|=1 不超线零提示'
+Assert-NotContains $out '[CONFIRM-REQUIRED]' '5b 不需要署名形态确认'
+
+# V1 传导负例：构筑升 db1（抽弃洗锚定回合边界）而组合无回合信号源 -> V1 block 非零退出。
+Invoke-Adm4 '5b：构筑升 db1（制造 V1 传导缺口）' @('authoring', 'select', $AutochessArchive, 'shop_main.tier', 'db1_run_loop') | Out-Null
+$out = Invoke-Adm4 '5b：db1 组合报告应有 V1 传导违例（非零退出）' @('compose', 'report', $AutochessArchive) -ExpectFailure
+Assert-Contains $out 'v1_transmission_gap' '5b V1 违例码'
+Assert-Contains $out 'turn_signal' '5b V1 点名缺失名词'
+
+# 回落 db0 -> 恢复零违例（draft 语义在 db0 完整成立）。
+Invoke-Adm4 '5b：构筑回落 db0' @('authoring', 'select', $AutochessArchive, 'shop_main.tier', 'db0_simple_draft') | Out-Null
+$out = Invoke-Adm4 '5b：回落后组合恢复零违例' @('compose', 'report', $AutochessArchive)
+Assert-NotContains $out '[BLOCK]' '5b 回落恢复'
+
+# ---------------------------------------------------------------------------
+# 8m. T-W7-5d 塔防薄样板：真实 towerdef_thin pack 的装配与 R-C1' 薄判定最小路径
+#     （建项 -> L0 画像 -> tier 三档声明（放置=BP0 预设槽位，G1 轻档实战主角）->
+#      compose report 薄判定断言）
+#
+# 装配面由本脚本开头的 space validate 全包遍历覆盖（towerdef_thin 在设计空间副本内，
+# 悬空绑定/门控矛盾都会 [BLOCKED]）。与 8l 自走棋段（|H|=1 唯一重核）再成对照：
+# 塔防薄组合 BP0 W4 轻 / 经济 T0 W5 中 / 计分 K0 W4 轻——无人 W≥9，|H|=0（空集
+# 平凡连通），零 block 零提示零确认，B(G)=9.75（4×1.0 + 5×0.75 + 4×0.5）。
+# 全链 C0-C6 由 towerdef_sample_e2e.rs 覆盖（BP0 正名点 slot_legality 两选项均
+# RollCheck 未交付臂，需 set_not_applicable 人工豁免，CLI 无该通道——与 5b 同缺口）。
+# ---------------------------------------------------------------------------
+
+$out = Invoke-Adm4 '5d：新建塔防薄样板项目（真实 towerdef_thin pack）' @('project', 'new', '薄暮要塞防线', '--pack', 'towerdef_thin', '--depth', 'L6')
+$match = [regex]::Match($out, '已创建项目：(\S+)')
+if (-not $match.Success) { Fail '未能解析塔防样板项目的存档 id' }
+$TowerdefArchive = $match.Groups[1].Value
+
+# L0 画像档（中核 -> R-C1' 参考线 2）。
+Invoke-Adm4 '5d：选择 u.target_scale' @('authoring', 'select', $TowerdefArchive, 'u.target_scale', 'midcore') | Out-Null
+
+# tier 三档声明（任务卡档位：放置 BP0 轻 / 经济 T0 轻-中 / 计分 K0 轻）。
+foreach ($pair in @(
+        @('placement_main.tier', 'bp0_preset_slots'),
+        @('economy_main.tier', 'basic_income'),
+        @('score_main.tier', 'k0_score_table'))) {
+    Invoke-Adm4 "5d：档位声明 $($pair[0]) = $($pair[1])" @('authoring', 'select', $TowerdefArchive, $pair[0], $pair[1]) | Out-Null
+    Invoke-Adm4 "5d：确认 $($pair[0])" @('authoring', 'confirm', $TowerdefArchive, $pair[0]) | Out-Null
+}
+
+# R-C1' 薄判定：零 [BLOCK]、|H|=0（全轻中组合无人入重核）-> 零提示零确认；
+# B(G)=9.75 ≤ mid_core 42。
+$out = Invoke-Adm4 '5d：组合报告（|H|=0 薄判定，零违例零提示）' @('compose', 'report', $TowerdefArchive)
+Assert-NotContains $out '[BLOCK]' '5d 薄组合零硬违例'
+Assert-Contains $out '重核集合 H：（空）（|H|=0，连通）' '5d H 空集与平凡连通'
+Assert-Contains $out '重度预算 B(G)：9.75' '5d B(G) 数字'
+Assert-NotContains $out '[ADVICE]' '5d |H|=0 零提示'
+Assert-NotContains $out '[CONFIRM-REQUIRED]' '5d 不需要署名形态确认'
+
+# ---------------------------------------------------------------------------
 # 9. 收尾
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse -Force -LiteralPath $Work -ErrorAction SilentlyContinue
 Write-Host ''
-Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> P0 两条线派生 -> 风格锚点门（生成/改词/确认/重选） -> P2 预算门/批量生产/缓存命中/代表锚图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 -> compose 组合校验接线 -> 三段访谈（概念/组合/机制）OK' -ForegroundColor Green
+Write-Host '[冒烟通过] 逆向五步 -> 模板预填 -> 访谈补齐 -> 冻结 -> C0-C6 全链 -> P0 两条线派生 -> 风格锚点门（生成/改词/确认/重选） -> P2 预算门/批量生产/缓存命中/代表锚图 -> 另存模板/重置/体检 -> 换皮豁免/认证证据/AI 配置 -> SDK 审批/变更流/交付清点/多选主选 -> compose 组合校验接线 -> 三段访谈（概念/组合/机制） -> 尖塔全量样板（spire_like 装配/R-C1判定/署名确认/四伤疤产物） -> 自走棋薄样板（autochess_thin 装配/R-C1薄判定/V1传导正反例） -> 塔防薄样板（towerdef_thin 装配/BP0 轻档 |H|=0 薄判定）OK' -ForegroundColor Green
 exit 0

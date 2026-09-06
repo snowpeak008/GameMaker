@@ -96,6 +96,7 @@ pub fn assess_composition(
     modules: &BTreeMap<String, SystemModule>,
     confirmation: Option<&CompositionFormConfirmation>,
     core_loop: &[CoreLoopVerb],
+    budget: &CompositionBudget,
 ) -> Adm4Result<Option<CompositionAssessment>> {
     let refs = &space.pack.system_refs;
     if refs.is_empty() {
@@ -177,7 +178,7 @@ pub fn assess_composition(
             .map(|entry| (entry.verb.clone(), entry.instance_id.clone()))
             .collect(),
         product_grade: product_grade_of(selections),
-        budget: CompositionBudget::default(),
+        budget: budget.clone(),
         form_confirmed: false,
         pack_core_nouns: space.pack.core_nouns.clone(),
         module_tier_orders,
@@ -509,8 +510,15 @@ mod tests {
     #[test]
     fn no_system_refs_returns_none() {
         let space = space_with_refs(Vec::new());
-        let result = assess_composition(&space, &BTreeMap::new(), &BTreeMap::new(), None, &[])
-            .expect("无引用项目不应报错");
+        let result = assess_composition(
+            &space,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("无引用项目不应报错");
         assert!(result.is_none(), "旧项目必须零开销返回 None");
     }
 
@@ -522,9 +530,16 @@ mod tests {
         ]);
         let mut selections = BTreeMap::new();
         select(&mut selections, "source_main.tier", "only");
-        let assessment = assess_composition(&space, &selections, &modules(), None, &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let assessment = assess_composition(
+            &space,
+            &selections,
+            &modules(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert_eq!(assessment.missing_tiers.len(), 1);
         assert_eq!(assessment.missing_tiers[0].instance_id, "engine_main");
         assert!(
@@ -548,9 +563,16 @@ mod tests {
         let mut selections = BTreeMap::new();
         select(&mut selections, "engine_main.tier", "ghost_tier");
         select(&mut selections, "source_main.tier", "only");
-        let assessment = assess_composition(&space, &selections, &modules(), None, &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let assessment = assess_composition(
+            &space,
+            &selections,
+            &modules(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert_eq!(assessment.missing_tiers.len(), 1);
         assert!(
             assessment.missing_tiers[0].detail.contains("ghost_tier"),
@@ -568,9 +590,16 @@ mod tests {
         let mut selections = BTreeMap::new();
         select(&mut selections, "engine_main.tier", "heavy");
         select(&mut selections, "source_main.tier", "only");
-        let assessment = assess_composition(&space, &selections, &modules(), None, &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let assessment = assess_composition(
+            &space,
+            &selections,
+            &modules(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         // 重档传导 sys.sink ≥ deep：组合内无 sys.sink 实例 → V1。
         let v1 = assessment
             .report
@@ -594,8 +623,15 @@ mod tests {
     #[test]
     fn missing_module_in_table_is_fail_closed() {
         let space = space_with_refs(vec![engine_ref("engine_main", CoreLink::Core)]);
-        let error = assess_composition(&space, &BTreeMap::new(), &BTreeMap::new(), None, &[])
-            .expect_err("模块表缺失必须 Err，不得静默跳过");
+        let error = assess_composition(
+            &space,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect_err("模块表缺失必须 Err，不得静默跳过");
         assert!(error.message.contains("sys.engine"), "{}", error.message);
     }
 
@@ -634,9 +670,16 @@ mod tests {
         select(&mut selections, "engine_b.tier", "heavy");
 
         // 无确认：超参考线（默认超休闲 0）→ 要求确认。
-        let unconfirmed = assess_composition(&space, &selections, &modules, None, &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let unconfirmed = assess_composition(
+            &space,
+            &selections,
+            &modules,
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert!(unconfirmed.report.form_confirmation_required);
         assert!(!unconfirmed.confirmation_stale);
         assert_eq!(unconfirmed.report.h_set, vec!["engine_a", "engine_b"]);
@@ -648,9 +691,16 @@ mod tests {
             at: "2026-09-05T00:00:00Z".into(),
             h_set: vec!["engine_a".into(), "engine_b".into()],
         };
-        let confirmed = assess_composition(&space, &selections, &modules, Some(&valid), &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let confirmed = assess_composition(
+            &space,
+            &selections,
+            &modules,
+            Some(&valid),
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert!(!confirmed.report.form_confirmation_required);
         assert_eq!(
             confirmed.confirmation.as_ref().map(|c| c.signer.as_str()),
@@ -666,9 +716,16 @@ mod tests {
             h_set: vec!["engine_a".into()],
             ..valid
         };
-        let invalidated = assess_composition(&space, &selections, &modules, Some(&stale), &[])
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let invalidated = assess_composition(
+            &space,
+            &selections,
+            &modules,
+            Some(&stale),
+            &[],
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert!(invalidated.report.form_confirmation_required);
         assert!(invalidated.confirmation_stale);
         assert!(invalidated.confirmation.is_none());
@@ -690,9 +747,16 @@ mod tests {
             verb: "驱动".into(),
             instance_id: "engine_main".into(),
         }];
-        let assessment = assess_composition(&space, &selections, &modules(), None, &core_loop)
-            .expect("评估应成功")
-            .expect("有引用应产报告");
+        let assessment = assess_composition(
+            &space,
+            &selections,
+            &modules(),
+            None,
+            &core_loop,
+            &CompositionBudget::default(),
+        )
+        .expect("评估应成功")
+        .expect("有引用应产报告");
         assert!(assessment.missing_tiers.is_empty());
         // κ 推导辅助可用：用与 assess 相同的动词序列跑 derive_core_link。
         let verbs: Vec<(String, String)> = core_loop

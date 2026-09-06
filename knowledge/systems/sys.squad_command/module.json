@@ -146,10 +146,11 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "roster_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true }
+            { "key": "roster_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 50.0 }, "required": true },
+            { "key": "roster_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "chosen_units limited_to {param:roster_size}" },
+            { "effect": "modify_property", "entity": "{param:roster_table_id}", "property": "active_roster", "formula": "chosen_units limited_to {param:roster_size}" },
             { "effect": "emit_signal", "signal": "roster_signal" }
           ]
         },
@@ -164,10 +165,11 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "population_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true }
+            { "key": "population_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true },
+            { "key": "roster_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "chosen_units where sum(unit_population) <= {param:population_cap}" },
+            { "effect": "modify_property", "entity": "{param:roster_table_id}", "property": "active_roster", "formula": "chosen_units where sum(unit_population) <= {param:population_cap}" },
             { "effect": "emit_signal", "signal": "roster_signal" }
           ]
         }
@@ -210,10 +212,11 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "swap_cooldown_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 300.0 }, "required": true },
-            { "key": "swap_charges_per_session", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true }
+            { "key": "swap_charges_per_session", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 99.0 }, "required": true },
+            { "key": "roster_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "squad", "property": "active_roster", "formula": "swap(bench_unit, field_unit) if swap_charges > 0" },
+            { "effect": "modify_property", "entity": "{param:roster_table_id}", "property": "active_roster", "formula": "swap(bench_unit, field_unit) if swap_charges > 0" },
             { "effect": "consume_resource", "resource": "swap_charge", "formula": "1" },
             { "effect": "schedule", "timing": "delayed", "amount_expr": "{param:swap_cooldown_seconds}", "unit": "seconds", "inner": [
               { "effect": "emit_signal", "signal": "roster_signal" }
@@ -264,10 +267,11 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.squad_command" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "grid_width", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
-            { "key": "grid_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+            { "key": "grid_height", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true },
+            { "key": "assignment_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "squad_assignment", "property": "grid_position", "formula": "player_placed_cell within grid({param:grid_width}, {param:grid_height})" },
+            { "effect": "modify_property", "entity": "{param:assignment_table_id}", "property": "grid_position", "formula": "player_placed_cell within grid({param:grid_width}, {param:grid_height})" },
             { "effect": "emit_signal", "signal": "roster_signal" }
           ]
         }

@@ -155,10 +155,12 @@
             "击杀数不进名次的话要另设表现指标，否则高击杀早死者会觉得名次不公"
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
-          "parameter_schema": { "schema": "none" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "participant_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "rank = remaining_count_at(elimination_time)" },
-            { "effect": "spawn_entity", "entity": "standing_entity" }
+            { "effect": "modify_property", "entity": "{param:participant_table_id}", "property": "advancement_state", "formula": "rank = remaining_count_at(elimination_time)" },
+            { "effect": "spawn_entity", "entity": "{param:participant_table_id}" }
           ]
         },
         {
@@ -413,11 +415,12 @@
           ],
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.match_format" },
           "parameter_schema": { "schema": "scalar", "fields": [
-            { "key": "bracket_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 256.0 }, "required": true }
+            { "key": "bracket_size", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 4.0, "max": 256.0 }, "required": true },
+            { "key": "participant_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
             { "effect": "change_state", "machine": "match_participant.bracket_state", "to_state": "eliminated_on_loss" },
-            { "effect": "modify_property", "entity": "match_participant", "property": "advancement_state", "formula": "advance_winner_to(next_round_slot({param:bracket_size}))" }
+            { "effect": "modify_property", "entity": "{param:participant_table_id}", "property": "advancement_state", "formula": "advance_winner_to(next_round_slot({param:bracket_size}))" }
           ]
         },
         {

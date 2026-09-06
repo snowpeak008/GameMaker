@@ -1,0 +1,332 @@
+{
+  "pack_id": "autochess_thin",
+  "pack_version": "0.1.0",
+  "display_name": "自走棋薄样板（W7 波 5：单样板同压 G2 对局赛制 / G5 战术棋盘 / G8 编队指挥）",
+  "reference_games": ["Auto Chess", "Teamfight Tactics", "云顶之弈"],
+  "core_nouns": [
+    "player_command_intent",
+    "autochess_win_signal",
+    "autochess_elimination_signal",
+    "autochess_round_signal",
+    "autochess_advancement_state",
+    "autochess_series_score",
+    "autochess_fixture_schedule",
+    "autochess_board_occupancy",
+    "autochess_money_supply"
+  ],
+  "system_refs": [
+    {
+      "instance_id": "format_main",
+      "module_id": "sys.match_format",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.objective.win_signal": "autochess_win_signal",
+        "sys.objective.elimination_signal": "autochess_elimination_signal",
+        "advancement_state": "autochess_advancement_state",
+        "series_score": "autochess_series_score",
+        "fixture_schedule": "autochess_fixture_schedule"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "board_main",
+      "module_id": "sys.tactical_board",
+      "version_req": "^1.1.0",
+      "noun_bindings": {
+        "sys.turn_combat.unit_entity": "shop_main.card_entity",
+        "sys.turn_combat.move_command": "squad_main.command_signal",
+        "board_occupancy": "autochess_board_occupancy"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "squad_main",
+      "module_id": "sys.squad_command",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.combat.combat_unit": "shop_main.card_entity",
+        "sys.player_input.command_intent": "player_command_intent"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "shop_main",
+      "module_id": "sys.run_deckbuild",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.turn_combat.action_point": "economy_main.currency_main",
+        "sys.turn_combat.turn_signal": "autochess_round_signal"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "economy_main",
+      "module_id": "sys.economy",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.loot.material_entity": "shop_main.card_entity",
+        "money_supply": "autochess_money_supply"
+      },
+      "core_link": "strong"
+    }
+  ],
+  "cardinality_expectations": {
+    "participant_rows": { "min": 2, "max": 8 },
+    "unit_pool_rows": { "min": 5, "max": 60 },
+    "asset_specs": { "min": 1, "max": 60 }
+  },
+  "consistency_rules": [],
+  "nodes": [
+    { "id": "grid_battlefield", "domain_id": "gameplay_system_design", "name": "自走棋·棋盘与站位", "description": "棋盘网格结构与准备期站位（tactical_board MG 迁移承接点的归属位）。", "role_class": "system_concrete" },
+    { "id": "grid_terrain", "domain_id": "gameplay_system_design", "name": "自走棋·棋盘地形（迁移承接位）", "description": "tactical_board MG1 迁移承接点的归属位——自走棋均质棋盘不使用地形，本节点仅承接模块决策点的组织归属。", "role_class": "system_concrete" }
+  ],
+  "decision_points": [
+    {
+      "id": "autochess.auto_battle_resolution",
+      "domain": "auto_battle",
+      "level": "L4",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "自动战斗的对局结算按什么口径折算玩家伤害？",
+      "design_question": "一回合自动战斗打完，输家掉多少血？按残存棋子数结算强调碾压程度，按固定底伤+棋子星级结算压平方差。战斗过程本身是自动寻路的涌现层（射程外），本点只声明结算规则。归零判定的条件分支需 RollCheck 表达（波 1 未交付臂），淘汰时点以信号语义注记表达——如实标注。",
+      "options": [
+        {
+          "id": "survivor_count_settle",
+          "label": "残存棋子数结算",
+          "summary": "败方按胜方残存棋子数×棋子伤系数扣血，碾压局掉血更狠（自走棋原祖口径）",
+          "implications": [
+            "碾压程度直接进伤害，苟血线策略与全力压盘策略分化",
+            "残存数结算使『险胜』几乎无伤，鼓励精确卡强度",
+            "血量归零的淘汰事件供赛制系统消费（autochess_elimination_signal）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "board_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "participant_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "damage_per_unit", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:participant_table_id}", "property": "hp", "formula": "hp - surviving_enemy_units * {param:damage_per_unit}" },
+            { "effect": "emit_signal", "signal": "autochess_win_signal" },
+            { "effect": "emit_signal", "signal": "autochess_elimination_signal" }
+          ]
+        },
+        {
+          "id": "damage_total_settle",
+          "label": "底伤+星级总和结算",
+          "summary": "败方按回合底伤+胜方残存棋子星级总和扣血，随对局轮次底伤递增（联盟系自走棋口径）",
+          "implications": [
+            "底伤随轮次递增给对局装了硬时钟，拖后期必然有人快速掉血",
+            "星级总和口径让高星残存比多单位残存更痛，鼓励质量流",
+            "血量归零的淘汰事件供赛制系统消费（autochess_elimination_signal）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "board_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "participant_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "base_round_damage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:participant_table_id}", "property": "hp", "formula": "hp - ({param:base_round_damage} + sum(surviving_unit_star_levels))" },
+            { "effect": "emit_signal", "signal": "autochess_win_signal" },
+            { "effect": "emit_signal", "signal": "autochess_elimination_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autochess.trait_synergy_rule",
+      "domain": "squad_synergy",
+      "level": "L4",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "羁绊协同按什么曲线改写自动战斗结算规则？",
+      "design_question": "同标签棋子凑齐后，加成是台阶式跳变（凑 2/4/6 点亮）还是逐个线性累加？台阶制造『再来一个就成型』的追逐张力，线性让每一个都有边际收益。本点以 ModifyRule 常驻改写自动战斗结算规则（模块 synergy_bonus 点的 Attach 模板属波 1 未交付臂，羁绊由本 pack 薄点替位表达——如实标注）。",
+      "options": [
+        {
+          "id": "threshold_step_synergy",
+          "label": "阈值台阶羁绊",
+          "summary": "同标签在场数每凑满一档（2/4/6）战斗结算系数阶跃一级（自走棋主流口径）",
+          "implications": [
+            "档位断点制造『差一个成型』的商店追牌张力，是滚动构筑的主发动机",
+            "台阶间平台期使多凑一个同标签棋子零边际收益，挤占人口的机会成本显性化",
+            "羁绊改写的是结算规则而非单位属性——常驻规则修饰，按 priority 进叠加序"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "squad_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "per_step_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.05, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "result * (1 + {param:per_step_bonus} * floor(trait_count / 2))" }, "priority": 20 },
+            { "effect": "emit_signal", "signal": "squad_main.roster_signal" }
+          ]
+        },
+        {
+          "id": "linear_per_unit_synergy",
+          "label": "线性逐个羁绊",
+          "summary": "同标签每多一个在场棋子，战斗结算系数线性加一段，无档位断点",
+          "implications": [
+            "每一个同标签棋子都有确定的边际收益，编成决策连续可算",
+            "没有断点就没有『成型瞬间』的爽点，构筑叙事感弱于台阶制",
+            "线性系数是唯一平衡旋钮，超模标签的修复只能全局调"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "squad_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "per_unit_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 0.5 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "result * (1 + {param:per_unit_bonus} * trait_count)" }, "priority": 20 },
+            { "effect": "emit_signal", "signal": "squad_main.roster_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autochess.economy_interest",
+      "domain": "match_economy",
+      "level": "L4",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "存款利息按什么口径发放？",
+      "design_question": "手里攥着的金币要不要生利息？利息阶梯把『攒钱』变成有复利的投资策略（存 50 吃满 5 利），无利息把经济决策压缩为纯工资分配。经济模块 T0 档无利息表达位，本点为 pack 薄点（不改模块，如实标注）。",
+      "options": [
+        {
+          "id": "tiered_interest",
+          "label": "存款阶梯利息",
+          "summary": "每回合按存款每 10 金 +1 金发利息，封顶 N 档（自走棋主流口径）",
+          "implications": [
+            "攒钱有复利回报，『存 50 打工』与『梭哈追三星』成为真策略分歧",
+            "利息封顶值决定最优存款水位，是经济节奏的主旋钮",
+            "血量与利息的兑换（卖血攒钱）是本口径的隐藏张力"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "interest_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "floor(min(gold_balance, {param:interest_cap} * 10) / 10)" },
+            { "effect": "emit_signal", "signal": "economy_main.income_signal" }
+          ]
+        },
+        {
+          "id": "flat_wage_no_interest",
+          "label": "无利息固定工资",
+          "summary": "每回合固定工资，存款不生息，经济决策全部落在花钱时机上",
+          "implications": [
+            "无复利意味着攒钱只有机会成本没有回报，快速滚动消费成为主流",
+            "经济系统可预测性最高，新手无需理解利息水位",
+            "对局经济总量恒定，平衡调参集中在商店价格侧"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "flat_wage", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "{param:flat_wage}" },
+            { "effect": "emit_signal", "signal": "economy_main.income_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autochess.streak_bonus",
+      "domain": "match_economy",
+      "level": "L4",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "连胜连败奖励按什么结构发放？",
+      "design_question": "连着赢或连着输，要不要额外给钱？对称口径让『战略性连败吃钱』成为合法流派，仅连胜口径杜绝摆烂但强者恒强。经济模块 T0 档无此表达位，本点为 pack 薄点（不改模块，如实标注）。",
+      "options": [
+        {
+          "id": "symmetric_streak",
+          "label": "对称连胜连败金",
+          "summary": "连胜与连败按同一张阶梯表发放额外金币，封顶 N 连（自走棋主流口径）",
+          "implications": [
+            "连败金让摆烂养经济成为合法策略，凹连败与保连胜双向张力",
+            "阶梯封顶决定连败流的收益上限，防止无限摆烂",
+            "断连（连胜被终结/连败被打断）的机会成本是每回合的隐形决策"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "streak_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 8.0 }, "required": true },
+            { "key": "bonus_per_step", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "{param:bonus_per_step} * min(streak_length, {param:streak_cap})" },
+            { "effect": "emit_signal", "signal": "economy_main.income_signal" }
+          ]
+        },
+        {
+          "id": "win_streak_only",
+          "label": "仅连胜奖励",
+          "summary": "只有连胜发放额外金币，连败无补偿",
+          "implications": [
+            "杜绝战略性摆烂，每一局都值得全力打",
+            "强者滚雪球更快，翻盘窗口收窄——需要其它系统（利息/血量保护）补偿弱势方",
+            "经济曲线与胜率强耦合，前期强势阵容的版本答案倾向加剧"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "streak_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 8.0 }, "required": true },
+            { "key": "bonus_per_step", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "{param:bonus_per_step} * min(win_streak_length, {param:streak_cap})" },
+            { "effect": "emit_signal", "signal": "economy_main.income_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autochess.player_roster",
+      "domain": "match_content",
+      "level": "L5",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "参战玩家表包含哪些列与行？",
+      "design_question": "一局几个人、每人多少血、坐哪个位？参战玩家表是赛制名次判定与自动战斗扣血的实体锚（每行一个参赛方）。",
+      "options": [
+        {
+          "id": "participant_table",
+          "label": "参战玩家表",
+          "summary": "每个参赛方一行：标识、当前血量、座位号",
+          "implications": [
+            "血量列被自动战斗结算扣减，归零即淘汰事件的数据源",
+            "行数即对局规模（8 人循环淘汰的实体面）",
+            "座位号供随机对阵抽取的轮转口径引用"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 200.0 }, "required": true },
+            { "key": "seat", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 8.0 }, "required": true }
+          ], "row_key": "id", "cardinality_key": "participant_rows" }
+        }
+      ]
+    },
+    {
+      "id": "autochess.unit_pool",
+      "domain": "match_content",
+      "level": "L5",
+      "genre_scope": { "pack": "autochess_thin" },
+      "question": "棋子单位池表包含哪些棋子？",
+      "design_question": "商店从什么池子里抽牌？每个棋子一行：费用、羁绊标签、基础属性。费用分布决定经济曲线的松紧，羁绊标签分布决定成型路径的宽窄。",
+      "options": [
+        {
+          "id": "unit_pool_table",
+          "label": "棋子单位池表",
+          "summary": "每种棋子一行：标识、展示名、费用、羁绊标签、生命、攻击",
+          "implications": [
+            "费用列直接耦合商店经济：高费棋子是后期经济的去处",
+            "羁绊标签列是协同规则的计数锚点",
+            "行数决定商店抽取的多样性上限与追三星的难度"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "unit_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true },
+            { "key": "trait_tag", "kind": { "kind": "text" }, "required": true },
+            { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 2000.0 }, "required": true },
+            { "key": "attack", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 500.0 }, "required": true }
+          ], "row_key": "unit_id", "cardinality_key": "unit_pool_rows" }
+        }
+      ]
+    }
+  ]
+}

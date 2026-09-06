@@ -1,0 +1,123 @@
+{
+  "pack_id": "rhythm_micro",
+  "pack_version": "0.1.0",
+  "display_name": "音游微样板（W7 波 5：#29 谱面时间轴 × G11 计分连击最小组合链）",
+  "reference_games": ["osu!", "Muse Dash", "Arcaea"],
+  "core_nouns": ["player_command_intent"],
+  "system_refs": [
+    {
+      "instance_id": "chart_main",
+      "module_id": "sys.beatmap_timeline",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.player_input.command_intent": "player_command_intent"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "scoring_main",
+      "module_id": "sys.scoring_combo",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.rhythm_judgement.judgement_signal": "chart_main.judgement_signal",
+        "sys.combat.hit_signal": "chart_main.judgement_signal",
+        "sys.match3_board.match_clear_signal": "chart_main.judgement_signal"
+      },
+      "core_link": "core"
+    }
+  ],
+  "cardinality_expectations": {
+    "song_roster_rows": { "min": 3, "max": 50 },
+    "scoring_session_rows": { "min": 1, "max": 4 },
+    "asset_specs": { "min": 1, "max": 60 }
+  },
+  "consistency_rules": [],
+  "decision_points": [
+    {
+      "id": "rhythm.song_roster",
+      "domain": "content",
+      "level": "L5",
+      "genre_scope": { "pack": "rhythm_micro" },
+      "question": "曲目列表表包含哪些曲目？",
+      "design_question": "每首曲目一行：标识、曲名、BPM、时长。曲目表是谱面内容的供给面——谱面音符表逐曲挂接，曲库规模即内容成本主项（#29 O 维口径）。",
+      "options": [
+        {
+          "id": "basic_song_table",
+          "label": "基础曲目表",
+          "summary": "每首曲目一行：标识、曲名、BPM、时长秒数",
+          "implications": [
+            "BPM 列是谱面时间轴的换算锚：拍格记法谱面按它换算毫秒",
+            "时长列驱动结算与体力/收益类系统的按曲计价",
+            "曲名是皮字段，换皮门只比对该列不动机制列"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "song_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "title", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "bpm", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 30.0, "max": 300.0 }, "required": true },
+            { "key": "duration_seconds", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 30.0, "max": 600.0 }, "required": true }
+          ], "row_key": "song_id", "cardinality_key": "song_roster_rows" }
+        },
+        {
+          "id": "song_table_with_difficulty",
+          "label": "带定数曲目表",
+          "summary": "在基础列之上增加难度定数列（移动端音游星级口径），选曲界面按定数排序过滤",
+          "implications": [
+            "定数列是玩家自我校准的坐标系，定数虚高/虚低是音游社区最敏感的运营议题",
+            "定数与谱面密度解耦（人工标定），每次改谱须回查定数",
+            "推分/排行类玩法以定数为权重输入，标定误差会被排行榜放大"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "song_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "title", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "bpm", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 30.0, "max": 300.0 }, "required": true },
+            { "key": "duration_seconds", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 30.0, "max": 600.0 }, "required": true },
+            { "key": "difficulty_rating", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 15.0 }, "required": true }
+          ], "row_key": "song_id", "cardinality_key": "song_roster_rows" }
+        }
+      ]
+    },
+    {
+      "id": "scoring_session",
+      "domain": "content",
+      "level": "L5",
+      "genre_scope": { "pack": "rhythm_micro" },
+      "question": "计分会话档案表如何声明？",
+      "design_question": "sys.scoring_combo 把连击状态声明为挂在 scoring_session 宿主上的属性，其 effects_template 以 scoring_session 为实体引用——本表是该宿主实体的落地位（决策点 id 特意取 scoring_session 与模块效果引用逐字节咬合，申报见 5c 验收单）。每行一种会话档案：连击作用域、失败策略。",
+      "options": [
+        {
+          "id": "single_profile_table",
+          "label": "单一会话档案表",
+          "summary": "一行标准档案：连击作用域（单曲内/歌单连贯）",
+          "implications": [
+            "单曲清零是主流口径：每曲都是干净的全连挑战，成绩可逐曲比较",
+            "歌单连贯口径把连击张力拉长到整个课题（段位认定模式），断连代价被课题长度放大",
+            "档案表单行即够，机制复杂度全部留在计分系统侧"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "invisible" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "session_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "combo_scope", "kind": { "kind": "enum", "variants": ["per_song", "per_playlist"] }, "required": true }
+          ], "row_key": "session_id", "cardinality_key": "scoring_session_rows" }
+        },
+        {
+          "id": "per_mode_profile_table",
+          "label": "分模式会话档案表",
+          "summary": "每模式一行：连击作用域 + 失败策略（无失败/即死），课题模式与休闲模式共存",
+          "implications": [
+            "即死策略（sudden death）把全连从计分目标升格为存活条件，紧张感质变",
+            "无失败模式是休闲人群的留存底线，两模式的成绩必须分桶展示",
+            "模式行数即运营面：每加一种模式，排行榜/成就/结算文案全部翻倍"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "invisible" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "session_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "combo_scope", "kind": { "kind": "enum", "variants": ["per_song", "per_playlist"] }, "required": true },
+            { "key": "fail_policy", "kind": { "kind": "enum", "variants": ["no_fail", "sudden_death"] }, "required": true }
+          ], "row_key": "session_id", "cardinality_key": "scoring_session_rows" }
+        }
+      ]
+    }
+  ]
+}

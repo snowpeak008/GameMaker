@@ -2,7 +2,8 @@ use crate::framework::StageStatus;
 use crate::runner::RunnerContext;
 use adm4_ai::AiRequest;
 use adm4_contracts::{
-    AnchoredNarrative, CardinalityDeclaration, CardinalityRange, SpecRef, UnclassifiedItem,
+    AnchoredNarrative, CardinalityDeclaration, CardinalityRange, SpecRef, TypedValue,
+    UnclassifiedItem,
 };
 use adm4_foundation::{Adm4Error, Adm4Result};
 use adm4_spec::{GameSpec, VisualForm};
@@ -157,9 +158,35 @@ fn asset_cardinality_expectation(
         })
 }
 
+/// 实体的属性文本（审计 B 速修项，5d 复核落地）：能从实体表行数据取到值时
+/// 渲染 `key=value`（画师需要具体数值感——造价 120 的塔和 600 血的首领画出来
+/// 不是一个体量），取不到值（非表派生实体/行缺列）时如实退回键名，不发明数据。
+///
+/// 行定位复用 C0 的 id 约定：表行实体 id = `<表id>.<行键值>`（compile_entity_table）。
+fn entity_property_text(spec: &GameSpec, entity: &adm4_spec::EntitySpec) -> String {
+    let row = spec.tables.iter().find_map(|table| {
+        let row_id = entity.id.strip_prefix(&format!("{}.", table.id))?;
+        table
+            .rows
+            .iter()
+            .find(|row| row.get(&table.row_key).map(TypedValue::render).as_deref() == Some(row_id))
+    });
+    entity
+        .properties
+        .iter()
+        .map(
+            |property| match row.and_then(|row| row.get(&property.key)) {
+                Some(value) => format!("{}={}", property.key, value.render()),
+                None => property.key.clone(),
+            },
+        )
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn describe_asset(
     ctx: &RunnerContext<'_>,
-    _spec: &GameSpec,
+    spec: &GameSpec,
     entity: &adm4_spec::EntitySpec,
     anchor: SpecRef,
 ) -> Adm4Result<AnchoredNarrative> {
@@ -172,12 +199,7 @@ fn describe_asset(
             "实体：{}（{}），属性：{}",
             entity.name,
             entity.id,
-            entity
-                .properties
-                .iter()
-                .map(|property| property.key.clone())
-                .collect::<Vec<_>>()
-                .join(", ")
+            entity_property_text(spec, entity)
         ),
         expect_json: true,
     };
@@ -195,6 +217,74 @@ fn describe_asset(
 mod tests {
     use super::*;
     use adm4_foundation::Adm4ErrorKind;
+    use adm4_spec::{EntitySpec, PropertySpec, TableSpec};
+    use adm4_spec::{ProjectIntent, SPEC_SCHEMA_VERSION, SpecIdentity};
+
+    /// 表行实体：属性值从行数据取出渲染 key=value；行缺列/非表实体退回键名（不发明数据）。
+    #[test]
+    fn entity_property_text_renders_values_and_falls_back_to_keys() {
+        let columns = vec![
+            PropertySpec {
+                key: "tower_id".into(),
+                kind: adm4_contracts::ValueKind::Text,
+                constraint: None,
+            },
+            PropertySpec {
+                key: "cost".into(),
+                kind: adm4_contracts::ValueKind::Int,
+                constraint: None,
+            },
+        ];
+        let spec = GameSpec {
+            identity: SpecIdentity {
+                schema_version: SPEC_SCHEMA_VERSION.into(),
+                project_id: "p".into(),
+                frozen_hash: "sha256:x".into(),
+            },
+            intent: ProjectIntent::default(),
+            systems: Vec::new(),
+            mechanics: Vec::new(),
+            entities: Vec::new(),
+            tables: vec![TableSpec {
+                id: "towers".into(),
+                columns: columns.clone(),
+                row_key: "tower_id".into(),
+                rows: vec![
+                    [
+                        ("tower_id".to_string(), TypedValue::Text("arrow".into())),
+                        ("cost".to_string(), TypedValue::Int(120)),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ],
+                cells: Vec::new(),
+                design_notes: Vec::new(),
+            }],
+            content: Vec::new(),
+            graphs: Vec::new(),
+            acceptance: Vec::new(),
+            source_map: Vec::new(),
+        };
+        // 表行实体 → key=value。
+        let entity = EntitySpec {
+            id: "towers.arrow".into(),
+            name: "arrow".into(),
+            visual_form: None,
+            properties: columns.clone(),
+        };
+        assert_eq!(
+            entity_property_text(&spec, &entity),
+            "tower_id=arrow, cost=120"
+        );
+        // 非表派生实体（无行数据）→ 退回键名清单，行为与修复前一致。
+        let orphan = EntitySpec {
+            id: "loose_entity".into(),
+            name: "散实体".into(),
+            visual_form: None,
+            properties: columns,
+        };
+        assert_eq!(entity_property_text(&spec, &orphan), "tower_id, cost");
+    }
 
     #[test]
     fn missing_asset_expectation_blocks_instead_of_defaulting() {

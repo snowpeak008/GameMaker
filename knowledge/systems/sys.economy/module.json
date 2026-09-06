@@ -173,10 +173,11 @@
           "compiler_tags": { "spec_role": "mechanic", "system": "sys.economy" },
           "parameter_schema": { "schema": "scalar", "fields": [
             { "key": "base_income", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10000.0 }, "required": true },
-            { "key": "per_level_increment", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true }
+            { "key": "per_level_increment", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1000.0 }, "required": true },
+            { "key": "world_table_id", "kind": { "kind": "text" }, "required": true }
           ] },
           "effects_template": [
-            { "effect": "modify_property", "entity": "economy_world", "property": "income_scale", "formula": "{param:base_income} + player_level * {param:per_level_increment}" }
+            { "effect": "modify_property", "entity": "{param:world_table_id}", "property": "income_scale", "formula": "{param:base_income} + player_level * {param:per_level_increment}" }
           ]
         },
         {

@@ -1,0 +1,380 @@
+{
+  "module_id": "sys.rule_modifier_collect",
+  "semver": "1.0.0",
+  "label_zh": "规则修饰器收集",
+  "summary": "收集常驻规则修饰器（遗物/饰品/被动）并按叠加序改写他系统规则的系统（清单 #14）。ModifyRule{RulePatch, priority} 是本模块的核心表达位（定稿 §5.3 指令 7）：同目标多修饰器按 priority 结算、同序按机制 id 字典序 tie-break，C4 把叠加序渲染进 GWT——力量类（加法修正，priority 靠前）先于乘算类（乘法修正，priority 靠后）结算。谱系三档：战利品架（纯收集展示）→ 规则修补（W10 重，尖塔遗物档）→ 条件触发网。边界三测试自检：T1 独占状态=修饰器收藏表 + 生效栈状态（谁被收集、谁在生效、以什么序，只有本系统能写）；T2 可摘除=摘除后战斗/构筑规则退回未修饰基线即自洽（只删接口边，不迫使目标系统改写内部规则——规则挂点语义保证）；T3 名词转换=消费回合事件与目标系统的规则挂点，产出修饰器实体/生效栈/收集事件。与 #13 局内构筑边界：#13 的卡牌是回合内消耗性行动、#14 的修饰器是常驻规则改写，状态所有权（牌库表 vs 修饰器收藏表）与生效时域（出牌瞬时 vs 持续常驻）都不同，不合并。",
+  "nouns": [
+    {
+      "id": "relic_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "修饰器实体",
+      "summary": "有行标识与属性列的修饰器实例（遗物/饰品）。修饰器收藏表是本系统独占状态的载体（T1 锚点）。"
+    },
+    {
+      "id": "modifier_stack_state",
+      "kind": { "kind": "property", "of": "relic_collection" },
+      "label_zh": "修饰器生效栈",
+      "summary": "当前生效修饰器的有序集合：每项记录作用靶规则、补丁类型与 priority。叠加序的唯一真相源——同 priority 冲突按机制 id 字典序 tie-break（确定性纪律）。"
+    },
+    {
+      "id": "relic_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "修饰器收集事件",
+      "summary": "一次修饰器获得/失去的时点信号，载荷为修饰器与来源渠道。统计、成就与收藏 UI 监听它。"
+    }
+  ],
+  "interface": {
+    "provides": ["relic_entity", "modifier_stack_state", "relic_signal"],
+    "consumes": [
+      "sys.turn_combat.turn_signal"
+    ],
+    "modifies": [
+      "sys.turn_combat.combat_rule_slot",
+      "sys.run_deckbuild.deck_rule_slot"
+    ]
+  },
+  "mda": {
+    "mechanics_summary": "修饰器获取渠道/收藏表/加法修正（力量类）/乘法修正（乘算类）/叠加序 priority 声明/条件触发前置的机制群。",
+    "dynamics_notes": [
+      "修饰器常驻生效使每次获取都永久改变局内规则地形，玩家的路线规划围绕『下一个遗物』展开（信号：遗物节点选择率、见宝箱绕路率）",
+      "加法与乘法修正的叠加序可感知后，高手开始计算修正链的实际期望而非面板数字（信号：社区伤害计算器出现、同遗物组合的取舍讨论）",
+      "条件触发档起，修饰器之间形成触发网，单件收集从线性加强变为组合发现（信号：特定遗物组合的胜率异常聚类）"
+    ],
+    "aesthetics_primary": ["发现", "表达"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "rm0_trophy_shelf",
+        "label_zh": "RM0 战利品架",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.rule_modifier_collect.acquisition_channel",
+          "sys.rule_modifier_collect.relic_pool"
+        ],
+        "inductions": [],
+        "summary": "纯收集档：修饰器有获取渠道与收藏表，但只做展示/计数，不改写任何规则。收集癖的最小满足面。C≥2（consumes 获取触发事件；provides 收藏实体）。"
+      },
+      {
+        "id": "rm1_rule_patch",
+        "label_zh": "RM1 +规则修补（叠加序）",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 3, "o": 1 },
+        "p_floor": 3,
+        "interface_floor": 4,
+        "activates": [
+          "sys.rule_modifier_collect.acquisition_channel",
+          "sys.rule_modifier_collect.relic_pool",
+          "sys.rule_modifier_collect.additive_modifier_rule",
+          "sys.rule_modifier_collect.multiplicative_modifier_rule"
+        ],
+        "inductions": [
+          {
+            "when_tier": "rm1_rule_patch",
+            "target": { "noun_provided": "combat_rule_slot" },
+            "min_tier": "",
+            "reason": "规则修补必须有真实规则挂点作靶——组合中须有实例 provides 战斗规则挂点（ModifyRule 的 target 不能悬空，C1 复检同一纪律）"
+          }
+        ],
+        "summary": "修饰器开始改写他系统规则：加法修正（力量类，priority 靠前先结算）与乘法修正（乘算类，priority 靠后后结算）按叠加序声明。定稿 §6.2 杀戮尖塔遗物档：W10 全局档带=重，P=3 承诺写死（每件遗物都永久改变规则地形，取舍是构筑级心智负担）。叠加序语义：同目标多修饰器按 priority 升序结算，同序按机制 id 字典序 tie-break——力量类先加、乘算类后乘，先后互换结果不同（指令 7 的可声明可校验落点）。"
+      },
+      {
+        "id": "rm2_trigger_web",
+        "label_zh": "RM2 +条件触发网",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 4,
+        "activates": [
+          "sys.rule_modifier_collect.acquisition_channel",
+          "sys.rule_modifier_collect.relic_pool",
+          "sys.rule_modifier_collect.additive_modifier_rule",
+          "sys.rule_modifier_collect.multiplicative_modifier_rule",
+          "sys.rule_modifier_collect.trigger_condition_rule"
+        ],
+        "inductions": [
+          {
+            "when_tier": "rm2_trigger_web",
+            "target": { "noun_provided": "combat_rule_slot" },
+            "min_tier": "",
+            "reason": "同 RM1：规则修补必须有真实规则挂点作靶"
+          },
+          {
+            "when_tier": "rm2_trigger_web",
+            "target": { "noun_provided": "turn_signal" },
+            "min_tier": "",
+            "reason": "条件触发锚定回合时点（回合开始/结束/第 N 回合），组合中必须有实例 provides 回合事件"
+          }
+        ],
+        "summary": "修饰器带触发前置条件（AddPrecondition：血线以下生效/每三回合触发一次），修饰器之间形成触发网。组合发现空间指数增长，O 供给（修饰器内容）与触发时点表成为长线成本。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.rule_modifier_collect.acquisition_channel",
+      "domain": "rule_modifier_collect",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "修饰器从什么渠道获得？",
+      "design_question": "遗物是精英/Boss 击杀必掉（战斗里程碑，尖塔口径）还是全渠道随机滴灌？里程碑掉落让强敌成为可规划的构筑投资，随机滴灌让每个节点都有惊喜但不可规划。",
+      "tier_gate": "rm0_trophy_shelf",
+      "options": [
+        {
+          "id": "milestone_drop",
+          "label": "里程碑必掉",
+          "summary": "精英/Boss 击杀从修饰器池按稀有度权重必掉一件——尖塔口径",
+          "implications": [
+            "『打精英换遗物』成为风险投资题，路线规划与战力评估直接挂钩",
+            "掉落时点可预期使构筑规划有节拍，欧非差异只在掉什么不在掉不掉",
+            "Boss 池与精英池分层（Boss 出改变规则级、精英出数值级）是投放的主结构"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "1", "draw_rule": "weighted_by_rarity_exclude_owned", "destination": "relic_collection" },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        },
+        {
+          "id": "random_trickle",
+          "label": "全渠道随机滴灌",
+          "summary": "宝箱/事件/商店/战斗全渠道按概率掉落修饰器",
+          "implications": [
+            "每个节点都可能出货，探索动机均匀分布到全地图",
+            "获取不可规划使构筑成型看脸，保底机制（N 节点未出必出）几乎必配",
+            "渠道概率表是平衡主战场，单渠道概率上调会虹吸路线选择"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "pool_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "drop_chance", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.01, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "draw_from_pool", "pool_table": "{param:pool_table_id}", "draw_count_expr": "bernoulli({param:drop_chance})", "draw_rule": "uniform_exclude_owned", "destination": "relic_collection" },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.rule_modifier_collect.relic_pool",
+      "domain": "rule_modifier_collect",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "修饰器池表包含哪些条目？",
+      "design_question": "修饰器池是本系统的内容供给面——每件一行：标识、稀有度、效果类别。类别列（加法/乘法/触发）直接决定叠加序档位的内容配比。",
+      "tier_gate": "rm0_trophy_shelf",
+      "options": [
+        {
+          "id": "relic_pool_table",
+          "label": "修饰器池表",
+          "summary": "每件修饰器一行：标识、稀有度、效果类别",
+          "implications": [
+            "效果类别列（additive/multiplicative/trigger）是叠加序声明的数据源锚点",
+            "稀有度分层决定成型节奏：普通件铺量、稀有件立轴、Boss 件改规则",
+            "池表行数即收集空间上限，图鉴完成度体系直接以它为分母"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "relic_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "rarity", "kind": { "kind": "enum", "variants": ["common", "uncommon", "rare", "boss"] }, "required": true },
+            { "key": "effect_class", "kind": { "kind": "enum", "variants": ["additive", "multiplicative", "trigger"] }, "required": true }
+          ], "row_key": "relic_id", "cardinality_key": "relic_pool_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "relic_entity" }
+          ]
+        },
+        {
+          "id": "relic_pool_table_with_curse",
+          "label": "带诅咒位修饰器池表",
+          "summary": "在基础列之上增加诅咒标记列：负面修饰器与正面同池投放",
+          "implications": [
+            "诅咒件让『拿不拿』从期望计算变成风险决策，宝箱开启获得张力",
+            "负面修饰器同样走 ModifyRule 通路（负向 patch），表达位零新增",
+            "诅咒移除服务与经济系统咬合，成为金币的额外去处"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "ui_only" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "relic_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "rarity", "kind": { "kind": "enum", "variants": ["common", "uncommon", "rare", "boss"] }, "required": true },
+            { "key": "effect_class", "kind": { "kind": "enum", "variants": ["additive", "multiplicative", "trigger"] }, "required": true },
+            { "key": "is_curse", "kind": { "kind": "bool" }, "required": true }
+          ], "row_key": "relic_id", "cardinality_key": "relic_pool_rows" },
+          "effects_template": [
+            { "effect": "spawn_entity", "entity": "relic_entity" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.rule_modifier_collect.additive_modifier_rule",
+      "domain": "rule_modifier_collect",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "加法修正类修饰器（力量类）按什么口径生效？",
+      "design_question": "力量类遗物是常驻加成还是逐层成长？无论哪种，加法修正必须在乘算类之前结算（priority 靠前）——先加后乘与先乘后加结果不同，叠加序是本点的机制本体。",
+      "tier_gate": "rm1_rule_patch",
+      "options": [
+        {
+          "id": "flat_additive_patch",
+          "label": "常驻加法修正",
+          "summary": "获得即对目标规则挂上常驻加法系数修正，priority 定为加法段（先于乘算结算）",
+          "implications": [
+            "加法修正先结算（priority 靠前），后续乘算类以加成后的基数放大——力量 6 点在 2 倍乘算下是 12 点收益，叠加序即价值序",
+            "常驻生效零维护：无层数、无衰减，收集即永久战力，可读性最高",
+            "多件加法修正同 priority 时按机制 id 字典序 tie-break，结果确定可复演（同为加法先后无语义差，tie-break 只保确定性）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "flat_bonus", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 100.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "base + {param:flat_bonus}" }, "priority": 10 },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        },
+        {
+          "id": "ramping_additive_patch",
+          "label": "逐层成长加法修正",
+          "summary": "加法修正随回合/触发逐层累积（每回合+1 力量口径），priority 同为加法段",
+          "implications": [
+            "成长型加法在长局中滚雪球，与速攻构筑形成节奏对冲",
+            "层数累积需要 Schedule 周期性触发，与回合事件强耦合",
+            "上限缺失时长局必然失衡，封顶值是本口径唯一的平衡闸"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "bonus_per_turn", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "base + accumulated_stacks * {param:bonus_per_turn}" }, "priority": 10 }
+            ] },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.rule_modifier_collect.multiplicative_modifier_rule",
+      "domain": "rule_modifier_collect",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "乘法修正类修饰器（乘算类）按什么口径生效？",
+      "design_question": "乘算类遗物是无条件全局倍率还是条件倍率？乘法修正必须在加法之后结算（priority 靠后）——它放大的是加成后的基数，这正是力量流与乘算件的协同来源。",
+      "tier_gate": "rm1_rule_patch",
+      "options": [
+        {
+          "id": "global_multiplier_patch",
+          "label": "全局乘法修正",
+          "summary": "获得即对目标规则挂上无条件乘法系数修正，priority 定为乘算段（后于加法结算）",
+          "implications": [
+            "乘算后结算（priority 靠后）使它与一切加法修正天然协同——乘算件是力量流的放大器，叠加序声明让这层协同可校验而非隐式约定",
+            "无条件倍率是最稀有的设计资源：它对所有构筑等价增益，通常锁 Boss 池",
+            "多件乘算叠乘的复利增长必须在投放前算清上界，两件 1.5 倍即 2.25 倍"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.05, "max": 5.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "result * {param:multiplier}" }, "priority": 100 },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        },
+        {
+          "id": "conditional_multiplier_patch",
+          "label": "条件乘法修正",
+          "summary": "乘法倍率仅在声明条件下生效（满血时/对精英时），priority 同为乘算段",
+          "implications": [
+            "条件位让乘算件可以给出更高倍率而不失衡，条件达成率即隐含折价",
+            "条件判定时点必须与叠加序结算时点对齐声明，否则出现『条件已变但倍率还在』的语义漏洞",
+            "构筑围绕『维持条件』展开（保满血流），条件本身成为玩法"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.05, "max": 8.0 }, "required": true },
+            { "key": "condition_expr", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "scale_coefficient", "expr": "result * if({param:condition_expr}, {param:multiplier}, 1)" }, "priority": 100 },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.rule_modifier_collect.trigger_condition_rule",
+      "domain": "rule_modifier_collect",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "触发类修饰器的前置条件按什么口径？",
+      "design_question": "触发件是给目标规则追加前置（满足才放行）还是周期性主动触发？前置追加改『何时能生效』，周期触发改『何时会发生』——AddPrecondition 与 Schedule 两条表达通路。",
+      "tier_gate": "rm2_trigger_web",
+      "options": [
+        {
+          "id": "precondition_gate",
+          "label": "前置条件追加",
+          "summary": "对目标规则追加生效前置（AddPrecondition）：血线以下才放行/持有特定卡才生效",
+          "implications": [
+            "前置追加是约束型修饰器的标准通路：目标规则本体不动，只收窄生效窗口",
+            "多件前置对同一规则叠加时按 priority 序逐条求值，全部满足才放行——序声明避免短路歧义",
+            "前置的可见性（UI 上标出当前是否满足）决定该类修饰器的可用感"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "target_rule_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "precondition_expr", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_rule", "target_rule": "{param:target_rule_id}", "patch": { "patch": "add_precondition", "condition": "{param:precondition_expr}" }, "priority": 200 },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        },
+        {
+          "id": "periodic_trigger",
+          "label": "周期主动触发",
+          "summary": "修饰器按周期主动触发效果（每 3 回合施放一次免费格挡）",
+          "implications": [
+            "周期触发给修饰器独立的行动感，收集品从被动数值变成『会做事的伙伴』",
+            "触发时点与状态结算时点同窗时的顺序必须进结算顺序表",
+            "周期参数是节奏旋钮：与关卡平均回合数错配时触发件价值坍缩"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.rule_modifier_collect" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "relic_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "period_turns", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "triggered_effect_expr", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "{param:period_turns}", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:relic_table_id}", "property": "modifier_stack_state", "formula": "apply({param:triggered_effect_expr})" }
+            ] },
+            { "effect": "emit_signal", "signal": "relic_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "relic_pool_rows": { "min": 3, "max": 300 }
+  },
+  "consistency_rules": [
+    {
+      "id": "additive_and_multiplicative_answered_together",
+      "kind": "answered_together",
+      "first": "sys.rule_modifier_collect.additive_modifier_rule",
+      "second": "sys.rule_modifier_collect.multiplicative_modifier_rule"
+    }
+  ],
+  "skin_fields": ["relic_icon_theme", "collection_shelf_style"]
+}

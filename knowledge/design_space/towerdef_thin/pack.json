@@ -1,0 +1,311 @@
+{
+  "pack_id": "towerdef_thin",
+  "pack_version": "0.1.0",
+  "display_name": "塔防薄样板（W7 波 5：G1 建造放置轻档 BP0 实战 + 波次语义 pack 薄点）",
+  "reference_games": ["Kingdom Rush", "Plants vs. Zombies", "Bloons TD 6"],
+  "core_nouns": [
+    "td_placement_command",
+    "td_slot_occupancy",
+    "td_tower_function_value",
+    "td_money_supply",
+    "td_kill_signal",
+    "td_battlefield_salvage"
+  ],
+  "system_refs": [
+    {
+      "instance_id": "placement_main",
+      "module_id": "sys.build_placement",
+      "version_req": "^1.0.0",
+      "allowed_tiers": ["bp0_preset_slots", "bp1_grid_adjacency"],
+      "noun_bindings": {
+        "placement_command": "td_placement_command",
+        "sys.loot.material_entity": "td_battlefield_salvage",
+        "sys.economy.currency_main": "economy_main.currency_main",
+        "world_grid_occupancy": "td_slot_occupancy",
+        "structure_function_value": "td_tower_function_value"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "economy_main",
+      "module_id": "sys.economy",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.loot.material_entity": "td_battlefield_salvage",
+        "money_supply": "td_money_supply"
+      },
+      "core_link": "strong"
+    },
+    {
+      "instance_id": "score_main",
+      "module_id": "sys.scoring_combo",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.rhythm_judgement.judgement_signal": "td_kill_signal",
+        "sys.combat.hit_signal": "td_kill_signal",
+        "sys.match3_board.match_clear_signal": "td_kill_signal"
+      },
+      "core_link": "weak"
+    }
+  ],
+  "cardinality_expectations": {
+    "slot_roster_rows": { "min": 3, "max": 50 },
+    "tower_roster_rows": { "min": 3, "max": 30 },
+    "enemy_roster_rows": { "min": 2, "max": 40 },
+    "wave_rows": { "min": 3, "max": 99 },
+    "asset_specs": { "min": 1, "max": 60 }
+  },
+  "consistency_rules": [
+    {
+      "id": "wave_enemy_must_exist",
+      "kind": "row_reference",
+      "source_decision": "towerdef.wave_table",
+      "source_column": "enemy_id",
+      "target_decision": "towerdef.enemy_roster",
+      "target_key_column": "enemy_id"
+    }
+  ],
+  "decision_points": [
+    {
+      "id": "towerdef.wave_system",
+      "domain": "wave",
+      "level": "L3",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "波次系统采用什么结构？",
+      "design_question": "敌人按什么节律涌向防线？脚本化波次是逐关手工调平的表数据（#7 波次关卡模块未入库——本 pack 薄点替位表达，如实标注），无尽压力波把关卡换成成长曲线。",
+      "options": [
+        {
+          "id": "scripted_waves",
+          "label": "脚本化波次表",
+          "summary": "每关波次表预先设计，敌人按表定时出场，逐波可手工调平",
+          "implications": [
+            "波次表是关卡数据不是机制：加关不改规则，平衡可逐波核算",
+            "塔位解锁节奏（enabled_from_wave 语义）要与波次难度联动",
+            "波间隙是玩家重排防线的操作窗口，间隙时长是节奏主旋钮"
+          ]
+        },
+        {
+          "id": "endless_pressure",
+          "label": "无尽压力波次",
+          "summary": "无关卡终点，敌人强度按波次号沿成长曲线爬升，直至防线失守",
+          "implications": [
+            "内容成本从逐关调平转为一条成长曲线的形状设计",
+            "记录冲榜成为核心动机，计分系统从外围升格为目标载体",
+            "防线没有『过关即毕业』时刻，塔阵优化是无限迭代"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "towerdef.wave_spawn_rule",
+      "domain": "wave",
+      "level": "L4",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "波次内敌人按什么规则投放？",
+      "design_question": "一波敌人是匀速点滴进场还是按表分批放闸？投放节律直接决定防线的瞬时承压形状。",
+      "options": [
+        {
+          "id": "scripted_release",
+          "label": "按表定时投放",
+          "summary": "按波次表逐行投放：到点生成该行敌人，行间隔即出怪间隔（脚本塔防口径）",
+          "implications": [
+            "出怪节律逐行可调，首领波/密集波都是表行形态",
+            "投放确定性让攻略可复现，速通与完美防守社区依赖它",
+            "波次表行数即调平工作量，内容成本随关卡数线性增长"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "towerdef.wave_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "wave_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "enemy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "next_spawn_interval({param:wave_table_id})", "unit": "seconds", "inner": [
+              { "effect": "spawn_entity", "entity": "{param:enemy_table_id}" },
+              { "effect": "emit_signal", "signal": "td_wave_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "pressure_scaling_release",
+          "label": "压力成长投放",
+          "summary": "固定间隔投放，敌人生命随波次号按线性系数放大（无尽口径）",
+          "implications": [
+            "调平集中在单一成长系数上，内容成本极低",
+            "防线强度与敌人成长的交点即『必然失守时刻』，可解析预估",
+            "缺少手工设计的波形起伏，节奏体验依赖成长曲线陡度"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "towerdef.wave_system" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "enemy_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "spawn_interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.2, "max": 30.0 }, "required": true },
+            { "key": "hp_growth_per_wave", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 2.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "{param:spawn_interval_seconds}", "unit": "seconds", "inner": [
+              { "effect": "spawn_entity", "entity": "{param:enemy_table_id}" },
+              { "effect": "modify_property", "entity": "{param:enemy_table_id}", "property": "hp", "formula": "base_hp * (1 + wave_no * {param:hp_growth_per_wave})" },
+              { "effect": "emit_signal", "signal": "td_wave_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "towerdef.kill_bounty_rule",
+      "domain": "wave_economy",
+      "level": "L4",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "击破敌人的赏金按什么口径结算？",
+      "design_question": "杀一个敌人拿多少钱？按敌表逐种定价把经济埋进敌人构成，固定赏金把经济压平成纯计数。击破事件（td_kill_signal）同时是计分系统的事件源。",
+      "options": [
+        {
+          "id": "table_bounty",
+          "label": "按敌表赏金列",
+          "summary": "每种敌人在敌人表声明赏金列，击破按行结算（塔防主流口径）",
+          "implications": [
+            "赏金列与生命/速度同表联调，高威胁敌人可标高赏金形成风险回报",
+            "波次构成即经济投放：改出怪表就是改这一关的预算曲线",
+            "击破事件供计分与任务系统消费（td_kill_signal）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "enemy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "despawn_entity", "entity": "{param:enemy_table_id}" },
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "bounty_of(enemy_id)" },
+            { "effect": "emit_signal", "signal": "td_kill_signal" }
+          ]
+        },
+        {
+          "id": "flat_bounty",
+          "label": "固定赏金",
+          "summary": "任何敌人击破发放同一数额，经济只看击破数不看构成",
+          "implications": [
+            "经济投放与敌人构成解耦，调平自由度最大但差异化尽失",
+            "刷小怪与打首领同价，玩家目标选择失去经济维度",
+            "单参数总阀，难度档可整体缩放"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "economy_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "bounty_amount", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "economy_main.currency_main", "formula": "{param:bounty_amount}" },
+            { "effect": "emit_signal", "signal": "td_kill_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "towerdef.slot_roster",
+      "domain": "defense_content",
+      "level": "L5",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "塔位槽位表包含哪些槽位？",
+      "design_question": "这张图有几个塔位、各自何时解锁？槽位表是 BP0 预设槽位放置的实体锚——放置合法性（落在开放槽位）与格占用（一格一物）都以它为宿主。",
+      "options": [
+        {
+          "id": "slot_table",
+          "label": "塔位槽位表",
+          "summary": "每个塔位一行：标识、位置标签、解锁波次",
+          "implications": [
+            "行数即防线容量上限，放置预算=槽位数（BP0 口径逐图可核算）",
+            "enabled_from_wave 列把塔位解锁节奏挂上波次进度",
+            "槽位是关卡数据不是机制：加图不改规则"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "invisible" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "slot_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "slot_tag", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "enabled_from_wave", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 99.0 }, "required": true }
+          ], "row_key": "slot_id", "cardinality_key": "slot_roster_rows" }
+        }
+      ]
+    },
+    {
+      "id": "towerdef.tower_roster",
+      "domain": "defense_content",
+      "level": "L5",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "塔名单表包含哪些塔？",
+      "design_question": "玩家能造哪些塔？每种塔一行：造价、攻击、射速、射程。造价列是放置结算（BP0 即时扣费）的消费端，攻防列是防线强度的数值面。",
+      "options": [
+        {
+          "id": "tower_table",
+          "label": "塔名单表",
+          "summary": "每种塔一行：标识、展示名、造价、攻击、攻击间隔、射程格数",
+          "implications": [
+            "造价列直接耦合经济：赏金流入与建造流出在此对账",
+            "射程格数决定单槽位的覆盖面，与槽位分布联合决定防线拓扑",
+            "行数即构筑多样性上限，混编策略空间随之展开"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "tower_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "cost", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "attack", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 500.0 }, "required": true },
+            { "key": "fire_interval", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.2, "max": 10.0 }, "required": true },
+            { "key": "range_cells", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 12.0 }, "required": true }
+          ], "row_key": "tower_id", "cardinality_key": "tower_roster_rows" }
+        }
+      ]
+    },
+    {
+      "id": "towerdef.enemy_roster",
+      "domain": "defense_content",
+      "level": "L5",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "敌人名单表包含哪些敌人？",
+      "design_question": "防线要挡什么？每种敌人一行：生命、移速、赏金。赏金列是击破经济的数据源，生命×移速是威胁度的两轴。",
+      "options": [
+        {
+          "id": "enemy_table",
+          "label": "敌人名单表",
+          "summary": "每种敌人一行：标识、展示名、生命、移速、击破赏金",
+          "implications": [
+            "生命列与塔攻击列的比值决定单塔击杀时间，是调平核心比",
+            "移速列决定敌人暴露在射程内的时长，快慢混编制造优先级决策",
+            "赏金列被击破赏金机制逐行消费（table_bounty 口径）"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "enemy_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10000.0 }, "required": true },
+            { "key": "speed", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true },
+            { "key": "bounty", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 999.0 }, "required": true }
+          ], "row_key": "enemy_id", "cardinality_key": "enemy_roster_rows" }
+        }
+      ]
+    },
+    {
+      "id": "towerdef.wave_table",
+      "domain": "wave",
+      "level": "L5",
+      "genre_scope": { "pack": "towerdef_thin" },
+      "question": "波次表包含哪些出怪行？",
+      "design_question": "每波放什么、放多少、隔多久？波次表是脚本化投放的数据面，enemy_id 列外键指向敌人名单（跨表一致性规则锁定）。",
+      "options": [
+        {
+          "id": "wave_rows",
+          "label": "波次数据表",
+          "summary": "每波一行：波次标识、敌人、数量、出怪间隔",
+          "implications": [
+            "行序即压力曲线：数量与间隔的组合形状是关卡设计的主笔",
+            "enemy_id 外键由跨表规则校验，波表引用幽灵敌人在冻结门被拦",
+            "首领波即高生命敌人行，无需独立机制"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "wave_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "enemy_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 999.0 }, "required": true },
+            { "key": "interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.2, "max": 60.0 }, "required": true }
+          ], "row_key": "wave_id", "cardinality_key": "wave_rows" }
+        }
+      ]
+    }
+  ]
+}

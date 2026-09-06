@@ -1,0 +1,177 @@
+{
+  "pack_id": "spire_like",
+  "pack_version": "0.1.0",
+  "display_name": "爬塔卡牌肉鸽（W7 波 5 尖塔样板组合模板）",
+  "reference_games": ["Slay the Spire", "Monster Train", "Griftlands"],
+  "core_nouns": ["player_command_intent"],
+  "system_refs": [
+    {
+      "instance_id": "combat_main",
+      "module_id": "sys.turn_combat",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.player_input.command_intent": "player_command_intent",
+        "combat_unit_state": "combat_main.combat_unit_state"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "deck_main",
+      "module_id": "sys.run_deckbuild",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.turn_combat.action_point": "combat_main.action_point",
+        "sys.turn_combat.turn_signal": "combat_main.turn_signal"
+      },
+      "core_link": "core"
+    },
+    {
+      "instance_id": "relic_main",
+      "module_id": "sys.rule_modifier_collect",
+      "version_req": "^1.0.0",
+      "noun_bindings": {
+        "sys.turn_combat.turn_signal": "combat_main.turn_signal",
+        "sys.turn_combat.combat_rule_slot": "combat_main.combat_rule_slot",
+        "sys.run_deckbuild.deck_rule_slot": "deck_main.deck_rule_slot"
+      },
+      "core_link": "strong"
+    }
+  ],
+  "cardinality_expectations": {
+    "map_nodes": { "min": 3, "max": 80 },
+    "enemy_roster_rows": { "min": 2, "max": 60 },
+    "asset_specs": { "min": 1, "max": 60 }
+  },
+  "consistency_rules": [],
+  "decision_points": [
+    {
+      "id": "spire.map_graph",
+      "domain": "content",
+      "level": "L5",
+      "genre_scope": { "pack": "spire_like" },
+      "question": "爬塔地图的节点路线结构是什么？",
+      "design_question": "地图是只进不退的分支塔（尖塔口径）还是可回访的枢纽网？只进不退把每次分岔变成不可逆承诺，可回访把地图变成资源刷取场。",
+      "options": [
+        {
+          "id": "acyclic_branching",
+          "label": "有向无环分支塔",
+          "summary": "单入口有向无环图：楼层向上分支/汇合，走过的节点不可回访——尖塔口径（定稿 §6.2：Graph{acyclic:true 显式声明, entry:Single}）",
+          "implications": [
+            "acyclic:true 显式声明使『不可回头』成为可校验结构约束而非软规则，图值有环即编译期拦截",
+            "单入口约束（entry:single）保证每局起点唯一，路线规划从第一层就开始",
+            "分支/汇合的宽度节奏（每层节点数）是地图内容排布的主旋钮"
+          ],
+          "compiler_tags": { "spec_role": "data_table", "data_form": "graph" },
+          "parameter_schema": { "schema": "graph", "node_payload": [
+            { "key": "node_kind", "kind": { "kind": "enum", "variants": ["combat", "elite", "event", "shop", "rest", "boss"] }, "required": true }
+          ], "edge_payload": [], "directed": true, "acyclic": true, "entry": "single", "cardinality_key": "map_nodes" }
+        },
+        {
+          "id": "hub_revisit_web",
+          "label": "枢纽可回访网",
+          "summary": "中心枢纽放射式地图，节点可回访（可回环、多入口）",
+          "implications": [
+            "可回访使地图节点成为可重复消费的资源点，节奏控制转移到节点冷却/耗竭规则",
+            "回环合法（acyclic:false）下路线规划退化为效率优化，单程张力消失",
+            "多入口意味着起点差异本身成为构筑变量"
+          ],
+          "compiler_tags": { "spec_role": "data_table", "data_form": "graph" },
+          "parameter_schema": { "schema": "graph", "node_payload": [
+            { "key": "node_kind", "kind": { "kind": "enum", "variants": ["combat", "elite", "event", "shop", "rest", "boss"] }, "required": true }
+          ], "edge_payload": [], "directed": false, "acyclic": false, "entry": "multiple", "cardinality_key": "map_nodes" }
+        }
+      ]
+    },
+    {
+      "id": "spire.intent_telegraph",
+      "domain": "combat_information",
+      "level": "L4",
+      "genre_scope": { "pack": "spire_like" },
+      "question": "敌人意图按什么口径预告？",
+      "design_question": "敌人下回合要做什么，是明牌到数值（尖塔口径）还是只给类别提示？明牌把战斗变成完全信息解题，类别提示保留威胁的模糊恐惧。已知轻缺口（定稿 §6.2 如实标注）：披露时序（意图在回合内何时刷新、被状态改变后是否即时更新）是信息披露机制的时序语义，当前表达位只声明『预告什么』不声明『何时刷新』——按定稿口径标轻缺口，不假装闭合。",
+      "options": [
+        {
+          "id": "full_disclosure",
+          "label": "数值明牌预告",
+          "summary": "敌人下回合行动与数值提前落表并完整展示（攻击 12/格挡 10）——尖塔口径",
+          "implications": [
+            "完全信息使每回合成为可精确求解的资源题，玩家失误全部归因于自己",
+            "意图数值须与叠加序结算联动展示（力量变化后预告值要重算），是 UI 与结算的强耦合点",
+            "披露时序轻缺口：意图刷新时点（回合边界/受状态影响即时）未进结构化表达位，如实标注（定稿 §6.2）"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "combat_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "enemy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:enemy_table_id}", "property": "intent_state", "formula": "next_action_with_values(action_id, computed_value) 提前落表" },
+            { "effect": "emit_signal", "signal": "combat_main.turn_signal" }
+          ]
+        },
+        {
+          "id": "category_hint",
+          "label": "类别模糊提示",
+          "summary": "只预告行动类别图标（攻击/防御/施法），不给数值",
+          "implications": [
+            "模糊信息保留威胁感，玩家按最坏情况防御——防御倾向系统性上升",
+            "类别图标表是小而稳定的 UI 词汇表，跨敌人复用成本低",
+            "披露时序轻缺口同上：类别刷新时点未进结构化表达位，如实标注"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "combat_main.tier" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "enemy_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:enemy_table_id}", "property": "intent_state", "formula": "next_action_category_only(action_category) 提前落表" },
+            { "effect": "emit_signal", "signal": "combat_main.turn_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spire.enemy_roster",
+      "domain": "content",
+      "level": "L5",
+      "genre_scope": { "pack": "spire_like" },
+      "question": "敌人名单表包含哪些敌人？",
+      "design_question": "每种敌人一行：标识、生命、行动模式。行动模式列是意图预告机制的数据源——敌人做什么可预告的前提是行动先落表。",
+      "options": [
+        {
+          "id": "enemy_table",
+          "label": "敌人名单表",
+          "summary": "每种敌人一行：标识、生命、行动模式脚本引用",
+          "implications": [
+            "行动模式列是意图预告的数据锚：预告机制逐回合从模式脚本读下一步",
+            "生命值与直减格挡公式同尺度（两位数），投放前对齐伤害心算尺度",
+            "精英/Boss 与小怪同表不同标记，遗物里程碑掉落按标记过滤"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+            { "key": "tier", "kind": { "kind": "enum", "variants": ["normal", "elite", "boss"] }, "required": true },
+            { "key": "action_pattern", "kind": { "kind": "text" }, "required": true }
+          ], "row_key": "id", "cardinality_key": "enemy_roster_rows" }
+        },
+        {
+          "id": "enemy_table_with_scaling",
+          "label": "带成长列敌人名单表",
+          "summary": "在基础列之上增加楼层成长系数列，同敌人随进度变强",
+          "implications": [
+            "成长系数把敌人内容复用到全塔，内容成本下降但数值调平面变大",
+            "成长后的意图预告数值必须按当前层系数重算，预告与结算同源",
+            "系数失控是肉鸽后期数值崩坏的常见来源，上限必须显式声明"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "id", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "hp", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 9999.0 }, "required": true },
+            { "key": "tier", "kind": { "kind": "enum", "variants": ["normal", "elite", "boss"] }, "required": true },
+            { "key": "action_pattern", "kind": { "kind": "text" }, "required": true },
+            { "key": "floor_scaling", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 1.0, "max": 5.0 }, "required": true }
+          ], "row_key": "id", "cardinality_key": "enemy_roster_rows" }
+        }
+      ]
+    }
+  ]
+}

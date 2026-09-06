@@ -1,0 +1,426 @@
+{
+  "module_id": "sys.turn_combat",
+  "semver": "1.0.0",
+  "label_zh": "回合战斗",
+  "summary": "离散回合内结算行动与伤害的战斗系统（清单 #2）。谱系四档：回合序（敌我交替的最小回合骨架）→ 行动点经济+伤害公式 → 状态叠层与结算时点（尖塔档：W10 重）→ 连锁与全状态战斗。边界三测试自检：T1 独占状态=回合状态机+单位战斗属性表（谁的回合、每个单位的 HP/格挡/状态层数只有本系统能写）；T2 可摘除=摘除后构筑/遗物/棋盘各自规则仍自洽（它们只失去消费源，不需改写内部规则）；T3 名词转换=消费行动指令（sys.player_input.command_intent），产出单位实体/行动点/回合事件/战斗规则挂点。与 #1 即时战斗边界：本系统无帧级时序，行动在离散回合内原子结算；与 #17 战术棋盘边界：本系统不管位置，棋盘 consumes 本系统的单位与移动指令名词（sys.tactical_board 接口已咬合）。",
+  "nouns": [
+    {
+      "id": "unit_entity",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "参战单位实体",
+      "summary": "有行标识与属性列的参战单位实例（玩家/敌人）。战术棋盘等位置系统 consumes 它做占位；本系统对它的战斗属性有独占写权限。"
+    },
+    {
+      "id": "combat_unit_state",
+      "kind": { "kind": "property", "of": "unit_entity" },
+      "label_zh": "单位战斗状态",
+      "summary": "挂在参战单位上的 HP/格挡/状态层数集合——本系统独占状态的载体（T1 锚点），伤害公式与状态结算的唯一写入口。"
+    },
+    {
+      "id": "action_point",
+      "kind": { "kind": "resource" },
+      "label_zh": "行动点",
+      "summary": "回合内可花费的行动资源（尖塔语境=能量）。有余额语义：回合发放、行动消耗。构筑系统打出卡牌即 consumes 本名词（定稿 §6.2：能量=ConsumeResource）。"
+    },
+    {
+      "id": "turn_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "回合推进事件",
+      "summary": "回合开始/结束的时点信号，载荷为回合数与当前行动方。构筑的抽牌节奏、遗物的回合触发条件都监听它。"
+    },
+    {
+      "id": "move_command",
+      "kind": { "kind": "signal" },
+      "label_zh": "移动指令信号",
+      "summary": "本系统发出的单位移动意图（回合内的移动行动）。位置类系统（战术棋盘）consumes 它做合法性判定与落位——本系统只发意图不管坐标。"
+    },
+    {
+      "id": "combat_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "战斗规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的战斗规则位（伤害公式/命中前置/结算系数）。遗物类规则修饰器的主要作用靶（定稿 §6.2：遗物 modifies 战斗）。"
+    }
+  ],
+  "interface": {
+    "provides": ["unit_entity", "combat_unit_state", "action_point", "turn_signal", "move_command", "combat_rule_slot"],
+    "consumes": ["sys.player_input.command_intent"],
+    "modifies": ["combat_unit_state"]
+  },
+  "mda": {
+    "mechanics_summary": "回合序/行动点发放与消耗/伤害公式/格挡抵消/状态叠层/状态结算时点/连锁结算的机制群。",
+    "dynamics_notes": [
+      "回合制的可暂停性让玩家在高压局面反复推演行动顺序（信号：单回合决策时长随血线下降上升、悔棋请求密度）",
+      "行动点约束下玩家发展出『省点』与『爆发回合』两种节奏策略（信号：回合末剩余行动点分布的双峰形态）",
+      "状态叠层档起，叠 DoT 与叠强化成为构筑流派分水岭（信号：同一关卡通关构筑的状态类卡占比聚类）"
+    ],
+    "aesthetics_primary": ["挑战"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "tc0_turn_sequence",
+        "label_zh": "TC0 回合序",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 1, "o": 0 },
+        "p_floor": 1,
+        "interface_floor": 2,
+        "activates": [
+          "sys.turn_combat.turn_structure"
+        ],
+        "inductions": [],
+        "summary": "最小回合骨架：敌我谁先动、一轮怎么换手。桌游级战斗的全部。C≥2（consumes 行动指令；provides 回合事件）。"
+      },
+      {
+        "id": "tc1_action_economy",
+        "label_zh": "TC1 +行动点与伤害公式",
+        "rating": { "m": 2, "d": 1, "c": 1, "p": 2, "o": 1 },
+        "p_floor": 2,
+        "interface_floor": 2,
+        "activates": [
+          "sys.turn_combat.turn_structure",
+          "sys.turn_combat.action_economy",
+          "sys.turn_combat.damage_formula"
+        ],
+        "inductions": [],
+        "summary": "行动点经济 + 确定性伤害公式：回合内做什么、做几次、打多少血全部可声明。JRPG 命令战斗落此档。"
+      },
+      {
+        "id": "tc2_status_stack",
+        "label_zh": "TC2 +状态叠层与结算时点",
+        "rating": { "m": 2, "d": 2, "c": 2, "p": 3, "o": 1 },
+        "p_floor": 3,
+        "interface_floor": 4,
+        "activates": [
+          "sys.turn_combat.turn_structure",
+          "sys.turn_combat.action_economy",
+          "sys.turn_combat.damage_formula",
+          "sys.turn_combat.status_effect_rule",
+          "sys.turn_combat.status_timing"
+        ],
+        "inductions": [],
+        "summary": "状态叠层（力量/中毒/易伤）+ 明确的结算时点表。定稿 §6.2 杀戮尖塔战斗档：W10 全局档带=重，P=3 承诺写死进档位（每回合的出牌顺序与状态时点都是构筑级心智负担）。战斗规则挂点自此档成为高频 ModifyRule 靶位。"
+      },
+      {
+        "id": "tc3_full_tactical",
+        "label_zh": "TC3 +连锁与全状态战斗",
+        "rating": { "m": 3, "d": 3, "c": 2, "p": 3, "o": 2 },
+        "p_floor": 3,
+        "interface_floor": 4,
+        "activates": [
+          "sys.turn_combat.turn_structure",
+          "sys.turn_combat.action_economy",
+          "sys.turn_combat.damage_formula",
+          "sys.turn_combat.status_effect_rule",
+          "sys.turn_combat.status_timing",
+          "sys.turn_combat.combo_chain_rule"
+        ],
+        "inductions": [],
+        "summary": "连锁触发与全状态互作（状态×状态、连锁×行动点回退）。极重档：状态互作表爆炸式增长，O 供给（敌人行动模式内容）成为长线成本。注：响应式回合（对手回合内的反应窗/跟牌）是定稿综合者注 ③ 的已知缺口，本谱系不含该形态，待下轮补裁后再扩档。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.turn_combat.turn_structure",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "回合结构按什么口径换手？",
+      "design_question": "敌我是整轮交替还是按速度穿插？整轮交替卖计划感（我这轮全想好），先攻序列卖数值养成（速度属性有了意义）。",
+      "tier_gate": "tc0_turn_sequence",
+      "options": [
+        {
+          "id": "player_enemy_alternate",
+          "label": "敌我整轮交替",
+          "summary": "我方全部行动完毕后轮到敌方整轮行动，双方回合边界清晰",
+          "implications": [
+            "玩家回合内行动顺序完全自主，计划感与悔棋空间最大——卡牌肉鸽主流口径",
+            "敌方回合是纯观演节点，需要行动演出与信息设计填充",
+            "回合边界清晰使『回合开始/结束』成为最稳定的触发时点，状态与遗物结算都锚定它"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "turn_machine", "to_state": "player_phase_then_enemy_phase" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        },
+        {
+          "id": "initiative_order",
+          "label": "速度先攻序列",
+          "summary": "全场单位按速度值排成行动序列，敌我穿插逐个行动",
+          "implications": [
+            "速度成为核心战斗属性，构筑与装备获得一条新价值轴",
+            "行动序列的可视化（时间轴 UI）是理解成本的主要承担者",
+            "敌我穿插削弱整轮计划感，单次行动的临场判断权重上升"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "none" },
+          "effects_template": [
+            { "effect": "change_state", "machine": "turn_machine", "to_state": "initiative_queue_next" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.turn_combat.action_economy",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "行动点按什么口径发放？",
+      "design_question": "每回合的行动预算是清零重发还是可以攒？清零逼玩家回合内花光（节奏紧凑），结转让忍一回合憋大招成为策略。",
+      "tier_gate": "tc1_action_economy",
+      "options": [
+        {
+          "id": "per_turn_refill",
+          "label": "每回合重置发放",
+          "summary": "回合开始时行动点重置为固定值，未用完不结转——尖塔能量口径",
+          "implications": [
+            "每回合都是等预算的独立决策题，出牌组合的搜索空间可控",
+            "『浪费能量』的负反馈直接可感，玩家自发追求整数消耗的手牌组合",
+            "能量上限成为构筑外挂点：提升上限的遗物/卡牌价值极高，需要谨慎投放"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "points_per_turn", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "action_point", "formula": "reset_to({param:points_per_turn}) on turn_start" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        },
+        {
+          "id": "carryover_pool",
+          "label": "结转蓄点",
+          "summary": "未用完的行动点按上限结转到下回合，可蓄力憋爆发",
+          "implications": [
+            "『这回合忍、下回合爆』成为主动节奏策略，回合间产生连续决策",
+            "蓄点上限是唯一防滚雪球的闸：上限过高时最优解退化为永远蓄满再动",
+            "敌方压力必须能惩罚过度蓄点（如递增的意图伤害），否则蓄点无代价"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "points_per_turn", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true },
+            { "key": "carryover_cap", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 40.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "grant_resource", "resource": "action_point", "formula": "min(remaining + {param:points_per_turn}, {param:carryover_cap}) on turn_start" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.turn_combat.damage_formula",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "伤害结算公式按什么口径？",
+      "design_question": "伤害是『攻击减格挡』的直减制还是带倍率的乘算制？直减让每点数值都可心算（尖塔口径），乘算给养成留出跨数量级的成长空间。",
+      "tier_gate": "tc1_action_economy",
+      "options": [
+        {
+          "id": "flat_minus_block",
+          "label": "直减格挡制",
+          "summary": "伤害 = max(0, 攻击值 - 格挡值)，逐点抵消，无隐藏系数——尖塔口径",
+          "implications": [
+            "全部数值个位数到两位数可心算，玩家能精确规划『刚好打死/刚好挡住』",
+            "格挡是与 HP 等价的第二血条，攻防转换的张力全部落在格挡分配上",
+            "数值膨胀空间小：长线成长必须走机制维度（状态/连锁）而非数字变大"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "hp - max(0, attack_value - block_value)" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        },
+        {
+          "id": "scaled_multiplier",
+          "label": "倍率乘算制",
+          "summary": "伤害 = 基础值 × 攻防倍率 ×（1 - 减伤率），系数链可扩展",
+          "implications": [
+            "倍率链给装备/等级/克制各留一个乘区，长线养成的数值空间充裕",
+            "多乘区叠加后玩家无法心算，伤害预览 UI 从加分项变成必需品",
+            "乘区之间的平衡（哪个乘区更值钱）是持续调平负担"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "base_multiplier", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "hp - base_value * {param:base_multiplier} * (1 - mitigation_ratio)" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.turn_combat.status_effect_rule",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "状态效果按什么口径叠层？",
+      "design_question": "中毒叠两次是毒得更狠（强度叠层）还是毒得更久（回合数叠层）？强度叠层奖励爆发式堆叠（尖塔口径），回合数叠层奖励细水长流。",
+      "tier_gate": "tc2_status_stack",
+      "options": [
+        {
+          "id": "stack_intensity",
+          "label": "强度叠层",
+          "summary": "同名状态叠加层数、每层放大效果强度，层数按衰减规则递减——尖塔中毒/力量口径",
+          "implications": [
+            "堆叠型构筑（毒爆/力量流）成立的机制基础，单状态可以成为整套构筑的轴",
+            "层数即强度使状态数值必须逐层线性可预期，非线性放大会失控",
+            "衰减规则（每回合-1 或减半）是该口径唯一的平衡闸门"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "decay_per_turn", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "status_stacks + applied_stacks" },
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "status_stacks - {param:decay_per_turn}" }
+            ] }
+          ]
+        },
+        {
+          "id": "stack_duration",
+          "label": "回合数叠层",
+          "summary": "同名状态强度固定、叠加只延长持续回合数，到期整体移除",
+          "implications": [
+            "状态强度恒定使敌我双方都能精确预估每回合的状态贡献",
+            "延时叠加奖励『维持』而非『爆发』，与持续输出型构筑咬合",
+            "多状态并存时到期时点各异，状态栏 UI 的剩余回合可读性是主要负担"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "max_duration_turns", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 30.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "over_time", "amount_expr": "min(total_duration, {param:max_duration_turns})", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "apply_status_constant_intensity" }
+            ] },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.turn_combat.status_timing",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "状态在回合的哪个时点结算？",
+      "design_question": "中毒是回合开始掉血还是回合结束掉血？开始结算让玩家带着伤打（决策前置），结束结算让玩家先打再痛（本回合行动不受影响）。",
+      "tier_gate": "tc2_status_stack",
+      "options": [
+        {
+          "id": "turn_start_settle",
+          "label": "回合开始结算",
+          "summary": "状态效果在承受方回合开始时统一结算，先掉血再行动",
+          "implications": [
+            "玩家决策时血线已是结算后的真值，『这回合还能不能苟』判断无歧义",
+            "开局即结算可能在玩家行动前触发死亡，需要死亡时点的边界规则",
+            "与回合开始的其他触发（遗物/抽牌）同时点，结算顺序表必须显式声明"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "settle_all_status on turn_start" },
+              { "effect": "emit_signal", "signal": "turn_signal" }
+            ] }
+          ]
+        },
+        {
+          "id": "turn_end_settle",
+          "label": "回合结束结算",
+          "summary": "状态效果在承受方回合结束时统一结算，先行动再掉血",
+          "implications": [
+            "本回合行动力不受新挂状态影响，玩家的当回合计划稳定",
+            "『行动完才掉血』使贴脸换血策略可行，攻防节奏更激进",
+            "回合结束时点与弃牌/能量清算同窗，结算顺序表同样必须显式声明"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "1", "unit": "turns", "inner": [
+              { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "settle_all_status on turn_end" },
+              { "effect": "emit_signal", "signal": "turn_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.turn_combat.combo_chain_rule",
+      "domain": "turn_combat",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "连锁触发按什么口径结算？",
+      "design_question": "行动触发行动（连锁）要不要设深度上限？无上限卖无限连的构筑爽感，有上限保回合时长与平衡可控。",
+      "tier_gate": "tc3_full_tactical",
+      "options": [
+        {
+          "id": "capped_chain",
+          "label": "限深连锁",
+          "summary": "连锁触发链有显式深度上限，到顶截断并提示",
+          "implications": [
+            "回合时长与结算复杂度有硬上界，对局节奏可控",
+            "『差一层到顶』的截断挫败需要 UI 预警（连锁计数器）缓解",
+            "上限数值本身成为构筑外的隐形平衡参数，调整会重划流派强弱"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "max_chain_depth", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 20.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "resolve_chain(depth <= {param:max_chain_depth})" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        },
+        {
+          "id": "resource_bounded_chain",
+          "label": "资源封顶连锁",
+          "summary": "连锁不限深度，但每层消耗行动点/专用连锁资源，资源尽则链止",
+          "implications": [
+            "无限连在理论上存在但被资源经济约束，构筑追求『资源回复环』",
+            "连锁资源的回复投放是平衡主战场，一张回复卡的增删可能成毁一个流派",
+            "结算表现（逐层动画）在长链下需要加速/合并策略，表现层负担高"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.turn_combat" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "unit_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "chain_cost_per_step", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "consume_resource", "resource": "action_point", "formula": "{param:chain_cost_per_step} per chain_step" },
+            { "effect": "modify_property", "entity": "{param:unit_table_id}", "property": "combat_unit_state", "formula": "resolve_chain(while action_point >= cost)" },
+            { "effect": "emit_signal", "signal": "turn_signal" }
+          ]
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {},
+  "consistency_rules": [
+    {
+      "id": "status_rule_and_timing_answered_together",
+      "kind": "answered_together",
+      "first": "sys.turn_combat.status_effect_rule",
+      "second": "sys.turn_combat.status_timing"
+    }
+  ],
+  "skin_fields": ["combat_vfx_theme", "unit_portrait_style"]
+}

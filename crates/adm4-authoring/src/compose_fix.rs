@@ -279,6 +279,7 @@ mod tests {
     use super::*;
     use crate::compose::assess_composition;
     use adm4_ai::ScriptedProvider;
+    use adm4_decision::composition::CompositionBudget;
     use adm4_decision::system_module::{
         CoreLink, FiveAxisRating, HeavinessLadder, HeavinessTier, Induction, InductionTarget,
         MdaMapping, NounDecl, NounKind, SystemInterface,
@@ -452,9 +453,16 @@ mod tests {
         let mut selections = BTreeMap::new();
         select(&mut selections, "producer_main.tier", "heavy");
         select(&mut selections, "sink_main.tier", "shallow");
-        assess_composition(&space(), &selections, &modules(), None, &[])
-            .unwrap()
-            .unwrap()
+        assess_composition(
+            &space(),
+            &selections,
+            &modules(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .unwrap()
+        .unwrap()
     }
 
     fn scripted(response: &str) -> ScriptedProvider {
@@ -524,9 +532,16 @@ mod tests {
         let mut selections = BTreeMap::new();
         select(&mut selections, "producer_main.tier", "light");
         select(&mut selections, "sink_main.tier", "shallow");
-        let assessment = assess_composition(&space(), &selections, &modules(), None, &[])
-            .unwrap()
-            .unwrap();
+        let assessment = assess_composition(
+            &space(),
+            &selections,
+            &modules(),
+            None,
+            &[],
+            &CompositionBudget::default(),
+        )
+        .unwrap()
+        .unwrap();
         // light 档 W5 不入 H、无传导：零违例零提示。
         assert!(assessment.report.blocks.is_empty());
         let provider = scripted(r#"{"explanation":"x","options":[]}"#);

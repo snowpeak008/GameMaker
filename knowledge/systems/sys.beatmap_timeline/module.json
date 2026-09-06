@@ -1,0 +1,440 @@
+{
+  "module_id": "sys.beatmap_timeline",
+  "semver": "1.0.0",
+  "label_zh": "谱面时间轴",
+  "summary": "沿时间轴排布的输入目标序列系统（定稿 §2.4 #29：音符表/判定窗表 → 节奏心流 → 感官/挑战）。独占状态=音符表/判定窗表；消费玩家输入、产出判定事件与谱面实体——本模块只产判定不产分数，分数由 G11 计分连击（sys.scoring_combo）消费判定事件产出（缺口扫描音游行：判定事件无人消费成分数则音游不成立）。命名申报：既有消费方以 sys.rhythm_judgement.judgement_signal 历史前缀引用判定事件，本模块裸名词 judgement_signal 与点号后段逐字节一致，组合期经 pack noun_bindings 咬合（见 5c 验收单）。射程申报：延迟补偿算法在射程外（定稿 §6.4），判定窗规则表在射程内。",
+  "nouns": [
+    {
+      "id": "note_chart",
+      "kind": { "kind": "entity_class" },
+      "label_zh": "谱面音符实体",
+      "summary": "一首曲目的音符实例类：时间位置、轨道、音符类型、持续长度。音符表是本系统独占状态的主体，行数以千计（O 维口径）。"
+    },
+    {
+      "id": "judgement_signal",
+      "kind": { "kind": "signal" },
+      "label_zh": "判定事件",
+      "summary": "一次输入被判定的时点信号，载荷为判定等级（Perfect/Great/…/Miss）与时间偏差。供计分连击（G11）消费转换为分数与连击，也是 UI 判定跳字的数据源——裸名词拼写与 sys.rhythm_judgement.judgement_signal 的点号后段逐字节咬合。"
+    },
+    {
+      "id": "playhead_state",
+      "kind": { "kind": "property", "of": "chart_session" },
+      "label_zh": "播放头状态",
+      "summary": "当前演奏会话在时间轴上的位置与滚动速度，挂在谱面会话上；判定窗的开闭全部以它为基准时钟。"
+    },
+    {
+      "id": "judgement_rule_slot",
+      "kind": { "kind": "rule_slot" },
+      "label_zh": "判定规则挂点",
+      "summary": "允许他系统 ModifyRule 作用的判定规则位（如道具放宽判定窗、模式修饰器 Double/HalfTime 缩放时间轴）。"
+    }
+  ],
+  "interface": {
+    "provides": ["note_chart", "judgement_signal", "playhead_state", "judgement_rule_slot"],
+    "consumes": ["sys.player_input.command_intent"],
+    "modifies": []
+  },
+  "mda": {
+    "mechanics_summary": "音符表记法/判定窗宽度表/输入配对规则/长押判定/轨道布局/精度换算曲线/变速段落表的机制群。",
+    "dynamics_notes": [
+      "判定窗收紧后玩家从『过曲』转向『刷精度』（信号：同曲目重开率、Perfect 占比随游玩次数的爬升曲线）",
+      "长押/滑键入谱后手指占位成为读谱负担，玩家开始预读谱面而非反应式击打（信号：长押头判失误率与谱面密度的相关性）",
+      "变速段成为记忆点与劝退点的同一位置：熟谱玩家的心流峰值与新玩家的断连峰值重合（信号：变速段落的分段重试率）"
+    ],
+    "aesthetics_primary": ["感官", "挑战"]
+  },
+  "heaviness": {
+    "tiers": [
+      {
+        "id": "bt0_single_lane",
+        "label_zh": "BT0 单轨判定窗",
+        "rating": { "m": 1, "d": 1, "c": 1, "p": 0, "o": 1 },
+        "p_floor": 0,
+        "interface_floor": 2,
+        "activates": [
+          "sys.beatmap_timeline.judgement_window_table",
+          "sys.beatmap_timeline.note_chart_table",
+          "sys.beatmap_timeline.hit_matching_rule"
+        ],
+        "inductions": [],
+        "summary": "单轨音符流 + 判定窗表 + 输入配对规则：下落式单键音游的全部（太鼓单键面）。P=0 如实标定——演奏期玩家在执行不在决策。C≥2（consumes 玩家输入；provides 判定事件）。"
+      },
+      {
+        "id": "bt1_multi_lane_holds",
+        "label_zh": "BT1 +多轨与长押/滑键",
+        "rating": { "m": 2, "d": 2, "c": 1, "p": 1, "o": 2 },
+        "p_floor": 1,
+        "interface_floor": 3,
+        "activates": [
+          "sys.beatmap_timeline.judgement_window_table",
+          "sys.beatmap_timeline.note_chart_table",
+          "sys.beatmap_timeline.hit_matching_rule",
+          "sys.beatmap_timeline.long_note_rule",
+          "sys.beatmap_timeline.lane_layout",
+          "sys.beatmap_timeline.accuracy_curve"
+        ],
+        "inductions": [],
+        "summary": "多轨布局 + 长押/滑键判定 + 偏差→精度换算：主流 4K/6K 下落式形态。判定事件从单击扩展到持续与复合音符，谱面数据深度与内容量同升一档。"
+      },
+      {
+        "id": "bt2_variable_timing",
+        "label_zh": "BT2 +变速变拍",
+        "rating": { "m": 3, "d": 2, "c": 2, "p": 1, "o": 3 },
+        "p_floor": 1,
+        "interface_floor": 4,
+        "activates": [
+          "sys.beatmap_timeline.judgement_window_table",
+          "sys.beatmap_timeline.note_chart_table",
+          "sys.beatmap_timeline.hit_matching_rule",
+          "sys.beatmap_timeline.long_note_rule",
+          "sys.beatmap_timeline.lane_layout",
+          "sys.beatmap_timeline.accuracy_curve",
+          "sys.beatmap_timeline.speed_change_rule"
+        ],
+        "inductions": [],
+        "summary": "变速段落/BPM 重映射进谱面数据（街机系变速谱口径）：时间轴本身成为表现与难度工具。O 推 3——音符行数以千计、变速段逐曲人工标定，内容供给是本档长线成本主项。"
+      }
+    ]
+  },
+  "decision_points": [
+    {
+      "id": "sys.beatmap_timeline.judgement_window_table",
+      "domain": "beatmap_timeline",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "判定窗宽度表如何定标？",
+      "design_question": "Perfect 到 Miss 的窗宽是全曲库写死一张表，还是随难度档缩放？写死卖手感一致性，缩放卖曲库人群跨度——判定窗是音游手感的第一参数。",
+      "tier_gate": "bt0_single_lane",
+      "options": [
+        {
+          "id": "fixed_window_table",
+          "label": "固定判定窗表",
+          "summary": "每判定等级一行固定窗宽（±毫秒）与精度权重，全曲库同一张表",
+          "implications": [
+            "全曲库同一窗宽，肌肉记忆可跨曲迁移——手感一致性是硬核社区的底线要求",
+            "难度只能靠谱面密度与配置表达，判定层不参与难度曲线",
+            "表行数即判定等级数，UI 判定跳字词表与本表一一对应，改表即改反馈语言"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "grade_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "window_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 500.0 }, "required": true },
+            { "key": "accuracy_weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "grade_key", "cardinality_key": "judgement_window_rows" }
+        },
+        {
+          "id": "difficulty_scaled_window_table",
+          "label": "难度缩放判定窗表",
+          "summary": "在基础窗宽之上增加难度缩放系数列，低难度按系数放宽窗口",
+          "implications": [
+            "低难度宽窗照顾新手，同一曲库覆盖更宽人群——商业化音游的主流选择",
+            "跨难度档的判定手感不连续，进阶玩家换档期要经历肌肉记忆重训",
+            "缩放系数是长线调平债务：改判定基准即须回查全部难度档的缩放结果"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "grade_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "label", "kind": { "kind": "text" }, "required": true, "is_skin": true },
+            { "key": "window_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 500.0 }, "required": true },
+            { "key": "accuracy_weight", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true },
+            { "key": "difficulty_scale", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.5, "max": 3.0 }, "required": true }
+          ], "row_key": "grade_key", "cardinality_key": "judgement_window_rows" }
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.note_chart_table",
+      "domain": "beatmap_timeline",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "音符表以什么记法落盘？",
+      "design_question": "音符时间用毫秒绝对时间戳还是小节/拍量化格？时间戳制谱自由但换速重排成本高，拍格制谱吃量化约束但改 BPM 即免费重排。",
+      "tier_gate": "bt0_single_lane",
+      "options": [
+        {
+          "id": "timestamp_notation",
+          "label": "毫秒时间戳记法",
+          "summary": "每音符一行：标识、绝对毫秒时刻、轨道、类型、持续毫秒（时间戳制谱口径）",
+          "implications": [
+            "任意非量化节奏（swing/自由拍）可直接落表，制谱表现力上限最高",
+            "改曲速/改 BPM 须逐行重算时间戳，谱面与音频的耦合是硬绑定",
+            "判定层直接拿毫秒比较零换算，运行时最简单"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "note_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "time_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 600000.0 }, "required": true },
+            { "key": "lane", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "note_type", "kind": { "kind": "enum", "variants": ["tap", "hold", "slide"] }, "required": true },
+            { "key": "duration_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 60000.0 }, "required": true }
+          ], "row_key": "note_id", "cardinality_key": "note_chart_rows" }
+        },
+        {
+          "id": "beat_grid_notation",
+          "label": "节拍格记法",
+          "summary": "每音符一行：标识、小节号、拍格步进、轨道、类型、持续步数（BMS/拍格口径）",
+          "implications": [
+            "BPM 改动即全谱免费重排，谱面与音频解耦——曲库维护成本最低",
+            "非量化节奏必须靠加密拍格逼近，swing 类曲目的制谱损耗如实存在",
+            "运行时需要拍格→毫秒的换算层，变拍段的换算表是隐藏复杂度"
+          ],
+          "compiler_tags": { "spec_role": "entity_table", "visual_form": "sprite2d" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "note_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "bar", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 9999.0 }, "required": true },
+            { "key": "beat_step", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 191.0 }, "required": true },
+            { "key": "lane", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true },
+            { "key": "note_type", "kind": { "kind": "enum", "variants": ["tap", "hold", "slide"] }, "required": true },
+            { "key": "duration_steps", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 768.0 }, "required": true }
+          ], "row_key": "note_id", "cardinality_key": "note_chart_rows" }
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.hit_matching_rule",
+      "domain": "beatmap_timeline",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "输入与音符按什么规则配对判定？",
+      "design_question": "一次按键记给时间上最近的音符，还是只认窗口内最早的未判音符？最近配对宽容误触，最早配对惩罚乱打——连打糊段的判定归属由此分岔。",
+      "tier_gate": "bt0_single_lane",
+      "options": [
+        {
+          "id": "nearest_note_match",
+          "label": "最近音符配对",
+          "summary": "输入时刻与窗口内时间距离最近的未判音符配对，距离换算判定等级",
+          "implications": [
+            "误触对相邻音符的伤害最小，糊段乱打常能蹭到 Good——新手体感宽容",
+            "高密度段可能出现『后按的键配了前面的音符』的直觉违背，需要击打反馈明确归属",
+            "配对搜索是双向的（前后都找），实现上要防同一音符被二次配对"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "window_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "judgement_state", "formula": "grade = window_grade(abs(input_time - nearest_unjudged_note_time), {param:window_table_id})" },
+            { "effect": "emit_signal", "signal": "judgement_signal" }
+          ]
+        },
+        {
+          "id": "earliest_in_lane_match",
+          "label": "最早未判配对",
+          "summary": "输入只与本轨道窗口内最早的未判音符配对，配不上即空击（IIDX 口径）",
+          "implications": [
+            "乱打会把后续音符的判定机会提前吃掉，空击惩罚使『读准再打』成为必修课",
+            "判定归属永远顺序一致，回放与成绩复核零歧义——竞技排行的裁判基础",
+            "糊段的挫败感显著高于最近配对，休闲人群的流失点要用低难度谱兜"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "window_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "judgement_state", "formula": "grade = window_grade(input_time - earliest_unjudged_in_lane(input_lane), {param:window_table_id}); unmatched input = ghost_tap" },
+            { "effect": "emit_signal", "signal": "judgement_signal" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.long_note_rule",
+      "domain": "beatmap_timeline",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "长押按什么口径判定？",
+      "design_question": "长押是头尾两次判定合成，还是持续 tick 逐段计判？头尾制清晰但中途松手代价一刀切，tick 制颗粒细但判定事件量成倍膨胀。",
+      "tier_gate": "bt1_multi_lane_holds",
+      "options": [
+        {
+          "id": "head_tail_double_judgement",
+          "label": "头尾双判合成",
+          "summary": "长押只在按下与松开两个时刻各判一次，合成为一条长押判定（下落式 LN 主流口径）",
+          "implications": [
+            "判定事件量与音符数同阶，计分侧的消费压力最小",
+            "中途松手再按回的挽救操作没有表达位——要么全责要么免责，颗粒是一刀切",
+            "尾判窗通常比头判宽，两窗独立定标是本口径唯一但敏感的手感旋钮"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "window_table_id", "kind": { "kind": "text" }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "judgement_state", "formula": "hold_grade = combine(head_grade, tail_grade) per {param:window_table_id}" },
+            { "effect": "emit_signal", "signal": "judgement_signal" }
+          ]
+        },
+        {
+          "id": "hold_tick_judgement",
+          "label": "持续 tick 判定",
+          "summary": "长押期间按固定间隔逐 tick 判定按住状态，每 tick 各产一条判定事件（DDR freeze/太鼓连打口径）",
+          "implications": [
+            "中途松手只丢失松手期间的 tick，挽救操作有连续的表达位——长押成为持续张力而非两个时点",
+            "判定事件量随长押时长线性膨胀，连击数与谱面密度解耦（计分侧要知道 tick 也算连击口径）",
+            "tick 间隔是手感与事件量的同一旋钮：过密刷爆连击数字，过疏挽救颗粒变粗"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "tick_interval_seconds", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.05, "max": 1.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "schedule", "timing": "periodic", "amount_expr": "{param:tick_interval_seconds}", "unit": "seconds", "inner": [
+              { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "judgement_state", "formula": "hold_tick_grade = held ? tick_perfect : tick_miss" },
+              { "effect": "emit_signal", "signal": "judgement_signal" }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.lane_layout",
+      "domain": "beatmap_timeline",
+      "level": "L4",
+      "genre_scope": "universal",
+      "question": "轨道数按什么口径固定？",
+      "design_question": "全曲库统一轨道数（4K 制）还是逐曲声明？统一轨数养专精肌肉记忆与键位社区，逐曲轨数卖谱面表现力但键位方案永远装不满所有曲目。",
+      "tier_gate": "bt1_multi_lane_holds",
+      "options": [
+        {
+          "id": "fixed_lane_count",
+          "label": "全库统一轨道数",
+          "summary": "整个曲库固定一个轨道数，谱面音符的轨道列取值被全局钳制",
+          "implications": [
+            "键位方案唯一，肌肉记忆全曲库通用——竞技深度与键位外设生态都长在这上面",
+            "谱面表现力被轨数封顶，高密度曲只能纵向（密度）不能横向（轨数）加压",
+            "轨道数一旦上线即不可改：改轨数等于作废全部存量谱面"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "lane_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 1.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "lane_assignment", "formula": "lane = clamp(note.lane, 1, {param:lane_count})" }
+          ]
+        },
+        {
+          "id": "per_song_lane_count",
+          "label": "逐曲轨道数",
+          "summary": "每首曲目声明自己的轨道数（不超过全局上限），布局随曲切换",
+          "implications": [
+            "低轨数曲当新手关、高轨数曲当挑战关，难度阶梯多一个横向维度",
+            "键位映射随曲切换，外设与手柄适配矩阵按轨数种类翻倍",
+            "跨轨数的成绩不可直接比较，排行榜必须按轨数分桶"
+          ],
+          "compiler_tags": { "spec_role": "mechanic", "system": "sys.beatmap_timeline" },
+          "parameter_schema": { "schema": "scalar", "fields": [
+            { "key": "chart_table_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "max_lane_count", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 2.0, "max": 10.0 }, "required": true }
+          ] },
+          "effects_template": [
+            { "effect": "modify_property", "entity": "{param:chart_table_id}", "property": "lane_assignment", "formula": "lane = clamp(note.lane, 1, min(song.lane_count, {param:max_lane_count}))" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.accuracy_curve",
+      "domain": "beatmap_timeline",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "判定偏差到精度系数的换算走什么形态？",
+      "design_question": "偏差毫秒→精度系数是连续曲线还是等级阶梯？曲线让每一毫秒都有分数差（移动端精度分口径），阶梯让玩家只需背等级边界（街机等级分口径）。",
+      "tier_gate": "bt1_multi_lane_holds",
+      "options": [
+        {
+          "id": "offset_accuracy_curve",
+          "label": "偏差精度曲线",
+          "summary": "x=|时间偏差 ms|、y=精度系数 的单值采样曲线，点间按插值方式求值。Curve 逐案核（定稿 §5.4）：本处是单值 y=f(x)，不涉二维序列，Curve 表达位成立不降级。",
+          "implications": [
+            "同一判定等级内部仍有分数差，顶层竞分的军备从『全 Perfect』延伸到『Perfect 内卷毫秒』",
+            "曲线形状（平台段+陡降段）直接是手感参数，采样点即调参界面——Curve 参数位的典型正当场景",
+            "普通玩家不可感知毫秒级差异，结算界面需要偏差分布图辅助归因，表现层成本随之增加"
+          ],
+          "compiler_tags": { "spec_role": "data_table", "data_form": "curve" },
+          "parameter_schema": { "schema": "curve", "cardinality_key": "accuracy_curve_samples" }
+        },
+        {
+          "id": "stepped_accuracy_table",
+          "label": "等级阶梯表",
+          "summary": "每判定等级一行固定精度系数，等级内无差别（DDR/传统街机口径）",
+          "implications": [
+            "规则一句话讲完：等级即系数，玩家目标清晰为『把 Great 变 Perfect』",
+            "等级边界处 1ms 之差跨一整档，边界毫秒是玩家体感最不公平的位置",
+            "表行数与判定窗表同构，两表必须同步维护（等级增删要双改）"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "grade_key", "kind": { "kind": "text" }, "required": true },
+            { "key": "accuracy_factor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.0, "max": 1.0 }, "required": true }
+          ], "row_key": "grade_key", "cardinality_key": "accuracy_step_rows" }
+        }
+      ]
+    },
+    {
+      "id": "sys.beatmap_timeline.speed_change_rule",
+      "domain": "beatmap_timeline",
+      "level": "L5",
+      "genre_scope": "universal",
+      "question": "变速段落表如何声明？",
+      "design_question": "变速是滚动速度缩放段（SV，只骗眼不骗手）还是真 BPM 重映射（判定网格同步变）？SV 是视觉表现工具，BPM 重映射连判定时机一起改写。",
+      "tier_gate": "bt2_variable_timing",
+      "options": [
+        {
+          "id": "sv_section_table",
+          "label": "滚动速度段落表（SV）",
+          "summary": "每段一行：起止毫秒与滚动速度因子，只改视觉滚动不改判定时刻。Curve 退化申报（定稿 §5.4 逐案核）：段落含 (start,end,factor) 区间闭合语义，单值 y=f(x) 采样点表达不了区间端点与重叠校验，如实退化为四列 Table，语义降级申报不假装闭合。",
+          "implications": [
+            "判定时刻不动，变速纯属读谱难度与演出效果——手元视频与实际节奏永远一致",
+            "SV 段的重叠/间隙需要表级校验（区间不相交），这是选择区间表而非采样曲线的结构原因",
+            "SV 滥用会把音游变成视觉记忆游戏，社区对『表现 SV』与『恶心 SV』的边界争议是长线运营话题"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "section_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "start_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 600000.0 }, "required": true },
+            { "key": "end_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 600000.0 }, "required": true },
+            { "key": "speed_factor", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 0.1, "max": 10.0 }, "required": true }
+          ], "row_key": "section_id", "cardinality_key": "speed_section_rows" }
+        },
+        {
+          "id": "bpm_remap_table",
+          "label": "BPM 重映射表",
+          "summary": "每段一行：起始毫秒与新 BPM，判定网格随段落真实变速（变拍曲目的本体口径）",
+          "implications": [
+            "判定时机随 BPM 真实改变，变速段是手上功夫不是眼上功夫——现场演奏感最强",
+            "拍格记法谱面在 BPM 段边界要重锚小节线，制谱工具链的复杂度主要花在这里",
+            "自动打分/难度评估算法必须按段折算密度，全曲单一密度指标失效"
+          ],
+          "compiler_tags": { "spec_role": "data_table" },
+          "parameter_schema": { "schema": "table", "columns": [
+            { "key": "section_id", "kind": { "kind": "text" }, "required": true },
+            { "key": "start_ms", "kind": { "kind": "int" }, "constraint": { "constraint": "range", "min": 0.0, "max": 600000.0 }, "required": true },
+            { "key": "bpm", "kind": { "kind": "float" }, "constraint": { "constraint": "range", "min": 30.0, "max": 600.0 }, "required": true }
+          ], "row_key": "section_id", "cardinality_key": "speed_section_rows" }
+        }
+      ]
+    }
+  ],
+  "cardinality_expectations": {
+    "judgement_window_rows": { "min": 2, "max": 8 },
+    "note_chart_rows": { "min": 4, "max": 5000 },
+    "accuracy_curve_samples": { "min": 3, "max": 20 },
+    "accuracy_step_rows": { "min": 2, "max": 8 },
+    "speed_section_rows": { "min": 1, "max": 200 }
+  },
+  "consistency_rules": [
+    {
+      "id": "window_table_and_matching_rule_answered_together",
+      "kind": "answered_together",
+      "first": "sys.beatmap_timeline.judgement_window_table",
+      "second": "sys.beatmap_timeline.hit_matching_rule"
+    }
+  ],
+  "skin_fields": ["note_skin_theme", "lane_visual_style"]
+}
